@@ -131,6 +131,7 @@
 
             <MenuItem Header="_Help">
                 <MenuItem Header="_Help Contents" />
+                <Separator />
                 <MenuItem Header="_About Logic Friday..." />
             </MenuItem>
         </Menu>
@@ -197,12 +198,6 @@
                         ToolTip.Tip="Map to Gates...">
                     <icons:PackIcon Kind="MapMarkerPath" />
                 </Button>
-
-                <Border Width="1"
-                        Height="22"
-                        Margin="4,3"
-                        Background="{DynamicResource SystemControlForegroundBaseLowBrush}" />
-
                 <Button Classes="toolbarButton"
                         ToolTip.Tip="Zoom In">
                     <icons:PackIcon Kind="MagnifyPlus" />
