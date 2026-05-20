@@ -112,11 +112,15 @@
                 <MenuItem Header="_Trace Gate Logic" />
                 <Separator />
                 <MenuItem Header="_Auto Redraw Diagram" />
+                <Separator />
+                <MenuItem Header="Zoom _In" />
                 <MenuItem Header="Zoom _Out" />
                 <MenuItem Header="_Zoom All" />
                 <Separator />
                 <MenuItem Header="_Delete Selected" />
-                <MenuItem Header="_Submit Enter" />
+                <Separator />
+                <MenuItem Header="_Submit (Enter)" />
+                <MenuItem Header="_Cancel (Esc)" />
             </MenuItem>
 
             <MenuItem Header="_View">
