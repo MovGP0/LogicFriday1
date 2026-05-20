@@ -1,5 +1,6 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:icons="using:LogicFriday1.MaterialIcons"
         xmlns:vm="using:LogicFriday1.ViewModels"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -12,6 +13,18 @@
         Height="720"
         MinWidth="900"
         MinHeight="560">
+
+    <Window.Styles>
+        <Style Selector="Button.toolbarButton">
+            <Setter Property="Width" Value="30" />
+            <Setter Property="Height" Value="28" />
+            <Setter Property="MinWidth" Value="30" />
+            <Setter Property="MinHeight" Value="28" />
+            <Setter Property="Padding" Value="5" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+    </Window.Styles>
 
     <Design.DataContext>
         <vm:MainWindowViewModel/>
@@ -119,6 +132,117 @@
                 <MenuItem Header="_About Logic Friday..." />
             </MenuItem>
         </Menu>
+
+        <Border DockPanel.Dock="Top"
+                BorderThickness="0,0,0,1"
+                BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+                Padding="4,2">
+            <StackPanel Orientation="Horizontal"
+                        Spacing="2">
+                <Button Classes="toolbarButton"
+                        ToolTip.Tip="New...">
+                    <icons:PackIcon Kind="FilePlus" />
+                </Button>
+                <Button Classes="toolbarButton"
+                        ToolTip.Tip="Open...">
+                    <icons:PackIcon Kind="FolderOpen" />
+                </Button>
+                <Button Classes="toolbarButton"
+                        ToolTip.Tip="Close">
+                    <icons:PackIcon Kind="Close" />
+                </Button>
+
+                <Border Width="1"
+                        Height="22"
+                        Margin="4,3"
+                        Background="{DynamicResource SystemControlForegroundBaseLowBrush}" />
+
+                <Button Classes="toolbarButton"
+                        ToolTip.Tip="Print">
+                    <icons:PackIcon Kind="Printer" />
+                </Button>
+
+                <Border Width="1"
+                        Height="22"
+                        Margin="4,3"
+                        Background="{DynamicResource SystemControlForegroundBaseLowBrush}" />
+
+                <Button Classes="toolbarButton"
+                        ToolTip.Tip="Cut">
+                    <icons:PackIcon Kind="ContentCut" />
+                </Button>
+                <Button Classes="toolbarButton"
+                        ToolTip.Tip="Copy">
+                    <icons:PackIcon Kind="ContentCopy" />
+                </Button>
+                <Button Classes="toolbarButton"
+                        ToolTip.Tip="Paste">
+                    <icons:PackIcon Kind="ContentPaste" />
+                </Button>
+                <Button Classes="toolbarButton"
+                        ToolTip.Tip="Delete">
+                    <icons:PackIcon Kind="Delete" />
+                </Button>
+                <Button Classes="toolbarButton"
+                        ToolTip.Tip="Select All">
+                    <icons:PackIcon Kind="SelectAll" />
+                </Button>
+
+                <Border Width="1"
+                        Height="22"
+                        Margin="4,3"
+                        Background="{DynamicResource SystemControlForegroundBaseLowBrush}" />
+
+                <Button Classes="toolbarButton"
+                        ToolTip.Tip="Submit">
+                    <icons:PackIcon Kind="Check" />
+                </Button>
+                <Button Classes="toolbarButton"
+                        ToolTip.Tip="Cancel">
+                    <icons:PackIcon Kind="Cancel" />
+                </Button>
+
+                <Border Width="1"
+                        Height="22"
+                        Margin="4,3"
+                        Background="{DynamicResource SystemControlForegroundBaseLowBrush}" />
+
+                <Button Classes="toolbarButton"
+                        ToolTip.Tip="Modify Truth Table">
+                    <icons:PackIcon Kind="TableEdit" />
+                </Button>
+                <Button Classes="toolbarButton"
+                        ToolTip.Tip="Modify Equation">
+                    <icons:PackIcon Kind="FunctionVariant" />
+                </Button>
+                <Button Classes="toolbarButton"
+                        ToolTip.Tip="Modify Gate Diagram">
+                    <icons:PackIcon Kind="Chip" />
+                </Button>
+                <Button Classes="toolbarButton"
+                        ToolTip.Tip="Minimize...">
+                    <icons:PackIcon Kind="ChartBellCurve" />
+                </Button>
+                <Button Classes="toolbarButton"
+                        ToolTip.Tip="Map to Gates...">
+                    <icons:PackIcon Kind="MapMarkerPath" />
+                </Button>
+
+                <Border Width="1"
+                        Height="22"
+                        Margin="4,3"
+                        Background="{DynamicResource SystemControlForegroundBaseLowBrush}" />
+
+                <Button Classes="toolbarButton"
+                        ToolTip.Tip="Zoom In">
+                    <icons:PackIcon Kind="MagnifyPlus" />
+                </Button>
+                <Button Classes="toolbarButton"
+                        ToolTip.Tip="Zoom Out">
+                    <icons:PackIcon Kind="MagnifyMinus" />
+                </Button>
+            </StackPanel>
+        </Border>
 
         <Border DockPanel.Dock="Bottom"
                 BorderThickness="0,1,0,0"
