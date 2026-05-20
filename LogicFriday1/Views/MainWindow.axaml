@@ -20,50 +20,103 @@
     <DockPanel>
         <Menu DockPanel.Dock="Top">
             <MenuItem Header="_File">
-                <MenuItem Header="_New Function" Command="{Binding NewFunctionCommand}" />
-                <MenuItem Header="_Open..." Command="{Binding OpenCommand}" />
+                <MenuItem Header="_New">
+                    <MenuItem Header="Truth _Table" />
+                    <MenuItem Header="Logic _Equation" />
+                    <MenuItem Header="Gate _Diagram" />
+                </MenuItem>
+                <MenuItem Header="_Open..." />
+                <MenuItem Header="_Close" />
                 <Separator />
-                <MenuItem Header="_Save" Command="{Binding SaveCommand}" />
-                <MenuItem Header="Save _As..." Command="{Binding SaveAsCommand}" />
+                <MenuItem Header="Save _As..." />
                 <Separator />
-                <MenuItem Header="_Import..." Command="{Binding ImportCommand}" />
-                <MenuItem Header="_Export..." Command="{Binding ExportCommand}" />
+                <MenuItem Header="_Import Truth Table..." />
+                <MenuItem Header="Export _Truth Table..." />
+                <MenuItem Header="Export _Gate Diagram..." />
                 <Separator />
-                <MenuItem Header="Page Set_up..." Command="{Binding PageSetupCommand}" />
-                <MenuItem Header="_Print..." Command="{Binding PrintCommand}" />
-                <Separator />
-                <MenuItem Header="E_xit" Command="{Binding ExitCommand}" />
+                <MenuItem Header="_Print..." />
             </MenuItem>
 
-            <MenuItem Header="_Edit">
-                <MenuItem Header="_Undo" Command="{Binding UndoCommand}" />
-                <MenuItem Header="_Redo" Command="{Binding RedoCommand}" />
+            <MenuItem Header="_Operation">
+                <MenuItem Header="_Minimize..." />
+                <MenuItem Header="Map to _Gates..." />
+                <MenuItem Header="Generate C _Lookup Function..." />
                 <Separator />
-                <MenuItem Header="Cu_t" Command="{Binding CutCommand}" />
-                <MenuItem Header="_Copy" Command="{Binding CopyCommand}" />
-                <MenuItem Header="_Paste" Command="{Binding PasteCommand}" />
-                <MenuItem Header="_Delete" Command="{Binding DeleteCommand}" />
+                <MenuItem Header="Clo_ne Function" />
+                <MenuItem Header="Compa_re Functions">
+                    <MenuItem Header="_OR Functions" />
+                    <MenuItem Header="_AND Functions" />
+                    <MenuItem Header="_XOR Functions" />
+                </MenuItem>
                 <Separator />
-                <MenuItem Header="Select _All" Command="{Binding SelectAllCommand}" />
+                <MenuItem Header="_Cancel Esc" />
+            </MenuItem>
+
+            <MenuItem Header="T_ruthtable">
+                <MenuItem Header="_Modify Truth Table" />
+                <Separator />
+                <MenuItem Header="Show Tr_ue and Don't Care" />
+                <MenuItem Header="Show All _Rows" />
+                <Separator />
+                <MenuItem Header="Select _All" />
+                <MenuItem Header="_Don't Care" />
+                <MenuItem Header="_Invert" />
+                <Separator />
+                <MenuItem Header="_Submit Enter" />
+                <MenuItem Header="_Cancel Esc" />
+            </MenuItem>
+
+            <MenuItem Header="_Equation">
+                <MenuItem Header="_Modify Equation" />
+                <Separator />
+                <MenuItem Header="Sum of Produc_ts" />
+                <MenuItem Header="Pro_duct of Sums" />
+                <MenuItem Header="_Factor" />
+                <Separator />
+                <MenuItem Header="_Delete Del" />
+                <MenuItem Header="Select _All Ctrl+A" />
+                <Separator />
+                <MenuItem Header="_Submit Enter" />
+            </MenuItem>
+
+            <MenuItem Header="_Gates">
+                <MenuItem Header="_Modify Gate Diagram" />
+                <Separator />
+                <MenuItem Header="_Copy to Clipboard" />
+                <MenuItem Header="IC _Package Info..." />
+                <MenuItem Header="_Trace Gate Logic" />
+                <Separator />
+                <MenuItem Header="_Auto Redraw Diagram" />
+                <MenuItem Header="Zoom _Out" />
+                <MenuItem Header="_Zoom All" />
+                <Separator />
+                <MenuItem Header="_Delete Selected" />
+                <MenuItem Header="_Submit Enter" />
             </MenuItem>
 
             <MenuItem Header="_View">
-                <MenuItem Header="_Truth Table" Command="{Binding TruthTableCommand}" />
-                <MenuItem Header="_Equations" Command="{Binding EquationsCommand}" />
-                <MenuItem Header="_Gate Diagram" Command="{Binding GateDiagramCommand}" />
+                <MenuItem Header="_Unminimized" />
+                <MenuItem Header="_Minimized" />
                 <Separator />
-                <MenuItem Header="_IC Package Info" Command="{Binding IcPackageInfoCommand}" />
-            </MenuItem>
-
-            <MenuItem Header="_Tools">
-                <MenuItem Header="_Minimize" Command="{Binding MinimizeCommand}" />
-                <MenuItem Header="Map to _Gates" Command="{Binding MapToGatesCommand}" />
+                <MenuItem Header="_Verify Solutions" />
+                <MenuItem Header="_Log Ops" />
                 <Separator />
-                <MenuItem Header="_Options..." Command="{Binding OptionsCommand}" />
+                <MenuItem Header="_Test Minimize" />
+                <MenuItem Header="Test _All 4-var" />
+                <MenuItem Header="Test Random Large Probs" />
+                <MenuItem Header="Test All Diag _In" />
+                <MenuItem Header="Verify _Lookup Fcn" />
+                <MenuItem Header="_Draw All Gates" />
+                <Separator />
+                <MenuItem Header="Properties" />
+                <MenuItem Header="Randomize TT" />
+                <MenuItem Header="Minimize Time" />
+                <MenuItem Header="Test Equations" />
             </MenuItem>
 
             <MenuItem Header="_Help">
-                <MenuItem Header="_About LogicFriday1" Command="{Binding AboutCommand}" />
+                <MenuItem Header="_Help Contents" />
+                <MenuItem Header="_About Logic Friday..." />
             </MenuItem>
         </Menu>
 
