@@ -2,22 +2,41 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="LogicFriday1.Views.AboutDialog"
         Title="About Logic Friday"
-        Width="420"
-        Height="240"
-        MinWidth="420"
-        MinHeight="240"
-        MaxWidth="420"
-        MaxHeight="240"
+        Width="430"
+        Height="245"
+        MinWidth="430"
+        MinHeight="245"
+        MaxWidth="430"
+        MaxHeight="245"
         WindowStartupLocation="CenterOwner"
         CanResize="False">
 
     <Grid RowDefinitions="*,Auto"
-          Margin="20">
-        <StackPanel Spacing="8">
-            <TextBlock Text="Logic Friday v. 1.1.4" />
-            <TextBlock Text="logicfriday.exe" />
-            <TextBlock Text="Copyright (C) 2006-2012" />
-        </StackPanel>
+          Margin="18">
+        <Grid ColumnDefinitions="48,*">
+            <Image Source="/Assets/avalonia-logo.ico"
+                   Width="32"
+                   Height="32"
+                   HorizontalAlignment="Left"
+                   VerticalAlignment="Top" />
+
+            <StackPanel Grid.Column="1"
+                        Spacing="8">
+                <TextBlock Text="Logic Friday v. 1.1.4" />
+                <TextBlock Text="Copyright (C) 2006-2012 Steve Rickman" />
+
+                <TextBlock TextWrapping="Wrap">
+                    <Run Text="Espresso and misII are copyright 1988-1993," />
+                    <LineBreak />
+                    <Run Text="Regents of the University of California." />
+                </TextBlock>
+
+                <StackPanel Spacing="2">
+                    <TextBlock Text="logic.friday@sontrak.com" />
+                    <TextBlock Text="www.sontrak.com" />
+                </StackPanel>
+            </StackPanel>
+        </Grid>
 
         <Button Grid.Row="1"
                 HorizontalAlignment="Center"
