@@ -126,21 +126,6 @@
             <MenuItem Header="_View">
                 <MenuItem Header="_Unminimized" />
                 <MenuItem Header="_Minimized" />
-                <Separator />
-                <MenuItem Header="_Verify Solutions" />
-                <MenuItem Header="_Log Ops" />
-                <Separator />
-                <MenuItem Header="_Test Minimize" />
-                <MenuItem Header="Test _All 4-var" />
-                <MenuItem Header="Test Random Large Probs" />
-                <MenuItem Header="Test All Diag _In" />
-                <MenuItem Header="Verify _Lookup Fcn" />
-                <MenuItem Header="_Draw All Gates" />
-                <Separator />
-                <MenuItem Header="Properties" />
-                <MenuItem Header="Randomize TT" />
-                <MenuItem Header="Minimize Time" />
-                <MenuItem Header="Test Equations" />
             </MenuItem>
 
             <MenuItem Header="_Help">
