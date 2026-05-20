@@ -16,6 +16,12 @@ public partial class MainWindow : Window
         await dialog.ShowDialog(this);
     }
 
+    private async void NewTruthTable_OnClick(object? sender, RoutedEventArgs e)
+    {
+        var dialog = new TruthTableSetupDialog();
+        await dialog.ShowDialog<bool?>(this);
+    }
+
     private void Exit_OnClick(object? sender, RoutedEventArgs e)
     {
         Close();
