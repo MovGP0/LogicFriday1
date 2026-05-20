@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "LogicFriday1",
+  "project_id": "38a73c35-3377-4638-90dd-fe7de3f4e686"
+}
