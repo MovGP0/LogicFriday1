@@ -74,11 +74,14 @@
                 <MenuItem Header="Show All _Rows" />
                 <Separator />
                 <MenuItem Header="Select _All" />
+                <Separator />
+                <MenuItem Header="_True" />
+                <MenuItem Header="_False" />
                 <MenuItem Header="_Don't Care" />
                 <MenuItem Header="_Invert" />
                 <Separator />
-                <MenuItem Header="_Submit Enter" />
-                <MenuItem Header="_Cancel Esc" />
+                <MenuItem Header="_Submit (Enter)" />
+                <MenuItem Header="_Cancel (Esc)" />
             </MenuItem>
 
             <MenuItem Header="_Equation">
