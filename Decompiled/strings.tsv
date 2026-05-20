@@ -1,0 +1,885 @@
+address	data_type	value
+0044a464	string	RICHED32.DLL
+0044a474	string	RICHED20.DLL
+0044a484	string	DiagInWindow
+0044a494	string	DiagOutWindow
+0044a4a4	string	%s\lf.chm::/Tracing_logic.htm
+0044a4c4	string	%s\lf.chm::/Entering_diag.htm
+0044a4e4	string	%s\lf.chm::/Modifying_fcn.htm#ModifyDiag
+0044a510	string	%s\lf.chm::/Creating_lookup.htm
+0044a530	string	%s\lf.chm::/Mapping_fcn.htm
+0044a54c	string	%s\lf.chm::/Entering_TT.htm
+0044a568	string	%s\lf.chm::/Modifying_fcn.htm
+0044a588	string	ABOUTDLG
+0044a594	string	Error: %d
+0044a5a0	string	Times
+0044a5a8	string	Average: %d  Min: %d  Max: %d\n
+0044a5cc	string	%d%%: %d
+0044a5d8	string	\nPercent True: %d\n
+0044a5ec	string	Type: FAST\n
+0044a5f8	string	Type: EXACT\n
+0044a608	string	Inputs: %d  Outputs: %d  Reps: %d  
+0044a62c	string	MINIMIZE TIME TEST\n
+0044a640	string	Could not open file.
+0044a65c	string	%s\log.dat
+0044a668	string	MINTIME
+0044a670	string	testmin(%d,%d)\n
+0044a680	string	MINTEST
+0044a688	string	ABCDEFGHIJKLMNOPQRSTUVWXYZ
+0044a6a4	string	Equation Check
+0044a6b4	string	Error at eqn %X.
+0044a6c8	string	Z$<>bg~%d
+0044a6d4	string	%cXRTYMui
+0044a6e0	string	ABCDEFGHIJKLMNOP
+0044a6f4	string	EQNTEST
+0044a70c	string	Count = %d
+0044a718	string	Working...
+0044a724	string	testmin4\n
+0044a730	string	Not equal at term %d.
+0044a754	string	Checking...
+0044a760	string	misii -x -c "read_eqn %s\checkin.dat";"write_pla";
+0044a794	string	OUTORDER = 
+0044a7a8	string	INORDER = 
+0044a7b4	string	Parsing...
+0044a7c0	string	misii -x -c "re %s\minin.dat";"wp";
+0044a7e4	string	debug tools off
+0044a7f4	string	T&ools
+0044a7fc	string	debug tools on
+0044a80c	string	misii -x -c "rp -s %s\minin.dat";pf\n
+0044a834	string	TRACEDLG16
+0044a840	string	Mapping...
+0044a850	string	misii\misii -x -c "rp %s\minin.dat";"source script.txt";"read_library -n %s\user.genlib";%s;reset_name;print_stats;"print_gate -p";"print_level -l";print_level\n
+0044a8f8	string	misii\misii -x -c "rp %s\minin.dat";"source script.txt";"read_library %s\user.genlib";%s;reset_name;print_stats;"print_gate -p";"print_level -l";print_level\n
+0044a99c	string	"map -m1 -f3"
+0044a9ac	string	MAPDIALOG
+0044a9b8	string	MAPTIME
+0044a9c0	string	No gates are required to implement the function.
+0044a9f4	string	All True
+0044aa00	string	All False
+0044aa0c	string	Minimizing...
+0044aa1c	string	espresso\espresso -Dexact %s\minin.dat
+0044aa44	string	espresso\espresso -Dso -S1 %s\minin.dat
+0044aa6c	string	espresso\espresso -Dso %s\minin.dat
+0044aa90	string	MINDLG
+0044aa98	string	MINTIMEDLG
+0044aaa4	string	Equation verification failure.
+0044aac4	string	Verify
+0044aacc	string	EQNMODVAR
+0044aadc	string	%s\minout.dat
+0044aaec	string	Click Submit or press <Enter> when done.
+0044ab18	string	GATEPICKDLG2
+0044ab2f	string	BRANDOMTT
+0044ab40	string	Double-click an output cell to change state, or select a range and use the menu. Press <Enter> when done.
+0044abac	string	TTSETUP
+0044abb4	string	Press <Enter> when done.
+0044abd0	string	ICPKGINFO
+0044abdc	string	Setting equation...
+0044abf0	string	espresso\espresso %s\minin.dat
+0044ac10	string	lookup
+0044ac18	string	LOOKUPFCNDLG
+0044ac28	string	Please select two functions to compare.
+0044ac50	string	Imported from file:
+0044ac64	string	Import Truth Table
+0044ac78	string	TTEXPORTWARN
+0044ac8c	string	Multiple functions selected.
+0044acac	string	Error
+0044acb4	string	File Open
+0044acc0	string	NEWFCNDLG
+0044accc	string	%s\lf.chm::/features.htm
+0044acf0	string	Function %s has been changed. Do you want to save it?
+0044ad28	string	Function Selection
+0044ad3c	string	gibber99
+0044ad48	string	AttachConsole
+0044ad58	string	kernel32.dll
+0044ad68	string	Ready
+0044ad70	string	This program requires Windows 98, ME, 2000, XP, or Vista
+0044adac	string	Logic Friday
+0044adbc	string	LogicFridayRunning
+0044add4	string	#32770
+0044addc	string	Variable Name
+0044adec	string	Unidentified error.
+0044ae00	string	File Error %d. The operation could not be completed because a Logic Friday\ndata file could not be opened. It may be in use by another application.
+0044ae98	string	File error %d. Logic Friday could not create a necessary file and must close.
+0044aee8	string	Equation Error
+0044aef8	string	Length exceeds buffer size. You are limited to %dK characters
+0044af38	string	Could not open the file. It was created with a later version of Logic Friday and is incompatible with this version.
+0044afac	string	File Error
+0044afb8	string	Could not open the file. It may be in use by another application. Error code: %d
+0044b00c	string	An equation must be terminated with a semicolon.
+0044b040	string	Internal diagram error.
+0044b058	string	The diagram is too large to be drawn in this version of Windows.
+0044b09c	string	Printing Error
+0044b0ac	string	An error occurred during printing.
+0044b0d0	string	Setup Error
+0044b0dc	string	Page Setup failed.
+0044b0f0	string	File does not appear to be the correct type.
+0044b120	string	misII error %d.
+0044b130	string	Gate translation error %d.
+0044b14c	string	Gates verification failed: true term %d yields false
+0044b184	string	Gates verification failed: false term %d yields true
+0044b1bc	string	Could not attach console.
+0044b1d8	string	You must assign an output variable with '='.
+0044b208	string	File error %d.
+0044b218	string	Espresso error %d.
+0044b22c	string	Error creating minimize thread.
+0044b24c	string	Unable to map the function.
+0044b268	string	Could not open the log file.
+0044b288	string	An output variable may not appear on the right hand side of an equation.
+0044b2d4	string	Unrecognized command or function.
+0044b2f8	string	Function name is undefined.
+0044b314	string	Syntax error: missing '%c'
+0044b330	string	Variable names are limited to %d characters.
+0044b360	string	Variable names may have only letters, digits, periods, underscores, and brackets.\n The name must begin with a letter or underscore. Illegal char: '%c' (ASCII %d)
+0044b404	string	Unmatched '%c' in input.
+0044b420	string	Flag error clearing the input truthtable.
+0044b44c	string	Display table verify failed at term %d.
+0044b474	string	Error in dwTrueCnt.
+0044b488	string	Could not create table windows.
+0044b4a8	string	Verify failed: false term %d marked essential
+0044b4d8	string	Verify failed: false term %d is covered
+0044b500	string	Verify failed: true term %d not covered
+0044b528	string	Could not create edit window.
+0044b548	string	Could not create function window.
+0044b56c	string	Repeated variable in a product term: '%c'
+0044b598	string	No function is selected.
+0044b5b8	string	There is not enough memory to complete the operation,To free up available memory, close programs, projects,or windows you aren't using, and then try again. Error code %d
+0044b664	string	Syntax error in equation.
+0044b680	string	 Limit Error
+0044b690	string	Too many variables. This version of Logic Friday is limited to %d variables.
+0044b6e0	string	Syntax Error
+0044b6f0	string	Illegal character: '%c' (ASCII %d)
+0044b714	string	%s\lf.chm::/Syntax.htm#VarOrder
+0044b73c	string	Could not find a registered web browser.
+0044b768	string	Could not find a registered email application.
+0044b798	string	Logic Friday v. %d.%d.%d
+0044b7b4	string	%s\espresso
+0044b7c0	string	%s\espresso\espresso.exe
+0044b7dc	string	%s\misii
+0044b7e8	string	%s\misii\misii.exe
+0044b7fc	string	%s\checkout.dat
+0044b80c	string	ToolbarWindow32
+0044b81c	string	MENU_DIAGIN
+0044b828	string	MENU_LEIN
+0044b834	string	MENU_TTIN
+0044b840	string	MENU_DIAGOUT
+0044b850	string	MENU_LEOUT
+0044b85c	string	MENU_TTOUT
+0044b868	string	Do you want to cancel diagram entry?
+0044b890	string	Do you want to cancel equation entry?
+0044b8b8	string	Do you want to cancel truth table entry?
+0044b8e4	string	INORDER
+0044b8ec	string	<none>
+0044b8f4	string	Gates
+0044b904	string	False
+0044b914	string	Outputs
+0044b91c	string	Inputs
+0044b924	string	Function
+0044b930	string	SysListView32
+0044b940	string	Not mapped
+0044b94c	string	Unminimized
+0044b96c	string	%s-%s
+0044b978	string	v. 1.0
+0044b980	string	Logic Friday cannot continue because an essential file\ncould not be found. It may have been moved or deleted.\n\n%s\%s
+0044b9f8	string	script.txt
+0044ba04	string	%s\misii\lib
+0044ba14	string	misii.exe
+0044ba20	string	espresso.exe
+0044ba38	string	%s\user.genlib
+0044ba48	string	%s\checkin.dat
+0044ba58	string	%s\minin.dat
+0044ba68	string	logfriday_TEMP
+0044ba78	string	%s\lf.ini
+0044ba84	string	\Logic Friday
+0044ba94	string	Logic function (*.lfcn)
+0044bab8	string	C Source File (*.c)
+0044bad4	string	Enhanced Metafile (*.emf)
+0044baf4	string	Windows Bitmap (*.bmp)
+0044bb18	string	All Files (*.*)
+0044bb2c	string	Comma Separated Variables (*.csv)
+0044bb54	string	Text Files (*.txt)
+0044bb70	string	Comma Separated Variables (*.csv)
+0044bbd0	string	The operation could not be completed.
+0044bbf8	string	Conflict assigning an output value at line %d. A different value was assigned previously.
+0044bc54	string	Variable name declaration not found where expected.
+0044bc88	string	The truth table must have 2 to %d inputs and 1 to %d outputs.
+0044bcc8	string	No truth table found, or format error.
+0044bcf0	string	The name of an input or output is used more than once.
+0044bd28	string	Invalid character in a variable name: '%c'
+0044bd58	string	The count of variable names does not equal the count\nof variables, or the count of output names does not\nequal the count of outputs.
+0044bde0	string	An input or output variable name could not be used because\nit is too long. Names must be no more than %d characters in length.
+0044be60	string	Variable names were not found. Names for inputs and outputs\nmust be in the line immediately preceding the truth table.
+0044bed8	string	Import Error
+0044bee8	string	Invalid character in the truth table at line %d.\nAll truthtable cells must be '0', '1', or 'X'.
+0044bf54	string	notepad 
+0044bf64	string	 if( nOutAry[nX] & 1<<nBit )\n  return 1;\n else\n  return 0;\n}
+0044bfa4	string	 nBit = %d - nTerm %% %d;\n
+0044bfc0	string	 nX = nTerm / %d;\n
+0044bfd4	string	 unsigned int nX, nBit;\n\n
+0044bff0	string	 if( %s ) nTerm |= 1;\n
+0044c008	string	 if( %s ) nTerm |= 1<<%d;\n
+0044c024	string	 unsigned int nTerm=0, nX, nBit;\n\n
+0044c04c	string	I64X};\n\n
+0044c058	string	I64X, 
+0044c060	string	X};\n\n
+0044c068	string	%s%d%s
+0044c078	string	 const unsigned int nOutAry[] =\n {
+0044c09c	string	int %s )\n{\n
+0044c0a8	string	int %s( unsigned int nTerm )\n{\n
+0044c0c8	string	int %s );\n
+0044c0d8	string	int %s, 
+0044c0e4	string	int %s( 
+0044c0f0	string	int %s( unsigned int nTerm );\n
+0044c110	string	lu_%s
+0044c118	string	 Generated by Logic Friday on %s*/\n\n
+0044c140	string	/*\n %s\n
+0044c14c	string	 if( iRow & 1<<%d ) %s = 1;\n
+0044c16c	string	%s=0, 
+0044c174	string	%s=0;\n\n
+0044c17c	string	int TestLUFcnZ( int iRow, int iOut )\n{\n int 
+0044c1ac	string	int TestLUFcnZ( int iRow, int iOut )\n{\n
+0044c1dc	string	}\nreturn 0;\n}\n\n
+0044c1ec	string	case 15:\n return lu_F15( %s );\n 
+0044c210	string	case 14:\n return lu_F14( %s );\n 
+0044c234	string	case 13:\n return lu_F13( %s );\n 
+0044c258	string	case 12:\n return lu_F12( %s );\n 
+0044c27c	string	case 11:\n return lu_F11( %s );\n 
+0044c2a0	string	case 10:\n return lu_F10( %s );\n 
+0044c2c4	string	case 9:\n return lu_F9( %s );\n 
+0044c2e4	string	case 8:\n return lu_F8( %s );\n 
+0044c304	string	case 7:\n return lu_F7( %s );\n 
+0044c324	string	case 6:\n return lu_F6( %s );\n 
+0044c344	string	case 5:\n return lu_F5( %s );\n 
+0044c364	string	case 4:\n return lu_F4( %s );\n 
+0044c384	string	case 3:\n return lu_F3( %s );\n 
+0044c3a4	string	case 2:\n return lu_F2( %s );\n 
+0044c3c4	string	case 1:\n return lu_F1( %s );\n 
+0044c3e4	string	case 0:\n return lu_F0( %s );\n 
+0044c404	string	 switch( iOut )\n {\n 
+0044c434	string	Too many outputs. The limit is %d.
+0044c45c	string	The equation must have at least 2 input variables.
+0044c490	string	Too many input variables. The limit is %d.
+0044c4bc	string	Illegal character in equation.
+0044c4dc	string	bad character
+0044c4ec	string	contains a cycle
+0044c504	string	Parse error. Please check equation.
+0044c534	string	\n.type fdr\n
+0044c548	string	.o %d\n
+0044c550	string	.i %d\n
+0044c558	string	WarnTTExport
+0044c568	string	WarnMinTime
+0044c574	string	Flags
+0044c57c	string	WarnMapTime
+0044c588	string	szLUFcnSaveDir
+0044c598	string	szSaveDir
+0044c5a4	string	Folders
+0044c5ac	string	szOpenDir
+0044c5c0	string	Window
+0044c5c8	string	Placement
+0044c5d4	string	COMPRESDLG
+0044c5e0	string	NAMESORDERDLG
+0044c5f0	string	The two functions have different input variable names. Do you want to compare on the basis of the\ntruth table ordering of input variables?
+0044c680	string	The two functions must have the same number of inputs and only one output.
+0044c6cc	string	Compare Functions
+0044c6e0	string	%s only:
+0044c6ec	string	%s and %s:
+0044c6f8	string	%s is not equal to %s.
+0044c710	string	%s is the complement of %s.
+0044c72c	string	%s is a subset of %s.
+0044c744	string	%s equals %s.
+0044c758	string	NEWFCNNAME
+0044c768	string	The two functions have different input variable names. Do you want to carry out the operation on the basis of the\ntruth table ordering of input variables?
+0044c804	string	Function Operation
+0044c818	string	Verify Entry
+0044c828	string	Are you sure you want to set the length of <unsigned int> to %d?
+0044c870	string	The length of unsigned int may not be less than 8 bits or more than 64 bits.
+0044c8c0	string	Invalid Entry
+0044c8d0	string	Insufficient Length:\n\nThe number of bits in <unsigned int> cannot be less than the count\n of input variables in the logic function.
+0044c954	string	Function Creation Failed
+0044c9a8	string	Variable names may have only letters, digits, underscores, periods,\nand brackets. The name must begin with a letter or underscore.
+0044ca2c	string	Variable name already in use.
+0044ca4c	string	Variable names must have between 1 and %d characters.
+0044ca8f	string	?iTestR = %d, iTestB = %d, factor = %f
+0044cac6	string	I@PRINTDLG
+0044cad4	string	Logic Friday: Printing
+0044caec	string	Page %d
+0044caf4	string	PRNCNCLDLG
+0044cb00	string	COURIER NEW
+0044cb0c	string	To Page %d
+0044cb18	string	Page %d of %d
+0044cb28	string	To Page 999
+0044cb34	string	Minimized Product of Sums:
+0044cb50	string	Unminimized Product of Sums:
+0044cb70	string	Minimized:
+0044cb7c	string	Entered by truthtable:
+0044cb94	string	Entered:
+0044cba4	string	Factored:\n
+0044cbb0	string	%d %d %d\n
+0044cbc4	string	Total number
+0044cbfc	string	%d %d\n
+0044cc04	string	Map to Gates
+0044cc14	string	already mapped
+0044cc24	string	nodes=
+0044cc2c	string	does not fanout
+0044cc3c	string	Bad equation format.
+0044cc54	string	%s = 
+0044cc5c	string	Unminimized:
+0044cc6c	string	Minimized Product of Sums:\n
+0044cc88	string	You must include either a NAND or a NOR gate type.
+0044ccbc	string	Gate Selection
+0044ccd0	string	GATE mux2 4 O=!(!1D1*!3SEL+!2D2*3SEL);\nPIN 1D1 NONINV 1 999 1 .2 1 .2\nPIN 2D2 NONINV 1 999 1 .2 1 .2\nPIN 3SEL UNKNOWN 1 999 1 .2 1 .2\n
+0044cd58	string	GATE exor2 5.5 O=!(a*b+!a*!b); PIN * UNKNOWN 2 999 1.9 0.5 1.9 0.5\n
+0044cda0	string	GATE mux2 4 O=1D1*!3SEL+2D2*3SEL;\nPIN 1D1 NONINV 1 999 1 .2 1 .2\nPIN 2D2 NONINV 1 999 1 .2 1 .2\nPIN 3SEL UNKNOWN 1 999 1 .2 1 .2\n
+0044ce2c	string	GATE or4 4 O=a+b+c+d; PIN * INV 1 999 3.8 1.0 3.8 1.0\n
+0044ce68	string	GATE or3 3 O=a+b+c; PIN * INV 1 999 2.4 0.7 2.4 0.7\n
+0044cea4	string	GATE or2 2 O=a+b; PIN * INV 1 999 1.4 0.5 1.4 0.5\n
+0044cedc	string	GATE and4 2 O=a*b*c*d; PIN * INV 1 999 1.0 0.2 1.0 0.2\n
+0044cf1c	string	GATE and3 2 O=a*b*c; PIN * INV 1 999 1.0 0.2 1.0 0.2\n
+0044cf5c	string	GATE and2 2 O=a*b; PIN * INV 1 999 1.0 0.2 1.0 0.2\n
+0044cf98	string	GATE exor2 5.5 O=a*!b+!a*b; PIN * UNKNOWN 2 999 1.9 0.5 1.9 0.5\n
+0044cfdc	string	exor2
+0044cfe4	string	GATE nor4 4 O=!(a+b+c+d); PIN * INV 1 999 3.8 1.0 3.8 1.0\n
+0044d028	string	GATE nor3 3 O=!(a+b+c); PIN * INV 1 999 2.4 0.7 2.4 0.7\n
+0044d06c	string	GATE nor2 2 O=!(a+b); PIN * INV 1 999 1.4 0.5 1.4 0.5\n
+0044d0ac	string	GATE nand4 4 O=!(a*b*c*d); PIN * INV 1 999 1.4 0.4 1.4 0.4\n
+0044d0e8	string	nand4
+0044d0f0	string	GATE nand3 3 O=!(a*b*c); PIN * INV 1 999 1.1 0.3 1.1 0.3\n
+0044d12c	string	nand3
+0044d134	string	GATE nand2 2 O=!(a*b); PIN * INV 1 999 1.0 0.2 1.0 0.2\n
+0044d16c	string	nand2
+0044d178	string	GATE zero0 0 O=CONST0;\nGATE one0 0 O=CONST1;\nGATE inv1 1 O=!a; PIN * INV 1 999 0.9 0.3 0.9 0.3\n
+0044d1d8	string	TOTAL PACKAGES %d\r\n
+0044d1ec	string	Quad 2-Input MUX %d\r\n
+0044d204	string	Quad 2-Input EXOR %d\r\n
+0044d21c	string	Dual 4-Input OR %d\r\n
+0044d234	string	Triple 3-Input OR %d\r\n
+0044d24c	string	Quad 2-Input OR %d\r\n
+0044d264	string	Dual 4-Input AND %d\r\n
+0044d27c	string	Triple 3-Input AND %d\r\n
+0044d294	string	Quad 2-Input AND %d\r\n
+0044d2ac	string	Dual 4-Input NOR %d\r\n
+0044d2c4	string	Triple 3-Input NOR %d\r\n
+0044d2dc	string	Quad 2-Input NOR %d\r\n
+0044d2f4	string	Dual 4-Input NAND %d\r\n
+0044d30c	string	Triple 3-Input NAND %d\r\n
+0044d328	string	Quad 2-Input NAND %d\r\n
+0044d340	string	Hex Inverter %d\r\n
+0044d354	string	IC Qty\r\n
+0044d360	string	Logic Friday Diagram
+0044d375	string	Function %s
+0044d398	string	Out of vert slots.\nbFirstPass: %d bAlloc: %d  Row1: %d  Row2: %d  Col: %d  SlotCntV: %d  iX: %d\ndwSlotMask[iX]:\n
+0044d410	string	Out of horz slots.\nbFirstPass: %d\nbAlloc: %d  Col1: %d  Col2: %d  Row: %d  SlotCntH: %d  iX: %d\ndwSlotMask[iX]:\n
+0044d484	string	%d, %d
+0044d48c	string	GATELABELDLG
+0044d49c	string	VARNAMEDLG
+0044d4a8	string	WIRECURS
+0044d4b4	string	ptap %d: {%d, %d}, nID=%d, iTap=%d, iNode=%d\n
+0044d4e4	string	\niTapCnt = %d\n
+0044d4f4	string	pnode %d: {%d, %d}, iOrient=%d, bSel=%d, nID=%d\n
+0044d528	string	Wire: %d\n\niTypeA = %d\niGateA = %d\niGateInA = %d\niWireA = %d\n\niTypeB = %d\niGateB = %d\niGateInB = %d\niWireB = %d\n\niIsOutput = %d\nbBroken = %d\nbRed = %d\nbSelected = %d\n\niNodeCnt = %d\n
+0044d5e0	string	Gate %d: iOutWire=%d, iInWire[0]=%d, iInWire[1]=%d
+0044d618	string	Wire %d: iIsOutput=%d, iTypeA=%d, iTypeB=%d nodeA = %d, nodeB = %d, iNodeCnt = %d
+0044d66c	string	Entered by gate diagram:
+0044d688	string	Unknown error: %d, %d
+0044d6a0	string	Gate %s: An input is a function of the gate's output. Feedback is not supported.
+0044d6f4	string	Input terminal %s is not connected.
+0044d718	string	The number of outputs is limited to %d.
+0044d740	string	The function must have at least one output.
+0044d76c	string	The number of inputs is limited to %d.
+0044d794	string	The function must have at least two inputs.
+0044d7c0	string	Gate %s: An input has no driving connection.
+0044d7f0	string	Gate %s: Output is connected to another output.
+0044d820	string	Gate %s: Missing input connection.
+0044d844	string	Diagram Error
+0044d854	string	Gate %s: Missing output connection.
+0044d878	string	Illegal character: '%c'
+0044d890	string	Error: Name must begin with a letter.
+0044d8b8	string	Error: Name already in use.
+0044d8d4	string	Error: Name must contain 1 to %d characters.
+0044d904	string	Error: Name must begin with a letter or underscore.
+0044d938	string	%s = %d
+0044d960	string	U777D
+0044d968	string	U666D
+0044d970	string	U999B
+0044d978	string	U222A
+0044d980	string	Courier New
+0044d98c	string	RichEdit
+0044d998	string	RichEdit20A
+0044d9a4	string	SPLITHORZ
+0044d9b0	string	SPLITVERT
+0044d9bc	string	iNodeCnt = %d
+0044d9d0	string	hhctrl.ocx
+0044d9e0	string	CLSID\{ADB880A6-D8FF-11CF-9377-00AA003B7A11}\InprocServer32
+0044db3c	string	Microsoft Visual C++ Runtime Library
+0044db64	string	Program: 
+0044db74	string	<program name unknown>
+0044db90	string	A buffer overrun has been detected which has corrupted the program's\ninternal state.  The program cannot safely continue execution and must\nnow be terminated.\n
+0044dc30	string	Buffer overrun detected!
+0044dc50	string	A security error of unknown cause has been detected which has\ncorrupted the program's internal state.  The program cannot safely\ncontinue execution and must now be terminated.\n
+0044dd04	string	Unknown security failure detected!
+0044ddbe	unicode	null)
+0044ddcc	string	(null)
+0044df90	string	CorExitProcess
+0044dfa0	string	mscoree.dll
+0044dfb8	string	e+000
+0044dfd6	string	GAIsProcessorFeaturePresent
+0044dff4	string	KERNEL32
+0044e09c	string	SunMonTueWedThuFriSat
+0044e0b4	string	JanFebMarAprMayJunJulAugSepOctNovDec
+0044e134	string	runtime error 
+0044e148	string	TLOSS error\r\n
+0044e158	string	SING error\r\n
+0044e168	string	DOMAIN error\r\n
+0044e178	string	R6028\r\n- unable to initialize heap\r\n
+0044e1a0	string	R6027\r\n- not enough space for lowio initialization\r\n
+0044e1d8	string	R6026\r\n- not enough space for stdio initialization\r\n
+0044e210	string	R6025\r\n- pure virtual function call\r\n
+0044e238	string	R6024\r\n- not enough space for _onexit/atexit table\r\n
+0044e270	string	R6019\r\n- unable to open console device\r\n
+0044e29c	string	R6018\r\n- unexpected heap error\r\n
+0044e2c0	string	R6017\r\n- unexpected multithread lock error\r\n
+0044e2f0	string	R6016\r\n- not enough space for thread data\r\n
+0044e320	string	\r\nThis application has requested the Runtime to terminate it in an unusual way.\nPlease contact the application's support team for more information.\r\n
+0044e3b8	string	R6009\r\n- not enough space for environment\r\n
+0044e3e4	string	R6008\r\n- not enough space for arguments\r\n
+0044e410	string	R6002\r\n- floating point not loaded\r\n
+0044e438	string	Runtime Error!\n\nProgram: 
+0044e474	string	GetProcessWindowStation
+0044e48c	string	GetUserObjectInformationA
+0044e4a8	string	GetLastActivePopup
+0044e4bc	string	GetActiveWindow
+0044e4cc	string	MessageBoxA
+0044e4d8	string	user32.dll
+0044e924	string	InitializeCriticalSectionAndSpinCount
+0044e95c	string	HH:mm:ss
+0044e968	string	dddd, MMMM dd, yyyy
+0044e97c	string	MM/dd/yy
+0044e990	string	December
+0044e99c	string	November
+0044e9a8	string	October
+0044e9b0	string	September
+0044e9bc	string	August
+0044e9d4	string	April
+0044e9dc	string	March
+0044e9e4	string	February
+0044e9f0	string	January
+0044ea28	string	Saturday
+0044ea34	string	Friday
+0044ea3c	string	Thursday
+0044ea48	string	Wednesday
+0044ea54	string	Tuesday
+0044ea5c	string	Monday
+0044ea64	string	Sunday
+0044ead4	string	1#QNAN
+0044eadc	string	1#INF
+0044eae4	string	1#IND
+0044eaec	string	1#SNAN
+0044eb20	string	RSDS
+0044eb38	string	c:\Documents and Settings\Administrator\My Documents\Visual Studio Projects\LogicToolKit\LTK\Release\LTK.pdb
+0044f306	TerminatedCString	InitCommonControlsEx
+0044f31e	TerminatedCString	ImageList_AddMasked
+0044f334	TerminatedCString	ImageList_Create
+0044f346	TerminatedCString	COMCTL32.dll
+0044f356	TerminatedCString	GetProcAddress
+0044f368	TerminatedCString	GetModuleHandleA
+0044f37c	TerminatedCString	lstrlenA
+0044f388	TerminatedCString	lstrcpynA
+0044f394	TerminatedCString	LoadLibraryA
+0044f3a4	TerminatedCString	GetTickCount
+0044f3b4	TerminatedCString	ResetEvent
+0044f3c2	TerminatedCString	CloseHandle
+0044f3d0	TerminatedCString	SetEvent
+0044f3dc	TerminatedCString	lstrcpyA
+0044f3e8	TerminatedCString	Sleep
+0044f3f0	TerminatedCString	SetConsoleTitleA
+0044f404	TerminatedCString	AllocConsole
+0044f414	TerminatedCString	SetHandleInformation
+0044f42c	TerminatedCString	CreateEventA
+0044f43c	TerminatedCString	GetVersionExA
+0044f44c	TerminatedCString	CreateMutexA
+0044f45c	TerminatedCString	FreeConsole
+0044f46a	TerminatedCString	WaitForSingleObject
+0044f480	TerminatedCString	GenerateConsoleCtrlEvent
+0044f49c	TerminatedCString	GetExitCodeProcess
+0044f4b2	TerminatedCString	WaitForMultipleObjects
+0044f4cc	TerminatedCString	CreateProcessA
+0044f4de	TerminatedCString	GetStdHandle
+0044f4ee	TerminatedCString	GetLastError
+0044f4fe	TerminatedCString	CreateFileA
+0044f50c	TerminatedCString	SearchPathA
+0044f51a	TerminatedCString	GetShortPathNameA
+0044f52e	TerminatedCString	FindClose
+0044f53a	TerminatedCString	CreateDirectoryA
+0044f54e	TerminatedCString	FindFirstFileA
+0044f560	TerminatedCString	GetModuleFileNameA
+0044f576	TerminatedCString	WinExec
+0044f580	TerminatedCString	GetWindowsDirectoryA
+0044f598	TerminatedCString	DeleteFileA
+0044f5a6	TerminatedCString	GetPrivateProfileIntA
+0044f5be	TerminatedCString	GetPrivateProfileStringA
+0044f5da	TerminatedCString	GetPrivateProfileStructA
+0044f5f6	TerminatedCString	WritePrivateProfileStringA
+0044f614	TerminatedCString	WritePrivateProfileStructA
+0044f632	TerminatedCString	GlobalUnlock
+0044f642	TerminatedCString	GlobalLock
+0044f650	TerminatedCString	MulDiv
+0044f65a	TerminatedCString	GlobalSize
+0044f666	TerminatedCString	KERNEL32.dll
+0044f676	TerminatedCString	SendMessageA
+0044f686	TerminatedCString	GetClientRect
+0044f696	TerminatedCString	CreateWindowExA
+0044f6a8	TerminatedCString	CallWindowProcA
+0044f6ba	TerminatedCString	GetDlgCtrlID
+0044f6ca	TerminatedCString	SetCursor
+0044f6d6	TerminatedCString	LoadCursorA
+0044f6e4	TerminatedCString	ReleaseDC
+0044f6f0	TerminatedCString	SetWindowLongA
+0044f702	TerminatedCString	SetWindowPos
+0044f712	TerminatedCString	GetSystemMetrics
+0044f726	TerminatedCString	GetDC
+0044f72e	TerminatedCString	GetDlgItem
+0044f73c	TerminatedCString	InvalidateRgn
+0044f74c	TerminatedCString	DispatchMessageA
+0044f760	TerminatedCString	TranslateMessage
+0044f774	TerminatedCString	TranslateAcceleratorA
+0044f78c	TerminatedCString	IsDialogMessageA
+0044f7a0	TerminatedCString	GetMessageA
+0044f7ae	TerminatedCString	PostMessageA
+0044f7be	TerminatedCString	LoadAcceleratorsA
+0044f7d2	TerminatedCString	RegisterClassExA
+0044f7e6	TerminatedCString	GetSysColor
+0044f7f4	TerminatedCString	LoadIconA
+0044f800	TerminatedCString	LoadStringA
+0044f80e	TerminatedCString	InsertMenuA
+0044f81c	TerminatedCString	CreateDialogParamA
+0044f832	TerminatedCString	UpdateWindow
+0044f842	TerminatedCString	InvalidateRect
+0044f854	TerminatedCString	SetFocus
+0044f860	TerminatedCString	DialogBoxParamA
+0044f872	TerminatedCString	CheckMenuItem
+0044f882	TerminatedCString	CheckMenuRadioItem
+0044f898	TerminatedCString	SetWindowPlacement
+0044f8ae	TerminatedCString	GetWindowPlacement
+0044f8c4	TerminatedCString	DefWindowProcA
+0044f8d6	TerminatedCString	ShowWindow
+0044f8e4	TerminatedCString	FindWindowA
+0044f8f2	TerminatedCString	DrawMenuBar
+0044f900	TerminatedCString	RemoveMenu
+0044f90e	TerminatedCString	GetSubMenu
+0044f91c	TerminatedCString	GetMenu
+0044f926	TerminatedCString	DestroyWindow
+0044f936	TerminatedCString	ShowScrollBar
+0044f946	TerminatedCString	PostQuitMessage
+0044f958	TerminatedCString	MessageBoxA
+0044f966	TerminatedCString	EndDialog
+0044f972	TerminatedCString	GetDlgItemInt
+0044f982	TerminatedCString	IsDlgButtonChecked
+0044f998	TerminatedCString	CheckDlgButton
+0044f9aa	TerminatedCString	EnableWindow
+0044f9ba	TerminatedCString	CheckRadioButton
+0044f9ce	TerminatedCString	SendDlgItemMessageA
+0044f9e4	TerminatedCString	SetDlgItemTextA
+0044f9f6	TerminatedCString	GetKeyState
+0044fa04	TerminatedCString	EnableMenuItem
+0044fa16	TerminatedCString	LoadImageA
+0044fa24	TerminatedCString	MoveWindow
+0044fa32	TerminatedCString	OffsetRect
+0044fa40	TerminatedCString	GetWindowRect
+0044fa50	TerminatedCString	DestroyMenu
+0044fa5e	TerminatedCString	TrackPopupMenu
+0044fa70	TerminatedCString	LoadMenuA
+0044fa7c	TerminatedCString	GetFocus
+0044fa88	TerminatedCString	ClientToScreen
+0044fa9a	TerminatedCString	PtInRect
+0044faa6	TerminatedCString	ScreenToClient
+0044fab8	TerminatedCString	CloseClipboard
+0044faca	TerminatedCString	FillRect
+0044fad6	TerminatedCString	SetClipboardData
+0044faea	TerminatedCString	EmptyClipboard
+0044fafc	TerminatedCString	OpenClipboard
+0044fb0c	TerminatedCString	GetDlgItemTextA
+0044fb1e	TerminatedCString	SetDlgItemInt
+0044fb2e	TerminatedCString	SetRect
+0044fb38	TerminatedCString	SetWindowTextA
+0044fb4a	TerminatedCString	PeekMessageA
+0044fb5a	TerminatedCString	GetScrollInfo
+0044fb6a	TerminatedCString	ReleaseCapture
+0044fb7c	TerminatedCString	SetCapture
+0044fb8a	TerminatedCString	KillTimer
+0044fb96	TerminatedCString	EndPaint
+0044fba2	TerminatedCString	BeginPaint
+0044fbb0	TerminatedCString	SystemParametersInfoA
+0044fbc8	TerminatedCString	SetTimer
+0044fbd4	TerminatedCString	InflateRect
+0044fbe2	TerminatedCString	SetScrollInfo
+0044fbf2	TerminatedCString	IntersectRect
+0044fc02	TerminatedCString	SetScrollPos
+0044fc12	TerminatedCString	GetClipboardData
+0044fc26	TerminatedCString	IsClipboardFormatAvailable
+0044fc44	TerminatedCString	GetSysColorBrush
+0044fc56	TerminatedCString	USER32.dll
+0044fc64	TerminatedCString	GetTextExtentPoint32A
+0044fc7c	TerminatedCString	SelectObject
+0044fc8c	TerminatedCString	CreateFontIndirectA
+0044fca2	TerminatedCString	GetObjectA
+0044fcb0	TerminatedCString	ExtTextOutA
+0044fcbe	TerminatedCString	SetBkMode
+0044fcca	TerminatedCString	SetTextColor
+0044fcda	TerminatedCString	DeleteObject
+0044fcea	TerminatedCString	GetStockObject
+0044fcfc	TerminatedCString	GetDeviceCaps
+0044fd0c	TerminatedCString	DeleteDC
+0044fd18	TerminatedCString	PlayEnhMetaFile
+0044fd2a	TerminatedCString	CreateCompatibleDC
+0044fd40	TerminatedCString	CreateDIBSection
+0044fd54	TerminatedCString	DeleteEnhMetaFile
+0044fd68	TerminatedCString	CopyEnhMetaFileA
+0044fd7c	TerminatedCString	GetEnhMetaFileBits
+0044fd92	TerminatedCString	SetEnhMetaFileBits
+0044fda8	TerminatedCString	CreateBitmap
+0044fdb8	TerminatedCString	GetEnhMetaFileHeader
+0044fdd0	TerminatedCString	ResetDCA
+0044fddc	TerminatedCString	EndDoc
+0044fde6	TerminatedCString	EndPage
+0044fdf0	TerminatedCString	LineTo
+0044fdfa	TerminatedCString	MoveToEx
+0044fe06	TerminatedCString	CreatePen
+0044fe12	TerminatedCString	TextOutA
+0044fe1e	TerminatedCString	StartPage
+0044fe2a	TerminatedCString	StartDocA
+0044fe36	TerminatedCString	SetAbortProc
+0044fe46	TerminatedCString	GetTextMetricsA
+0044fe58	TerminatedCString	SetTextAlign
+0044fe68	TerminatedCString	Rectangle
+0044fe74	TerminatedCString	SelectClipRgn
+0044fe84	TerminatedCString	CreateRectRgnIndirect
+0044fe9c	TerminatedCString	CloseEnhMetaFile
+0044feb0	TerminatedCString	SetBkColor
+0044febe	TerminatedCString	CreateEnhMetaFileA
+0044fed4	TerminatedCString	SetPixel
+0044fee0	TerminatedCString	PolyBezier
+0044feee	TerminatedCString	Ellipse
+0044fef8	TerminatedCString	Arc
+0044fefe	TerminatedCString	CreateBrushIndirect
+0044ff14	TerminatedCString	CreateCompatibleBitmap
+0044ff2e	TerminatedCString	BitBlt
+0044ff38	TerminatedCString	PatBlt
+0044ff42	TerminatedCString	CreatePatternBrush
+0044ff56	TerminatedCString	GDI32.dll
+0044ff62	TerminatedCString	GetOpenFileNameA
+0044ff76	TerminatedCString	GetSaveFileNameA
+0044ff8a	TerminatedCString	PageSetupDlgA
+0044ff9a	TerminatedCString	PrintDlgA
+0044ffa4	TerminatedCString	comdlg32.dll
+0044ffb4	TerminatedCString	SetFileSecurityA
+0044ffc8	TerminatedCString	SetSecurityDescriptorSacl
+0044ffe4	TerminatedCString	SetSecurityDescriptorGroup
+00450002	TerminatedCString	SetSecurityDescriptorDacl
+0045001e	TerminatedCString	InitializeSecurityDescriptor
+0045003e	TerminatedCString	RegCloseKey
+0045004c	TerminatedCString	RegQueryValueExA
+00450060	TerminatedCString	RegOpenKeyExA
+0045006e	TerminatedCString	ADVAPI32.dll
+0045007e	TerminatedCString	ShellExecuteA
+0045008e	TerminatedCString	SHGetSpecialFolderPathA
+004500a6	TerminatedCString	SHELL32.dll
+004500b4	TerminatedCString	ExitProcess
+004500c2	TerminatedCString	GetSystemTimeAsFileTime
+004500dc	TerminatedCString	HeapReAlloc
+004500ea	TerminatedCString	HeapAlloc
+004500f6	TerminatedCString	ExitThread
+00450104	TerminatedCString	TlsSetValue
+00450112	TerminatedCString	TlsGetValue
+00450120	TerminatedCString	ResumeThread
+00450130	TerminatedCString	CreateThread
+00450140	TerminatedCString	HeapFree
+0045014c	TerminatedCString	RtlUnwind
+00450158	TerminatedCString	GetStartupInfoA
+0045016a	TerminatedCString	GetCommandLineA
+0045017c	TerminatedCString	QueryPerformanceCounter
+00450196	TerminatedCString	GetCurrentThreadId
+004501ac	TerminatedCString	GetCurrentProcessId
+004501c2	TerminatedCString	EnterCriticalSection
+004501da	TerminatedCString	LeaveCriticalSection
+004501f2	TerminatedCString	DeleteCriticalSection
+0045020a	TerminatedCString	HeapDestroy
+00450218	TerminatedCString	HeapCreate
+00450226	TerminatedCString	VirtualFree
+00450234	TerminatedCString	VirtualAlloc
+00450244	TerminatedCString	IsBadWritePtr
+00450254	TerminatedCString	TlsFree
+0045025e	TerminatedCString	SetLastError
+0045026e	TerminatedCString	TlsAlloc
+0045027a	TerminatedCString	TerminateProcess
+0045028e	TerminatedCString	GetCurrentProcess
+004502a2	TerminatedCString	UnhandledExceptionFilter
+004502be	TerminatedCString	HeapSize
+004502ca	TerminatedCString	WriteFile
+004502d6	TerminatedCString	ReadFile
+004502e2	TerminatedCString	WideCharToMultiByte
+004502f8	TerminatedCString	GetTimeZoneInformation
+00450312	TerminatedCString	SetFilePointer
+00450324	TerminatedCString	SetHandleCount
+00450336	TerminatedCString	GetFileType
+00450344	TerminatedCString	LCMapStringA
+00450354	TerminatedCString	MultiByteToWideChar
+0045036a	TerminatedCString	LCMapStringW
+0045037a	TerminatedCString	FreeEnvironmentStringsA
+00450394	TerminatedCString	GetEnvironmentStrings
+004503ac	TerminatedCString	FreeEnvironmentStringsW
+004503c6	TerminatedCString	GetEnvironmentStringsW
+004503e0	TerminatedCString	SetStdHandle
+004503f0	TerminatedCString	FlushFileBuffers
+00450404	TerminatedCString	InitializeCriticalSection
+00450420	TerminatedCString	GetCPInfo
+0045042c	TerminatedCString	GetLocaleInfoA
+0045043e	TerminatedCString	GetStringTypeA
+00450450	TerminatedCString	GetStringTypeW
+00450462	TerminatedCString	GetACP
+0045046c	TerminatedCString	GetOEMCP
+00450478	TerminatedCString	SetUnhandledExceptionFilter
+00450496	TerminatedCString	IsBadReadPtr
+004504a6	TerminatedCString	IsBadCodePtr
+004504b6	TerminatedCString	VirtualProtect
+004504c8	TerminatedCString	GetSystemInfo
+004504d8	TerminatedCString	VirtualQuery
+004504e8	TerminatedCString	SetEndOfFile
+004504f8	TerminatedCString	CompareStringA
+0045050a	TerminatedCString	CompareStringW
+0045051c	TerminatedCString	SetEnvironmentVariableA
+0045106c	string	logic.friday@sontrak.com
+00451170	string	mailto:logic.friday@sontrak.com
+00451384	string	www.sontrak.com
+00451488	string	http://www.sontrak.com
+004516aa	string	New...
+0045173a	string	Print
+004517fa	string	Paste
+004518ba	string	Minimize...
+004518ea	string	Map to Gates...
+0045191a	string	Zoom In
+0045194a	string	Zoom Out
+0046eca0	IMAGE_RESOURCE_DIR_STRING_U_20	
+0046ecb6	IMAGE_RESOURCE_DIR_STRING_U_20	
+0046eccc	IMAGE_RESOURCE_DIR_STRING_U_24	
+0046ece6	IMAGE_RESOURCE_DIR_STRING_U_18	
+0046ecfa	IMAGE_RESOURCE_DIR_STRING_U_18	
+0046ed0e	IMAGE_RESOURCE_DIR_STRING_U_22	
+0046ed26	IMAGE_RESOURCE_DIR_STRING_U_14	
+0046ed36	IMAGE_RESOURCE_DIR_STRING_U_14	
+0046ed46	IMAGE_RESOURCE_DIR_STRING_U_18	
+0046ed5a	IMAGE_RESOURCE_DIR_STRING_U_16	
+0046ed6c	IMAGE_RESOURCE_DIR_STRING_U_20	
+0046ed82	IMAGE_RESOURCE_DIR_STRING_U_26	
+0046ed9e	IMAGE_RESOURCE_DIR_STRING_U_20	
+0046edb4	IMAGE_RESOURCE_DIR_STRING_U_20	
+0046edca	IMAGE_RESOURCE_DIR_STRING_U_24	
+0046ede4	IMAGE_RESOURCE_DIR_STRING_U_22	
+0046edfc	IMAGE_RESOURCE_DIR_STRING_U_20	
+0046ee12	IMAGE_RESOURCE_DIR_STRING_U_24	
+0046ee2c	IMAGE_RESOURCE_DIR_STRING_U_20	
+0046ee42	IMAGE_RESOURCE_DIR_STRING_U_24	
+0046ee5c	IMAGE_RESOURCE_DIR_STRING_U_18	
+0046ee70	IMAGE_RESOURCE_DIR_STRING_U_18	
+0046ee84	IMAGE_RESOURCE_DIR_STRING_U_16	
+0046ee96	IMAGE_RESOURCE_DIR_STRING_U_16	
+0046eea8	IMAGE_RESOURCE_DIR_STRING_U_14	
+0046eeb8	IMAGE_RESOURCE_DIR_STRING_U_14	
+0046eec8	IMAGE_RESOURCE_DIR_STRING_U_20	
+0046eede	IMAGE_RESOURCE_DIR_STRING_U_18	
+0046eef2	IMAGE_RESOURCE_DIR_STRING_U_14	
+0046ef02	IMAGE_RESOURCE_DIR_STRING_U_12	
+0046ef10	IMAGE_RESOURCE_DIR_STRING_U_24	
+0046ef2a	IMAGE_RESOURCE_DIR_STRING_U_16	
+0046ef3c	IMAGE_RESOURCE_DIR_STRING_U_18	
+0046ef50	IMAGE_RESOURCE_DIR_STRING_U_18	
+004707ae	unicode	&File
+004707ea	unicode	Truth &Table
+00470812	unicode	Logic &Equation
+00470842	unicode	Gate &Diagram
+0047086e	unicode	&Open...
+0047088e	unicode	&Close
+004708d6	unicode	Save &As...
+0047090e	unicode	&Import Truth Table...
+0047094a	unicode	Export &Truth Table...
+00470986	unicode	Export &Gate Diagram...
+004709d6	unicode	&Print...
+00470a26	unicode	&Operation
+00470a4e	unicode	&Minimize...
+00470a76	unicode	Map to &Gates...
+00470aa6	unicode	Generate C &Lookup Function...
+00470b02	unicode	Clo&ne Function
+00470b42	unicode	Compa&re Functions
+00470b76	unicode	&OR Functions
+00470ba2	unicode	&AND Functions
+00470bce	unicode	&XOR Functions
+00470c0a	unicode	&Cancel Esc
+00470c32	unicode	T&ruthtable
+00470c5e	unicode	&Modify Truth Table
+00470ca6	unicode	Show Tr&ue and Don't Care
+00470cea	unicode	Show All &Rows
+00470d26	unicode	Select &All
+00470d96	unicode	&Don't Care
+00470dbe	unicode	&Invert
+00470dee	unicode	&Submit Enter
+00470e1a	unicode	&Cancel Esc
+00470e42	unicode	&Equation
+00470e6a	unicode	&Modify Equation
+00470eaa	unicode	Sum of Produc&ts
+00470eda	unicode	Pro&duct of Sums
+00470f0a	unicode	&Factor
+00471016	unicode	&Delete Del
+0047103e	unicode	Select &All Ctrl+A
+00471082	unicode	&Submit Enter
+004710d6	unicode	&Gates
+004710f6	unicode	&Modify Gate Diagram
+0047113e	unicode	&Copy to Clipboard
+00471172	unicode	IC &Package Info...
+004711aa	unicode	&Trace Gate Logic
+004711ee	unicode	&Auto Redraw Diagram
+00471256	unicode	Zoom &Out
+0047127a	unicode	&Zoom All
+004712ae	unicode	&Delete Selected
+004712ee	unicode	&Submit Enter
+00471362	unicode	&Unminimized
+0047138a	unicode	&Minimized
+004713ce	unicode	&Verify Solutions
+00471402	unicode	&Log Ops
+00471432	unicode	&Test Minimize
+0047145e	unicode	Test &All 4-var
+0047148e	unicode	Test Random Large Probs
+004714ce	unicode	Test All Diag &In
+00471502	unicode	Verify &Lookup Fcn
+00471536	unicode	&Draw All Gates
+00471566	unicode	Properties
+0047158a	unicode	Randomize TT
+004715b2	unicode	Minimize Time
+004715de	unicode	Test Equations
+0047162a	unicode	&Help Contents
+00471666	unicode	&About Logic Friday...
+0047c416	unicode	VS_VERSION_INFO
+0047c46c	StringFileInfo	
+0047c472	TerminatedUnicode	StringFileInfo
+0047c490	StringTable	
+0047c496	TerminatedUnicode	040904b0
+0047c4a8	StringInfo	
+0047c4ae	TerminatedUnicode	FileDescription
+0047c4d0	TerminatedUnicode	Logic Friday 1.1.4
+0047c4f8	StringInfo	
+0047c4fe	TerminatedUnicode	FileVersion
+0047c518	TerminatedUnicode	1, 1, 4, 0
+0047c530	StringInfo	
+0047c536	TerminatedUnicode	InternalName
+0047c550	TerminatedUnicode	LTK
+0047c558	StringInfo	
+0047c55e	TerminatedUnicode	LegalCopyright
+0047c57c	TerminatedUnicode	Copyright (C) 2006-2012
+0047c5ac	StringInfo	
+0047c5b2	TerminatedUnicode	OriginalFilename
+0047c5d4	TerminatedUnicode	logicfriday.exe
+0047c5f4	StringInfo	
+0047c5fa	TerminatedUnicode	ProductName
+0047c614	TerminatedUnicode	 LTK Application
+0047c638	StringInfo	
+0047c63e	TerminatedUnicode	ProductVersion
+0047c65c	TerminatedUnicode	1, 1, 4, 0
+0047c67a	TerminatedUnicode	VarFileInfo
+0047c69a	TerminatedUnicode	Translation
