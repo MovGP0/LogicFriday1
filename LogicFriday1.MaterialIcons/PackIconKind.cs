@@ -9,22 +9,17 @@ namespace LogicFriday1.MaterialIcons;
 public enum PackIconKind
 {
     None,
-    Cancel,
     ChartBellCurve,
-    Check,
-    Chip,
-    Close,
     ContentCopy,
     ContentCut,
     ContentPaste,
-    Delete,
+    ContentSave,
     FilePlus,
     FolderOpen,
-    FunctionVariant,
     MagnifyMinus,
     MagnifyPlus,
     MapMarkerPath,
     Printer,
-    SelectAll,
-    TableEdit
+    Redo,
+    Undo
 }
