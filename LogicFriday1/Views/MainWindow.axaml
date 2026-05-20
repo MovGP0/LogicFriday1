@@ -131,7 +131,8 @@
             <MenuItem Header="_Help">
                 <MenuItem Header="_Help Contents" />
                 <Separator />
-                <MenuItem Header="_About Logic Friday..." />
+                <MenuItem Header="_About Logic Friday..."
+                          Click="AboutLogicFriday_OnClick" />
             </MenuItem>
         </Menu>
 

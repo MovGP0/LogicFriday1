@@ -1,0 +1,67 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="LogicFriday1.Views.AboutDialog"
+        Title="About Logic Friday"
+        Width="420"
+        Height="240"
+        MinWidth="420"
+        MinHeight="240"
+        MaxWidth="420"
+        MaxHeight="240"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False">
+
+    <Grid RowDefinitions="*,Auto"
+          Margin="20">
+        <StackPanel Spacing="10">
+            <TextBlock Text="Logic Friday"
+                       FontSize="22"
+                       FontWeight="SemiBold" />
+            <TextBlock Text="Logic Friday v. 1.1.4" />
+            <TextBlock Text="Digital logic tool for truth tables, equations, and gate diagrams."
+                       TextWrapping="Wrap" />
+
+            <Grid ColumnDefinitions="Auto,*"
+                  RowDefinitions="Auto,Auto"
+                  Margin="0,8,0,0"
+                  RowSpacing="6"
+                  ColumnSpacing="12">
+                <TextBlock Text="Email:" />
+                <Button Grid.Column="1"
+                        Classes="linkButton"
+                        Click="EmailButton_OnClick">
+                    logic.friday@sontrak.com
+                </Button>
+
+                <TextBlock Grid.Row="1"
+                           Text="Web:" />
+                <Button Grid.Row="1"
+                        Grid.Column="1"
+                        Classes="linkButton"
+                        Click="WebsiteButton_OnClick">
+                    www.sontrak.com
+                </Button>
+            </Grid>
+        </StackPanel>
+
+        <Button Grid.Row="1"
+                HorizontalAlignment="Right"
+                MinWidth="80"
+                IsDefault="True"
+                IsCancel="True"
+                Click="OkButton_OnClick">
+            OK
+        </Button>
+    </Grid>
+
+    <Window.Styles>
+        <Style Selector="Button.linkButton">
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="Foreground" Value="#CC0000" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="TextBlock.TextDecorations" Value="Underline" />
+        </Style>
+    </Window.Styles>
+</Window>
