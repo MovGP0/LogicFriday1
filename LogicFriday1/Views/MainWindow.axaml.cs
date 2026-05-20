@@ -15,4 +15,9 @@ public partial class MainWindow : Window
         var dialog = new AboutDialog();
         await dialog.ShowDialog(this);
     }
+
+    private void Exit_OnClick(object? sender, RoutedEventArgs e)
+    {
+        Close();
+    }
 }

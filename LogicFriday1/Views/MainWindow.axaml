@@ -49,7 +49,8 @@
                 <Separator />
                 <MenuItem Header="_Print..." />
                 <Separator />
-                <MenuItem Header="E_xit" />
+                <MenuItem Header="E_xit"
+                          Click="Exit_OnClick" />
             </MenuItem>
 
             <MenuItem Header="_Operation">
