@@ -91,10 +91,17 @@
                 <MenuItem Header="Pro_duct of Sums" />
                 <MenuItem Header="_Factor" />
                 <Separator />
-                <MenuItem Header="_Delete Del" />
-                <MenuItem Header="Select _All Ctrl+A" />
+                <MenuItem Header="_Undo (Ctrl+Z)" />
+                <MenuItem Header="_Redo (Ctrl+Y)" />
                 <Separator />
-                <MenuItem Header="_Submit Enter" />
+                <MenuItem Header="Cu_t (Ctrl+X)" />
+                <MenuItem Header="_Copy (Ctrl+C)" />
+                <MenuItem Header="_Paste (Ctrl+V)" />
+                <MenuItem Header="_Delete (Del)" />
+                <MenuItem Header="Select _All (Ctrl+A)" />
+                <Separator />
+                <MenuItem Header="_Submit (Enter)" />
+                <MenuItem Header="_Cancel (Esc)" />
             </MenuItem>
 
             <MenuItem Header="_Gates">
