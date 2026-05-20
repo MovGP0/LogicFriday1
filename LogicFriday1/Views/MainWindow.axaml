@@ -1,0 +1,95 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:LogicFriday1.ViewModels"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="1100" d:DesignHeight="720"
+        x:Class="LogicFriday1.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Icon="/Assets/avalonia-logo.ico"
+        Title="LogicFriday1"
+        Width="1100"
+        Height="720"
+        MinWidth="900"
+        MinHeight="560">
+
+    <Design.DataContext>
+        <vm:MainWindowViewModel/>
+    </Design.DataContext>
+
+    <DockPanel>
+        <Menu DockPanel.Dock="Top">
+            <MenuItem Header="_File">
+                <MenuItem Header="_New Function" Command="{Binding NewFunctionCommand}" />
+                <MenuItem Header="_Open..." Command="{Binding OpenCommand}" />
+                <Separator />
+                <MenuItem Header="_Save" Command="{Binding SaveCommand}" />
+                <MenuItem Header="Save _As..." Command="{Binding SaveAsCommand}" />
+                <Separator />
+                <MenuItem Header="_Import..." Command="{Binding ImportCommand}" />
+                <MenuItem Header="_Export..." Command="{Binding ExportCommand}" />
+                <Separator />
+                <MenuItem Header="Page Set_up..." Command="{Binding PageSetupCommand}" />
+                <MenuItem Header="_Print..." Command="{Binding PrintCommand}" />
+                <Separator />
+                <MenuItem Header="E_xit" Command="{Binding ExitCommand}" />
+            </MenuItem>
+
+            <MenuItem Header="_Edit">
+                <MenuItem Header="_Undo" Command="{Binding UndoCommand}" />
+                <MenuItem Header="_Redo" Command="{Binding RedoCommand}" />
+                <Separator />
+                <MenuItem Header="Cu_t" Command="{Binding CutCommand}" />
+                <MenuItem Header="_Copy" Command="{Binding CopyCommand}" />
+                <MenuItem Header="_Paste" Command="{Binding PasteCommand}" />
+                <MenuItem Header="_Delete" Command="{Binding DeleteCommand}" />
+                <Separator />
+                <MenuItem Header="Select _All" Command="{Binding SelectAllCommand}" />
+            </MenuItem>
+
+            <MenuItem Header="_View">
+                <MenuItem Header="_Truth Table" Command="{Binding TruthTableCommand}" />
+                <MenuItem Header="_Equations" Command="{Binding EquationsCommand}" />
+                <MenuItem Header="_Gate Diagram" Command="{Binding GateDiagramCommand}" />
+                <Separator />
+                <MenuItem Header="_IC Package Info" Command="{Binding IcPackageInfoCommand}" />
+            </MenuItem>
+
+            <MenuItem Header="_Tools">
+                <MenuItem Header="_Minimize" Command="{Binding MinimizeCommand}" />
+                <MenuItem Header="Map to _Gates" Command="{Binding MapToGatesCommand}" />
+                <Separator />
+                <MenuItem Header="_Options..." Command="{Binding OptionsCommand}" />
+            </MenuItem>
+
+            <MenuItem Header="_Help">
+                <MenuItem Header="_About LogicFriday1" Command="{Binding AboutCommand}" />
+            </MenuItem>
+        </Menu>
+
+        <Border DockPanel.Dock="Bottom"
+                BorderThickness="0,1,0,0"
+                BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+                Padding="8,4">
+            <TextBlock Text="{Binding StatusText}" />
+        </Border>
+
+        <Grid ColumnDefinitions="240,*">
+            <Border BorderThickness="0,0,1,0"
+                    BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}">
+                <Panel />
+            </Border>
+
+            <Grid Grid.Column="1"
+                  RowDefinitions="*,220">
+                <Panel />
+                <Border Grid.Row="1"
+                        BorderThickness="0,1,0,0"
+                        BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}">
+                    <Panel />
+                </Border>
+            </Grid>
+        </Grid>
+    </DockPanel>
+
+</Window>

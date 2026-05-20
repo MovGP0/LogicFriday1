@@ -3,3 +3,7 @@
 .dolt/
 *.db
 .beads-credential-key
+
+# .NET build output
+bin/
+obj/
