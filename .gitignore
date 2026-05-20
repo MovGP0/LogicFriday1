@@ -5,5 +5,11 @@
 .beads-credential-key
 
 # .NET build output
-bin/
-obj/
+/bin/
+/obj/
+**/bin/
+**/obj/
+
+# Local workspace files
+.idea/
+.temp/
