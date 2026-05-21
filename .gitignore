@@ -13,3 +13,4 @@
 # Local workspace files
 .idea/
 .temp/
+*.user
