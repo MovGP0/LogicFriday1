@@ -43,6 +43,14 @@
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
             <Setter Property="VerticalContentAlignment" Value="Stretch" />
         </Style>
+        <Style Selector="Button.gatePaletteButton icons|PackIcon">
+            <Setter Property="Width" Value="24" />
+            <Setter Property="Height" Value="24" />
+            <Setter Property="Foreground" Value="{DynamicResource LogicFriday.Brush.OnSurface}" />
+        </Style>
+        <Style Selector="Button.gatePaletteButton:pointerover icons|PackIcon">
+            <Setter Property="Foreground" Value="{DynamicResource LogicFriday.Brush.OnSecondaryContainer}" />
+        </Style>
     </Window.Styles>
 
     <Window.DataTemplates>
@@ -476,21 +484,24 @@
                                 <Button Grid.Row="8"
                                         Grid.Column="0"
                                         Classes="gatePaletteButton"
-                                        Content="{Binding GatePaletteItems[21]}"
                                         Tag="{Binding GatePaletteItems[21]}"
-                                        Click="GatePaletteButton_OnClick" />
+                                        Click="GatePaletteButton_OnClick">
+                                    <icons:PackIcon Kind="Check" />
+                                </Button>
                                 <Button Grid.Row="8"
                                         Grid.Column="1"
                                         Classes="gatePaletteButton"
-                                        Content="{Binding GatePaletteItems[22]}"
                                         Tag="{Binding GatePaletteItems[22]}"
-                                        Click="GatePaletteButton_OnClick" />
+                                        Click="GatePaletteButton_OnClick">
+                                    <icons:PackIcon Kind="Close" />
+                                </Button>
                                 <Button Grid.Row="8"
                                         Grid.Column="2"
                                         Classes="gatePaletteButton"
-                                        Content="{Binding GatePaletteItems[23]}"
                                         Tag="{Binding GatePaletteItems[23]}"
-                                        Click="GatePaletteButton_OnClick" />
+                                        Click="GatePaletteButton_OnClick">
+                                    <icons:PackIcon Kind="HelpCircle" />
+                                </Button>
                             </Grid>
                         </ScrollViewer>
                     </Border>
