@@ -92,6 +92,23 @@ public partial class MainWindow : Window
         }
     }
 
+    private void NewGateDiagram_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is MainWindowViewModel viewModel)
+        {
+            viewModel.StartNewGateDiagram();
+        }
+    }
+
+    private void GatePaletteButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Button { Tag: GatePaletteItem item } &&
+            DataContext is MainWindowViewModel viewModel)
+        {
+            viewModel.SelectGatePaletteItem(item);
+        }
+    }
+
     private void Exit_OnClick(object? sender, RoutedEventArgs e)
     {
         Close();
