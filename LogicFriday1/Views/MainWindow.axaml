@@ -126,12 +126,20 @@
             </MenuItem>
 
             <MenuItem Header="_View">
-                <MenuItem Header="_Unminimized" />
-                <MenuItem Header="_Minimized" />
+                <MenuItem Header="_Unminimized"
+                          ToggleType="Radio"
+                          GroupName="FunctionViewMode"
+                          IsChecked="{Binding IsUnminimizedViewSelected}" />
+                <MenuItem Header="_Minimized"
+                          ToggleType="Radio"
+                          GroupName="FunctionViewMode"
+                          IsChecked="{Binding IsMinimizedViewSelected}"
+                          Click="MinimizedView_OnClick" />
             </MenuItem>
 
             <MenuItem Header="_Help">
-                <MenuItem Header="_Help Contents" />
+                <MenuItem Header="_Help Contents"
+                          Click="HelpContents_OnClick" />
                 <Separator />
                 <MenuItem Header="_About Logic Friday..."
                           Click="AboutLogicFriday_OnClick" />

@@ -32,8 +32,14 @@
                 </TextBlock>
 
                 <StackPanel Spacing="2">
-                    <TextBlock Text="logic.friday@sontrak.com" />
-                    <TextBlock Text="www.sontrak.com" />
+                    <Button Classes="linkButton"
+                            Click="EmailButton_OnClick">
+                        logic.friday@sontrak.com
+                    </Button>
+                    <Button Classes="linkButton"
+                            Click="WebsiteButton_OnClick">
+                        www.sontrak.com
+                    </Button>
                 </StackPanel>
             </StackPanel>
         </Grid>
@@ -47,5 +53,18 @@
             OK
         </Button>
     </Grid>
+
+    <Window.Styles>
+        <Style Selector="Button.linkButton">
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="HorizontalAlignment" Value="Left" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Foreground" Value="{DynamicResource SystemAccentColor}" />
+            <Setter Property="TextBlock.TextDecorations" Value="Underline" />
+        </Style>
+    </Window.Styles>
 
 </Window>
