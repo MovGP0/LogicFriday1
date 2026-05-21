@@ -1,4 +1,5 @@
 <Solution>
   <Project Path="LogicFriday1.MaterialIcons/LogicFriday1.MaterialIcons.csproj" />
   <Project Path="LogicFriday1/LogicFriday1.csproj" />
+  <Project Path="MaterialDesign3.MaterialColorUtilities/MaterialColorUtilities.csproj" />
 </Solution>

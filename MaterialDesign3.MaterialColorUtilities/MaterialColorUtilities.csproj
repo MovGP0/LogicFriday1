@@ -1,0 +1,33 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>MaterialColorUtilities</RootNamespace>
+    <AssemblyName>MaterialColorUtilities</AssemblyName>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <LangVersion>13</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>MaterialColorUtilities</RootNamespace>
+    <Nullable>enable</Nullable>
+    <EnableSourceLink>false</EnableSourceLink>
+    <SuppressImplicitGitSourceLink>true</SuppressImplicitGitSourceLink>
+    <UseWpf>true</UseWpf>
+    <MDIXColorsVersion Condition="$(MDIXColorsVersion) == '' Or $(MDIXColorsVersion) == '*Undefined*'">1.0.1</MDIXColorsVersion>
+    <MDIXColorsVersion>$([System.Text.RegularExpressions.Regex]::Replace("$(MDIXColorsVersion)", "-ci\d+$", ""))</MDIXColorsVersion>
+    <Description>Material Design Color Utilities</Description>
+    <Version>$(MDIXColorsVersion)</Version>
+    <AssemblyVersion>$(MDIXColorsVersion)</AssemblyVersion>
+
+    <!-- Package Properties -->
+    <PackageId>MaterialDesignColorUtilities</PackageId>
+    <Title>Material Design 3 Color Utilities</Title>
+    <PackageDescription>Utilities to create Material Design 3 Color Palettes</PackageDescription>
+    <PackageTags>WPF XAML Material Design Colour Color UI UX</PackageTags>
+    <NoWarn>CS0618</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>MDIXColorsVersion</_Parameter1>
+      <_Parameter2>$(MDIXColorsVersion)</_Parameter2>
+    </AssemblyAttribute>
+  </ItemGroup>
+</Project>
