@@ -134,6 +134,17 @@ public partial class MainWindowViewModel : ViewModelBase
         StatusText = "Editing gate diagram";
     }
 
+    public void CloseCurrentDocument()
+    {
+        LogicEquationText = "";
+        TruthTableRows.Clear();
+        SelectedGatePaletteItem = null;
+        IsEquationEditorVisible = false;
+        IsTruthTableVisible = false;
+        IsGateDiagramVisible = false;
+        StatusText = "Ready";
+    }
+
     public void SelectGatePaletteItem(GatePaletteItem item)
     {
         SelectedGatePaletteItem = item;

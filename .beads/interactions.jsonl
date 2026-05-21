@@ -27,3 +27,4 @@
 {"id":"int-c9a95a94","kind":"field_change","created_at":"2026-05-21T10:46:20.3020181Z","actor":"Johann Dirry","issue_id":"LogicFriday1-udb","extra":{"field":"status","new_value":"in_progress","old_value":"open"}}
 {"id":"int-f1cad554","kind":"field_change","created_at":"2026-05-21T10:46:30.4868291Z","actor":"Johann Dirry","issue_id":"LogicFriday1-b0f","extra":{"field":"status","new_value":"in_progress","old_value":"open"}}
 {"id":"int-148e1f0a","kind":"field_change","created_at":"2026-05-21T11:31:49.41004Z","actor":"Johann Dirry","issue_id":"LogicFriday1-cmz.2","extra":{"field":"status","new_value":"in_progress","old_value":"open"}}
+{"id":"int-800f526f","kind":"field_change","created_at":"2026-05-21T13:35:41.3657107Z","actor":"Johann Dirry","issue_id":"LogicFriday1-cmz.5","extra":{"field":"status","new_value":"closed","old_value":"in_progress","reason":"Implemented File > Close to reset the active editor state and clear transient truth-table columns."}}

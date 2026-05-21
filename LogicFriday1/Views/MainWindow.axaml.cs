@@ -109,6 +109,15 @@ public partial class MainWindow : Window
         }
     }
 
+    private void CloseDocument_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is MainWindowViewModel viewModel)
+        {
+            viewModel.CloseCurrentDocument();
+            TruthTableDataGrid.Columns.Clear();
+        }
+    }
+
     private void Exit_OnClick(object? sender, RoutedEventArgs e)
     {
         Close();

@@ -84,7 +84,8 @@
                               Click="NewGateDiagram_OnClick" />
                 </MenuItem>
                 <MenuItem Header="_Open..." />
-                <MenuItem Header="_Close" />
+                <MenuItem Header="_Close"
+                          Click="CloseDocument_OnClick" />
                 <Separator />
                 <MenuItem Header="Save _As..." />
                 <Separator />
