@@ -33,6 +33,10 @@ public partial class TruthTableSetupDialog : Window
 
     public ObservableCollection<TruthTableVariableName> Outputs { get; } = [];
 
+    public string[] InputNames => Inputs.Select(item => item.Name.Trim()).ToArray();
+
+    public string[] OutputNames => Outputs.Select(item => item.Name.Trim()).ToArray();
+
     public int InputCount
     {
         get => _inputCount;

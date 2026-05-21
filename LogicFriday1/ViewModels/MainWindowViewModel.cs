@@ -16,7 +16,12 @@ public partial class MainWindowViewModel : ViewModelBase
     private bool _isEquationEditorVisible;
 
     [ObservableProperty]
+    private bool _isTruthTableVisible;
+
+    [ObservableProperty]
     private FunctionSummaryRow? _selectedFunctionSummary;
+
+    public ObservableCollection<TruthTableRow> TruthTableRows { get; } = [];
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsUnminimizedViewSelected))]
@@ -46,6 +51,41 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         LogicEquationText = "";
         IsEquationEditorVisible = true;
+        IsTruthTableVisible = false;
         StatusText = "Entering new logic equation";
+    }
+
+    public void StartNewTruthTable(string[] inputNames, string[] outputNames)
+    {
+        TruthTableRows.Clear();
+
+        var rowCount = 1 << inputNames.Length;
+        for (var term = 0; term < rowCount; term++)
+        {
+            var cells = new List<TruthTableCell>
+            {
+                new(term.ToString(), false)
+            };
+
+            for (var inputIndex = 0; inputIndex < inputNames.Length; inputIndex++)
+            {
+                var bitOffset = inputNames.Length - inputIndex - 1;
+                var value = ((term >> bitOffset) & 1).ToString();
+                cells.Add(new TruthTableCell(value, false));
+            }
+
+            cells.Add(new TruthTableCell("", false));
+
+            for (var outputIndex = 0; outputIndex < outputNames.Length; outputIndex++)
+            {
+                cells.Add(new TruthTableCell("0", true));
+            }
+
+            TruthTableRows.Add(new TruthTableRow(cells));
+        }
+
+        IsEquationEditorVisible = false;
+        IsTruthTableVisible = true;
+        StatusText = $"Editing truth table: {inputNames.Length} inputs, {outputNames.Length} outputs";
     }
 }

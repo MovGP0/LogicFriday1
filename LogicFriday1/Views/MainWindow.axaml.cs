@@ -1,11 +1,16 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
+using Avalonia.Data;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
+using LogicFriday1.Models;
 using LogicFriday1.ViewModels;
 
 namespace LogicFriday1.Views;
@@ -67,7 +72,14 @@ public partial class MainWindow : Window
     private async void NewTruthTable_OnClick(object? sender, RoutedEventArgs e)
     {
         var dialog = new TruthTableSetupDialog();
-        await dialog.ShowDialog<bool?>(this);
+        var result = await dialog.ShowDialog<bool?>(this);
+        if (result != true || DataContext is not MainWindowViewModel viewModel)
+        {
+            return;
+        }
+
+        viewModel.StartNewTruthTable(dialog.InputNames, dialog.OutputNames);
+        ConfigureTruthTableColumns(dialog.InputNames, dialog.OutputNames);
     }
 
     private void NewLogicEquation_OnClick(object? sender, RoutedEventArgs e)
@@ -82,6 +94,47 @@ public partial class MainWindow : Window
     private void Exit_OnClick(object? sender, RoutedEventArgs e)
     {
         Close();
+    }
+
+    private void ConfigureTruthTableColumns(string[] inputNames, string[] outputNames)
+    {
+        TruthTableDataGrid.Columns.Clear();
+
+        var headers = new[] { "Term" }
+            .Concat(inputNames)
+            .Concat([ "=>" ])
+            .Concat(outputNames)
+            .ToArray();
+
+        var outputStartColumn = inputNames.Length + 2;
+        for (var columnIndex = 0; columnIndex < headers.Length; columnIndex++)
+        {
+            TruthTableDataGrid.Columns.Add(new DataGridTextColumn
+            {
+                Header = headers[columnIndex],
+                Binding = new Binding($"Cells[{columnIndex}].Value"),
+                IsReadOnly = true,
+                Foreground = columnIndex >= outputStartColumn ? Brushes.Blue : Brushes.Black,
+                Width = columnIndex == 0 ? new DataGridLength(60) : DataGridLength.Auto
+            });
+        }
+    }
+
+    private void TruthTableDataGrid_OnCellPointerPressed(object? sender, DataGridCellPointerPressedEventArgs e)
+    {
+        if (e.PointerPressedEventArgs.ClickCount < 2 ||
+            e.Row.DataContext is not TruthTableRow row)
+        {
+            return;
+        }
+
+        var columnIndex = TruthTableDataGrid.Columns.IndexOf(e.Column);
+        if (columnIndex < 0 || columnIndex >= row.Cells.Count)
+        {
+            return;
+        }
+
+        row.Cells[columnIndex].CycleOutputValue();
     }
 
     private static string? FindHelpFilePath()

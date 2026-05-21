@@ -273,6 +273,18 @@
                          FontFamily="Courier New"
                          TextWrapping="NoWrap"
                          PlaceholderText="Enter a logic equation..." />
+                <DataGrid x:Name="TruthTableDataGrid"
+                          Grid.Row="2"
+                          IsVisible="{Binding IsTruthTableVisible}"
+                          ItemsSource="{Binding TruthTableRows}"
+                          AutoGenerateColumns="False"
+                          IsReadOnly="True"
+                          CanUserResizeColumns="True"
+                          CanUserReorderColumns="False"
+                          CanUserSortColumns="False"
+                          GridLinesVisibility="All"
+                          HeadersVisibility="Column"
+                          CellPointerPressed="TruthTableDataGrid_OnCellPointerPressed" />
             </Grid>
         </Border>
     </DockPanel>
