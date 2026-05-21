@@ -89,7 +89,8 @@
                 <Separator />
                 <MenuItem Header="Save _As..." />
                 <Separator />
-                <MenuItem Header="_Import Truth Table..." />
+                <MenuItem Header="_Import Truth Table..."
+                          Click="ImportTruthTable_OnClick" />
                 <MenuItem Header="Export _Truth Table..." />
                 <MenuItem Header="Export _Gate Diagram..." />
                 <Separator />

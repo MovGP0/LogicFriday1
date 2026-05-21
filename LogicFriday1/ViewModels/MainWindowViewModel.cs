@@ -92,6 +92,25 @@ public partial class MainWindowViewModel : ViewModelBase
 
     public void StartNewTruthTable(string[] inputNames, string[] outputNames)
     {
+        var outputValues = Enumerable
+            .Range(0, 1 << inputNames.Length)
+            .Select(_ => Enumerable.Repeat("0", outputNames.Length).ToArray())
+            .ToArray();
+
+        StartTruthTable(inputNames, outputNames, outputValues, "Editing truth table");
+    }
+
+    public void StartImportedTruthTable(string[] inputNames, string[] outputNames, IReadOnlyList<string[]> outputValues)
+    {
+        StartTruthTable(inputNames, outputNames, outputValues, "Imported truth table");
+    }
+
+    private void StartTruthTable(
+        string[] inputNames,
+        string[] outputNames,
+        IReadOnlyList<string[]> outputValues,
+        string statusPrefix)
+    {
         TruthTableRows.Clear();
 
         var rowCount = 1 << inputNames.Length;
@@ -113,7 +132,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
             for (var outputIndex = 0; outputIndex < outputNames.Length; outputIndex++)
             {
-                cells.Add(new TruthTableCell("0", true));
+                cells.Add(new TruthTableCell(outputValues[term][outputIndex], true));
             }
 
             TruthTableRows.Add(new TruthTableRow(cells));
@@ -122,7 +141,7 @@ public partial class MainWindowViewModel : ViewModelBase
         IsEquationEditorVisible = false;
         IsTruthTableVisible = true;
         IsGateDiagramVisible = false;
-        StatusText = $"Editing truth table: {inputNames.Length} inputs, {outputNames.Length} outputs";
+        StatusText = $"{statusPrefix}: {inputNames.Length} inputs, {outputNames.Length} outputs";
     }
 
     public void StartNewGateDiagram()

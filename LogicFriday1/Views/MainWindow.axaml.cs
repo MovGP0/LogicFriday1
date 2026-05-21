@@ -11,7 +11,9 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Platform.Storage;
 using LogicFriday1.Models;
+using LogicFriday1.Services;
 using LogicFriday1.ViewModels;
 
 namespace LogicFriday1.Views;
@@ -97,6 +99,51 @@ public partial class MainWindow : Window
         if (DataContext is MainWindowViewModel viewModel)
         {
             viewModel.StartNewGateDiagram();
+        }
+    }
+
+    private async void ImportTruthTable_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainWindowViewModel viewModel)
+        {
+            return;
+        }
+
+        var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "Import Truth Table",
+            AllowMultiple = false,
+            FileTypeFilter =
+            [
+                new FilePickerFileType("Truth Table Files")
+                {
+                    Patterns = [ "*.csv", "*.txt", "*.*" ]
+                }
+            ]
+        });
+
+        var file = files.FirstOrDefault();
+        if (file is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await using var stream = await file.OpenReadAsync();
+            using var reader = new StreamReader(stream);
+            var import = TruthTableImporter.Import(await reader.ReadToEndAsync());
+
+            viewModel.StartImportedTruthTable(import.InputNames, import.OutputNames, import.OutputValues);
+            ConfigureTruthTableColumns(import.InputNames, import.OutputNames);
+        }
+        catch (TruthTableImportException ex)
+        {
+            await ShowMessageAsync($"The truth table could not be imported.\n{ex.Message}");
+        }
+        catch (Exception ex)
+        {
+            await ShowMessageAsync($"The truth table file could not be opened.\n{ex.Message}");
         }
     }
 
