@@ -8,4 +8,5 @@ public sealed record FunctionSummaryRow(
     string False = "",
     string DC = "",
     string PI = "",
-    string Gates = "");
+    string Gates = "",
+    LogicFunction? LogicFunction = null);

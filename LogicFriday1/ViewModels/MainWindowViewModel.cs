@@ -6,6 +6,9 @@ namespace LogicFriday1.ViewModels;
 
 public partial class MainWindowViewModel : ViewModelBase
 {
+    private string[] _truthTableInputNames = [];
+    private string[] _truthTableOutputNames = [];
+
     [ObservableProperty]
     private string _statusText = "Ready";
 
@@ -22,12 +25,17 @@ public partial class MainWindowViewModel : ViewModelBase
     private bool _isGateDiagramVisible;
 
     [ObservableProperty]
+    private bool _isFunctionDetailVisible;
+
+    [ObservableProperty]
     private FunctionSummaryRow? _selectedFunctionSummary;
 
     [ObservableProperty]
     private GatePaletteItem? _selectedGatePaletteItem;
 
     public ObservableCollection<TruthTableRow> TruthTableRows { get; } = [];
+
+    public ObservableCollection<TruthTableRow> FunctionTruthTableRows { get; } = [];
 
     public ObservableCollection<GatePaletteItem> GatePaletteItems { get; } =
     [
@@ -87,6 +95,7 @@ public partial class MainWindowViewModel : ViewModelBase
         IsEquationEditorVisible = true;
         IsTruthTableVisible = false;
         IsGateDiagramVisible = false;
+        IsFunctionDetailVisible = false;
         StatusText = "Entering new logic equation";
     }
 
@@ -112,6 +121,8 @@ public partial class MainWindowViewModel : ViewModelBase
         string statusPrefix)
     {
         TruthTableRows.Clear();
+        _truthTableInputNames = [.. inputNames];
+        _truthTableOutputNames = [.. outputNames];
 
         var rowCount = 1 << inputNames.Length;
         for (var term = 0; term < rowCount; term++)
@@ -141,6 +152,7 @@ public partial class MainWindowViewModel : ViewModelBase
         IsEquationEditorVisible = false;
         IsTruthTableVisible = true;
         IsGateDiagramVisible = false;
+        IsFunctionDetailVisible = false;
         StatusText = $"{statusPrefix}: {inputNames.Length} inputs, {outputNames.Length} outputs";
     }
 
@@ -149,18 +161,59 @@ public partial class MainWindowViewModel : ViewModelBase
         IsEquationEditorVisible = false;
         IsTruthTableVisible = false;
         IsGateDiagramVisible = true;
+        IsFunctionDetailVisible = false;
         SelectedGatePaletteItem = null;
         StatusText = "Editing gate diagram";
+    }
+
+    public void CancelTruthTableEditing()
+    {
+        TruthTableRows.Clear();
+        _truthTableInputNames = [];
+        _truthTableOutputNames = [];
+        IsTruthTableVisible = false;
+        IsFunctionDetailVisible = false;
+        StatusText = "Ready";
+    }
+
+    public void SubmitTruthTableEditing()
+    {
+        if (_truthTableInputNames.Length == 0 || _truthTableOutputNames.Length == 0)
+        {
+            StatusText = "No truth table is active";
+            return;
+        }
+
+        var logicFunction = CreateTruthTableFunction();
+        AddFunction(logicFunction);
+        ShowFunction(logicFunction);
+        TruthTableRows.Clear();
+        _truthTableInputNames = [];
+        _truthTableOutputNames = [];
+        IsEquationEditorVisible = false;
+        IsTruthTableVisible = false;
+        IsGateDiagramVisible = false;
+        StatusText = "Truth table submitted";
     }
 
     public void CloseCurrentDocument()
     {
         LogicEquationText = "";
         TruthTableRows.Clear();
+        FunctionTruthTableRows.Clear();
+        _truthTableInputNames = [];
+        _truthTableOutputNames = [];
         SelectedGatePaletteItem = null;
+        SelectedFunctionSummary = null;
+        FunctionSummaries.Clear();
+        FunctionSummaries.Add(new FunctionSummaryRow
+        {
+            Function = "<none>"
+        });
         IsEquationEditorVisible = false;
         IsTruthTableVisible = false;
         IsGateDiagramVisible = false;
+        IsFunctionDetailVisible = false;
         StatusText = "Ready";
     }
 
@@ -168,5 +221,204 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         SelectedGatePaletteItem = item;
         StatusText = $"Selected gate diagram tool: {item.Label}";
+    }
+
+    public LogicFunction? GetSelectedFunction()
+    {
+        return SelectedFunctionSummary?.LogicFunction;
+    }
+
+    public void ShowFunction(LogicFunction logicFunction)
+    {
+        LogicEquationText = logicFunction.EquationText;
+        RefreshFunctionTruthTable(logicFunction);
+        IsEquationEditorVisible = false;
+        IsTruthTableVisible = false;
+        IsGateDiagramVisible = false;
+        IsFunctionDetailVisible = true;
+        StatusText = $"Showing {logicFunction.OutputNames.Length} output function";
+    }
+
+    private LogicFunction CreateTruthTableFunction()
+    {
+        var outputStartIndex = _truthTableInputNames.Length + 2;
+        var outputValues = TruthTableRows
+            .Select(row => Enumerable
+                .Range(0, _truthTableOutputNames.Length)
+                .Select(outputIndex => row.Cells[outputStartIndex + outputIndex].Value)
+                .ToArray())
+            .ToArray();
+
+        return new TruthTableLogicFunction(
+            [.. _truthTableInputNames],
+            [.. _truthTableOutputNames],
+            outputValues,
+            GenerateSumOfProductsEquation(
+                _truthTableInputNames,
+                _truthTableOutputNames,
+                outputValues,
+                "Entered by truthtable:"));
+    }
+
+    private string GenerateSumOfProductsEquation(
+        string[] inputNames,
+        string[] outputNames,
+        IReadOnlyList<string[]> outputValues,
+        string label)
+    {
+        var equations = new List<string>
+        {
+            label
+        };
+
+        for (var outputIndex = 0; outputIndex < outputNames.Length; outputIndex++)
+        {
+            var trueTerms = outputValues
+                .Select((outputs, term) => new
+                {
+                    outputs,
+                    term
+                })
+                .Where(row => row.outputs[outputIndex] == "1")
+                .ToArray();
+
+            if (trueTerms.Length == outputValues.Count)
+            {
+                equations.Add($"{outputNames[outputIndex]} = 1;");
+            }
+            else if (trueTerms.Length == 0)
+            {
+                equations.Add($"{outputNames[outputIndex]} = 0;");
+            }
+            else
+            {
+                var terms = trueTerms.Select(row => BuildProductTerm(row.term, inputNames));
+                equations.Add($"{outputNames[outputIndex]} = {string.Join(" + ", terms)};");
+            }
+        }
+
+        return string.Join(Environment.NewLine, equations);
+    }
+
+    private static string BuildProductTerm(int term, string[] inputNames)
+    {
+        var literals = new List<string>();
+        for (var inputIndex = 0; inputIndex < inputNames.Length; inputIndex++)
+        {
+            var bitOffset = inputNames.Length - inputIndex - 1;
+            var inputValue = (term >> bitOffset) & 1;
+            literals.Add(inputValue == 0
+                ? $"{inputNames[inputIndex]}'"
+                : inputNames[inputIndex]);
+        }
+
+        return string.Join(" ", literals);
+    }
+
+    private void AddFunction(LogicFunction logicFunction)
+    {
+        if (FunctionSummaries.Count == 1 && FunctionSummaries[0].LogicFunction is null)
+        {
+            FunctionSummaries.Clear();
+        }
+
+        var summary = CreateFunctionSummary(logicFunction);
+        FunctionSummaries.Add(summary);
+        SelectedFunctionSummary = summary;
+    }
+
+    private static FunctionSummaryRow CreateFunctionSummary(LogicFunction logicFunction)
+    {
+        var trueCounts = new int[logicFunction.OutputNames.Length];
+        var falseCounts = new int[logicFunction.OutputNames.Length];
+        var dontCareCounts = new int[logicFunction.OutputNames.Length];
+
+        foreach (var row in logicFunction.OutputValues)
+        {
+            for (var outputIndex = 0; outputIndex < logicFunction.OutputNames.Length; outputIndex++)
+            {
+                switch (row[outputIndex])
+                {
+                    case "1":
+                        trueCounts[outputIndex]++;
+                        break;
+                    case "X":
+                        dontCareCounts[outputIndex]++;
+                        break;
+                    default:
+                        falseCounts[outputIndex]++;
+                        break;
+                }
+            }
+        }
+
+        return new FunctionSummaryRow(
+            Function: FormatFunctionName(logicFunction.OutputNames),
+            Inputs: logicFunction.InputNames.Length.ToString(),
+            Outputs: logicFunction.OutputNames.Length.ToString(),
+            True: string.Join(", ", trueCounts),
+            False: string.Join(", ", falseCounts),
+            DC: string.Join(", ", dontCareCounts),
+            PI: "Unminimized",
+            Gates: "Not Mapped",
+            LogicFunction: logicFunction);
+    }
+
+    private void RefreshFunctionTruthTable(LogicFunction logicFunction)
+    {
+        FunctionTruthTableRows.Clear();
+
+        for (var term = 0; term < logicFunction.OutputValues.Count; term++)
+        {
+            var outputs = logicFunction.OutputValues[term];
+            if (outputs.All(static value => value == "0"))
+            {
+                continue;
+            }
+
+            FunctionTruthTableRows.Add(CreateTruthTableRow(
+                term,
+                logicFunction.InputNames,
+                outputs,
+                outputCellsEditable: false));
+        }
+    }
+
+    private static TruthTableRow CreateTruthTableRow(
+        int term,
+        string[] inputNames,
+        IReadOnlyList<string> outputValues,
+        bool outputCellsEditable)
+    {
+        var cells = new List<TruthTableCell>
+        {
+            new(term.ToString(), false)
+        };
+
+        for (var inputIndex = 0; inputIndex < inputNames.Length; inputIndex++)
+        {
+            var bitOffset = inputNames.Length - inputIndex - 1;
+            var value = ((term >> bitOffset) & 1).ToString();
+            cells.Add(new TruthTableCell(value, false));
+        }
+
+        cells.Add(new TruthTableCell("", false));
+
+        foreach (var outputValue in outputValues)
+        {
+            cells.Add(new TruthTableCell(outputValue, outputCellsEditable));
+        }
+
+        return new TruthTableRow(cells);
+    }
+
+    private static string FormatFunctionName(IReadOnlyList<string> outputNames)
+    {
+        return outputNames.Count switch
+        {
+            0 => "",
+            1 => outputNames[0],
+            _ => $"{outputNames[0]}-{outputNames[^1]}"
+        };
     }
 }

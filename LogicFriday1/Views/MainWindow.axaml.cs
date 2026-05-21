@@ -85,7 +85,7 @@ public partial class MainWindow : Window
         }
 
         viewModel.StartNewTruthTable(dialog.InputNames, dialog.OutputNames);
-        ConfigureTruthTableColumns(dialog.InputNames, dialog.OutputNames);
+        ConfigureTruthTableColumns(TruthTableDataGrid, dialog.InputNames, dialog.OutputNames);
     }
 
     private void NewLogicEquation_OnClick(object? sender, RoutedEventArgs e)
@@ -138,7 +138,7 @@ public partial class MainWindow : Window
             var import = TruthTableImporter.Import(await reader.ReadToEndAsync());
 
             viewModel.StartImportedTruthTable(import.InputNames, import.OutputNames, import.OutputValues);
-            ConfigureTruthTableColumns(import.InputNames, import.OutputNames);
+            ConfigureTruthTableColumns(TruthTableDataGrid, import.InputNames, import.OutputNames);
         }
         catch (TruthTableImportException ex)
         {
@@ -165,6 +165,7 @@ public partial class MainWindow : Window
         {
             viewModel.CloseCurrentDocument();
             TruthTableDataGrid.Columns.Clear();
+            FunctionTruthTableDataGrid.Columns.Clear();
         }
     }
 
@@ -173,9 +174,21 @@ public partial class MainWindow : Window
         Close();
     }
 
-    private void ConfigureTruthTableColumns(string[] inputNames, string[] outputNames)
+    private void FunctionSummaryDataGrid_OnSelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
-        TruthTableDataGrid.Columns.Clear();
+        if (DataContext is not MainWindowViewModel viewModel ||
+            viewModel.GetSelectedFunction() is not { } logicFunction)
+        {
+            return;
+        }
+
+        ConfigureTruthTableColumns(FunctionTruthTableDataGrid, logicFunction.InputNames, logicFunction.OutputNames);
+        viewModel.ShowFunction(logicFunction);
+    }
+
+    private void ConfigureTruthTableColumns(DataGrid dataGrid, string[] inputNames, string[] outputNames)
+    {
+        dataGrid.Columns.Clear();
 
         var headers = new[] { "Term" }
             .Concat(inputNames)
@@ -186,7 +199,7 @@ public partial class MainWindow : Window
         var outputStartColumn = inputNames.Length + 2;
         for (var columnIndex = 0; columnIndex < headers.Length; columnIndex++)
         {
-            TruthTableDataGrid.Columns.Add(new DataGridTextColumn
+            dataGrid.Columns.Add(new DataGridTextColumn
             {
                 Header = headers[columnIndex],
                 Binding = new Binding($"Cells[{columnIndex}].Value"),
@@ -301,17 +314,52 @@ public partial class MainWindow : Window
 
     private void TruthTableSubmit_OnClick(object? sender, RoutedEventArgs e)
     {
-        if (DataContext is MainWindowViewModel viewModel)
-        {
-            viewModel.StatusText = "Truth table submitted";
-        }
+        SubmitTruthTableEditing();
     }
 
     private void TruthTableCancel_OnClick(object? sender, RoutedEventArgs e)
     {
+        CancelTruthTableEditing();
+    }
+
+    private void TruthTableDataGrid_OnKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter)
+        {
+            SubmitTruthTableEditing();
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key != Key.Escape)
+        {
+            return;
+        }
+
+        CancelTruthTableEditing();
+        e.Handled = true;
+    }
+
+    private void SubmitTruthTableEditing()
+    {
         if (DataContext is MainWindowViewModel viewModel)
         {
-            viewModel.StatusText = "Truth table edit canceled";
+            viewModel.SubmitTruthTableEditing();
+            if (viewModel.GetSelectedFunction() is { } logicFunction)
+            {
+                ConfigureTruthTableColumns(FunctionTruthTableDataGrid, logicFunction.InputNames, logicFunction.OutputNames);
+            }
+
+            TruthTableDataGrid.Columns.Clear();
+        }
+    }
+
+    private void CancelTruthTableEditing()
+    {
+        if (DataContext is MainWindowViewModel viewModel)
+        {
+            viewModel.CancelTruthTableEditing();
+            TruthTableDataGrid.Columns.Clear();
         }
     }
 

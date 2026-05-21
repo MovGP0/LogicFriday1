@@ -128,8 +128,10 @@
                 <MenuItem Header="_Don't Care" />
                 <MenuItem Header="_Invert" />
                 <Separator />
-                <MenuItem Header="_Submit (Enter)" />
-                <MenuItem Header="_Cancel (Esc)" />
+                <MenuItem Header="_Submit (Enter)"
+                          Click="TruthTableSubmit_OnClick" />
+                <MenuItem Header="_Cancel (Esc)"
+                          Click="TruthTableCancel_OnClick" />
             </MenuItem>
 
             <MenuItem Header="_Equation">
@@ -277,8 +279,10 @@
         <Border Padding="8"
                 Background="{DynamicResource LogicFriday.Brush.Surface}">
             <Grid RowDefinitions="160,Auto,*">
-                <DataGrid ItemsSource="{Binding FunctionSummaries}"
+                <DataGrid x:Name="FunctionSummaryDataGrid"
+                          ItemsSource="{Binding FunctionSummaries}"
                           SelectedItem="{Binding SelectedFunctionSummary, Mode=TwoWay}"
+                          SelectionChanged="FunctionSummaryDataGrid_OnSelectionChanged"
                           AutoGenerateColumns="False"
                           IsReadOnly="True"
                           CanUserResizeColumns="True"
@@ -324,6 +328,33 @@
                          FontFamily="Courier New"
                          TextWrapping="NoWrap"
                          PlaceholderText="Enter a logic equation..." />
+                <Grid Grid.Row="2"
+                      IsVisible="{Binding IsFunctionDetailVisible}"
+                      ColumnDefinitions="*,*"
+                      ColumnSpacing="8">
+                    <DataGrid x:Name="FunctionTruthTableDataGrid"
+                              Grid.Column="0"
+                              ItemsSource="{Binding FunctionTruthTableRows}"
+                              AutoGenerateColumns="False"
+                              IsReadOnly="True"
+                              CanUserResizeColumns="True"
+                              CanUserReorderColumns="False"
+                              CanUserSortColumns="False"
+                              GridLinesVisibility="All"
+                              HeadersVisibility="Column"
+                              Background="{DynamicResource LogicFriday.Brush.SurfaceContainerLowest}"
+                              Foreground="{DynamicResource LogicFriday.Brush.OnSurface}"
+                              BorderBrush="{DynamicResource LogicFriday.Brush.OutlineVariant}" />
+                    <TextBox Grid.Column="1"
+                             Text="{Binding LogicEquationText}"
+                             IsReadOnly="True"
+                             AcceptsReturn="True"
+                             FontFamily="Courier New"
+                             TextWrapping="NoWrap"
+                             Background="{DynamicResource LogicFriday.Brush.SurfaceContainerLowest}"
+                             Foreground="{DynamicResource LogicFriday.Brush.OnSurface}"
+                             BorderBrush="{DynamicResource LogicFriday.Brush.OutlineVariant}" />
+                </Grid>
                 <DataGrid x:Name="TruthTableDataGrid"
                           Grid.Row="2"
                           IsVisible="{Binding IsTruthTableVisible}"
@@ -339,6 +370,7 @@
                           Background="{DynamicResource LogicFriday.Brush.SurfaceContainerLowest}"
                           Foreground="{DynamicResource LogicFriday.Brush.OnSurface}"
                           BorderBrush="{DynamicResource LogicFriday.Brush.OutlineVariant}"
+                          KeyDown="TruthTableDataGrid_OnKeyDown"
                           CellPointerPressed="TruthTableDataGrid_OnCellPointerPressed">
                     <DataGrid.ContextMenu>
                         <ContextMenu Opening="TruthTableContextMenu_OnOpening"
