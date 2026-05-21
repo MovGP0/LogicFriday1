@@ -223,6 +223,80 @@ public partial class MainWindow : Window
         return Brushes.Black;
     }
 
+    private void EquationEditorContextMenu_OnOpening(object? sender, CancelEventArgs e)
+    {
+        var hasSelection = HasEquationEditorSelection();
+        EquationEditorUndoMenuItem.IsEnabled = EquationEditor.CanUndo;
+        EquationEditorRedoMenuItem.IsEnabled = EquationEditor.CanRedo;
+        EquationEditorCutMenuItem.IsEnabled = hasSelection;
+        EquationEditorCopyMenuItem.IsEnabled = hasSelection;
+        EquationEditorDeleteMenuItem.IsEnabled = hasSelection;
+        EquationEditorSelectAllMenuItem.IsEnabled = !string.IsNullOrEmpty(EquationEditor.Text);
+    }
+
+    private void EquationEditorUndo_OnClick(object? sender, RoutedEventArgs e)
+    {
+        EquationEditor.Focus();
+        EquationEditor.Undo();
+    }
+
+    private void EquationEditorRedo_OnClick(object? sender, RoutedEventArgs e)
+    {
+        EquationEditor.Focus();
+        EquationEditor.Redo();
+    }
+
+    private void EquationEditorCut_OnClick(object? sender, RoutedEventArgs e)
+    {
+        EquationEditor.Focus();
+        EquationEditor.Cut();
+    }
+
+    private void EquationEditorCopy_OnClick(object? sender, RoutedEventArgs e)
+    {
+        EquationEditor.Focus();
+        EquationEditor.Copy();
+    }
+
+    private void EquationEditorPaste_OnClick(object? sender, RoutedEventArgs e)
+    {
+        EquationEditor.Focus();
+        EquationEditor.Paste();
+    }
+
+    private void EquationEditorDelete_OnClick(object? sender, RoutedEventArgs e)
+    {
+        EquationEditor.Focus();
+        EquationEditor.SelectedText = "";
+    }
+
+    private void EquationEditorSelectAll_OnClick(object? sender, RoutedEventArgs e)
+    {
+        EquationEditor.Focus();
+        EquationEditor.SelectAll();
+    }
+
+    private void EquationEditorSubmit_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is MainWindowViewModel viewModel)
+        {
+            viewModel.SubmitLogicEquationEditing();
+        }
+    }
+
+    private void EquationEditorCancel_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is MainWindowViewModel viewModel)
+        {
+            viewModel.CancelLogicEquationEditing();
+        }
+    }
+
+    private bool HasEquationEditorSelection()
+    {
+        return EquationEditor.SelectionStart != EquationEditor.SelectionEnd;
+    }
+
     private void TruthTableDataGrid_OnCellPointerPressed(object? sender, DataGridCellPointerPressedEventArgs e)
     {
         if (e.PointerPressedEventArgs.GetCurrentPoint(TruthTableDataGrid).Properties.IsRightButtonPressed)

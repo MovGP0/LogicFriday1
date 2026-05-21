@@ -327,7 +327,38 @@
                          AcceptsReturn="True"
                          FontFamily="Courier New"
                          TextWrapping="NoWrap"
-                         PlaceholderText="Enter a logic equation..." />
+                         PlaceholderText="Enter a logic equation...">
+                    <TextBox.ContextMenu>
+                        <ContextMenu Opening="EquationEditorContextMenu_OnOpening">
+                            <MenuItem x:Name="EquationEditorUndoMenuItem"
+                                      Header="Undo"
+                                      Click="EquationEditorUndo_OnClick" />
+                            <MenuItem x:Name="EquationEditorRedoMenuItem"
+                                      Header="Redo"
+                                      Click="EquationEditorRedo_OnClick" />
+                            <Separator />
+                            <MenuItem x:Name="EquationEditorCutMenuItem"
+                                      Header="Cut"
+                                      Click="EquationEditorCut_OnClick" />
+                            <MenuItem x:Name="EquationEditorCopyMenuItem"
+                                      Header="Copy"
+                                      Click="EquationEditorCopy_OnClick" />
+                            <MenuItem Header="Paste"
+                                      Click="EquationEditorPaste_OnClick" />
+                            <MenuItem x:Name="EquationEditorDeleteMenuItem"
+                                      Header="Delete"
+                                      Click="EquationEditorDelete_OnClick" />
+                            <MenuItem x:Name="EquationEditorSelectAllMenuItem"
+                                      Header="Select All"
+                                      Click="EquationEditorSelectAll_OnClick" />
+                            <Separator />
+                            <MenuItem Header="Submit"
+                                      Click="EquationEditorSubmit_OnClick" />
+                            <MenuItem Header="Cancel"
+                                      Click="EquationEditorCancel_OnClick" />
+                        </ContextMenu>
+                    </TextBox.ContextMenu>
+                </TextBox>
                 <Grid Grid.Row="2"
                       IsVisible="{Binding IsFunctionDetailVisible}"
                       ColumnDefinitions="*,*"

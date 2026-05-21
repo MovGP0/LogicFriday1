@@ -166,6 +166,24 @@ public partial class MainWindowViewModel : ViewModelBase
         StatusText = "Editing gate diagram";
     }
 
+    public void SubmitLogicEquationEditing()
+    {
+        if (!IsEquationEditorVisible)
+        {
+            StatusText = "No logic equation is active";
+            return;
+        }
+
+        StatusText = "Logic equation submit is not implemented";
+    }
+
+    public void CancelLogicEquationEditing()
+    {
+        LogicEquationText = "";
+        IsEquationEditorVisible = false;
+        StatusText = "Ready";
+    }
+
     public void CancelTruthTableEditing()
     {
         TruthTableRows.Clear();
