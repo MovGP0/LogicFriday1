@@ -36,7 +36,8 @@
                 <MenuItem Header="_New">
                     <MenuItem Header="Truth _Table"
                               Click="NewTruthTable_OnClick" />
-                    <MenuItem Header="Logic _Equation" />
+                    <MenuItem Header="Logic _Equation"
+                              Click="NewLogicEquation_OnClick" />
                     <MenuItem Header="Gate _Diagram" />
                 </MenuItem>
                 <MenuItem Header="_Open..." />
@@ -226,22 +227,54 @@
             <TextBlock Text="{Binding StatusText}" />
         </Border>
 
-        <Grid ColumnDefinitions="240,*">
-            <Border BorderThickness="0,0,1,0"
-                    BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}">
-                <Panel />
-            </Border>
+        <Border Padding="8">
+            <Grid RowDefinitions="160,Auto,*">
+                <DataGrid ItemsSource="{Binding FunctionSummaries}"
+                          SelectedItem="{Binding SelectedFunctionSummary, Mode=TwoWay}"
+                          AutoGenerateColumns="False"
+                          IsReadOnly="True"
+                          CanUserResizeColumns="True"
+                          CanUserReorderColumns="True"
+                          CanUserSortColumns="True"
+                          GridLinesVisibility="All"
+                          HeadersVisibility="Column"
+                          Margin="0,0,0,8">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Function"
+                                            Binding="{Binding Function}"
+                                            Width="*" />
+                        <DataGridTextColumn Header="Inputs"
+                                            Binding="{Binding Inputs}" />
+                        <DataGridTextColumn Header="Outputs"
+                                            Binding="{Binding Outputs}" />
+                        <DataGridTextColumn Header="True"
+                                            Binding="{Binding True}" />
+                        <DataGridTextColumn Header="False"
+                                            Binding="{Binding False}" />
+                        <DataGridTextColumn Header="DC"
+                                            Binding="{Binding DC}" />
+                        <DataGridTextColumn Header="PI"
+                                            Binding="{Binding PI}" />
+                        <DataGridTextColumn Header="Gates"
+                                            Binding="{Binding Gates}" />
+                    </DataGrid.Columns>
+                </DataGrid>
 
-            <Grid Grid.Column="1"
-                  RowDefinitions="*,220">
-                <Panel />
-                <Border Grid.Row="1"
-                        BorderThickness="0,1,0,0"
-                        BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}">
-                    <Panel />
-                </Border>
+                <TextBlock Grid.Row="1"
+                           IsVisible="{Binding IsEquationEditorVisible}"
+                           Text="Logic Equation"
+                           FontWeight="SemiBold"
+                           Margin="0,0,0,6" />
+                <TextBox x:Name="EquationEditor"
+                         Grid.Row="2"
+                         IsVisible="{Binding IsEquationEditorVisible}"
+                         Text="{Binding LogicEquationText, Mode=TwoWay}"
+                         AcceptsReturn="True"
+                         FontFamily="Courier New"
+                         TextWrapping="NoWrap"
+                         PlaceholderText="Enter a logic equation..." />
             </Grid>
-        </Grid>
+        </Border>
     </DockPanel>
 
 </Window>

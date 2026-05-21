@@ -70,6 +70,15 @@ public partial class MainWindow : Window
         await dialog.ShowDialog<bool?>(this);
     }
 
+    private void NewLogicEquation_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is MainWindowViewModel viewModel)
+        {
+            viewModel.StartNewLogicEquation();
+            EquationEditor.Focus();
+        }
+    }
+
     private void Exit_OnClick(object? sender, RoutedEventArgs e)
     {
         Close();
