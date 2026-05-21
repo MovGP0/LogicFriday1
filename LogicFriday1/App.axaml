@@ -2,8 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="LogicFriday1.App"
              xmlns:local="using:LogicFriday1"
-             RequestedThemeVariant="Default">
-             <!-- "Default" ThemeVariant follows system theme variant. "Dark" or "Light" are other available options. -->
+             RequestedThemeVariant="Light">
 
     <Application.DataTemplates>
         <local:ViewLocator/>
@@ -12,5 +11,34 @@
     <Application.Styles>
         <FluentTheme />
         <StyleInclude Source="avares://Avalonia.Controls.DataGrid/Themes/Fluent.xaml" />
+
+        <Style Selector="Window">
+            <Setter Property="Background" Value="{DynamicResource LogicFriday.Brush.Surface}" />
+            <Setter Property="Foreground" Value="{DynamicResource LogicFriday.Brush.OnSurface}" />
+        </Style>
+
+        <Style Selector="Menu">
+            <Setter Property="Background" Value="{DynamicResource LogicFriday.Brush.SurfaceContainer}" />
+            <Setter Property="Foreground" Value="{DynamicResource LogicFriday.Brush.OnSurface}" />
+        </Style>
+
+        <Style Selector="MenuItem">
+            <Setter Property="Foreground" Value="{DynamicResource LogicFriday.Brush.OnSurface}" />
+        </Style>
+
+        <Style Selector="Button">
+            <Setter Property="Foreground" Value="{DynamicResource LogicFriday.Brush.OnSurface}" />
+        </Style>
+
+        <Style Selector="Button:pointerover">
+            <Setter Property="Background" Value="{DynamicResource LogicFriday.Brush.SecondaryContainer}" />
+            <Setter Property="Foreground" Value="{DynamicResource LogicFriday.Brush.OnSecondaryContainer}" />
+        </Style>
+
+        <Style Selector="TextBox">
+            <Setter Property="Background" Value="{DynamicResource LogicFriday.Brush.SurfaceContainerLowest}" />
+            <Setter Property="Foreground" Value="{DynamicResource LogicFriday.Brush.OnSurface}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource LogicFriday.Brush.Outline}" />
+        </Style>
     </Application.Styles>
 </Application>

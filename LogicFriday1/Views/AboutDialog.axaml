@@ -62,7 +62,7 @@
             <Setter Property="HorizontalContentAlignment" Value="Left" />
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="Foreground" Value="{DynamicResource SystemAccentColor}" />
+            <Setter Property="Foreground" Value="{DynamicResource LogicFriday.Brush.Primary}" />
             <Setter Property="TextBlock.TextDecorations" Value="Underline" />
         </Style>
     </Window.Styles>

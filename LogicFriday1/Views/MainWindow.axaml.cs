@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using Avalonia;
 using Avalonia.Data;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -114,10 +115,23 @@ public partial class MainWindow : Window
                 Header = headers[columnIndex],
                 Binding = new Binding($"Cells[{columnIndex}].Value"),
                 IsReadOnly = true,
-                Foreground = columnIndex >= outputStartColumn ? Brushes.Blue : Brushes.Black,
+                Foreground = columnIndex >= outputStartColumn
+                    ? FindThemeBrush("LogicFriday.Brush.Primary")
+                    : FindThemeBrush("LogicFriday.Brush.OnSurface"),
                 Width = columnIndex == 0 ? new DataGridLength(60) : DataGridLength.Auto
             });
         }
+    }
+
+    private static IBrush FindThemeBrush(string resourceKey)
+    {
+        if (Application.Current?.TryFindResource(resourceKey, out var resource) == true &&
+            resource is IBrush brush)
+        {
+            return brush;
+        }
+
+        return Brushes.Black;
     }
 
     private void TruthTableDataGrid_OnCellPointerPressed(object? sender, DataGridCellPointerPressedEventArgs e)
