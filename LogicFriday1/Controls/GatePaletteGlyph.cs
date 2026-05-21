@@ -130,16 +130,16 @@ public sealed class GatePaletteGlyph : Control
         var geometry = new StreamGeometry();
         using (var stream = geometry.Open())
         {
-            stream.BeginFigure(p(15, 5), false);
-            stream.LineTo(p(15, 45));
-            stream.LineTo(p(55, 25));
+            stream.BeginFigure(p(15, 0), false);
+            stream.LineTo(p(15, 50));
+            stream.LineTo(p(70, 25));
             stream.EndFigure(true);
         }
 
         context.DrawGeometry(null, pen, geometry);
-        context.DrawEllipse(null, pen, p(60.5, 25), 4.5 * scale, 4.5 * scale);
+        context.DrawEllipse(null, pen, p(75, 25), 5 * scale, 5 * scale);
         context.DrawLine(pen, p(0, 25), p(15, 25));
-        context.DrawLine(pen, p(65, 25), p(100, 25));
+        context.DrawLine(pen, p(80, 25), p(100, 25));
     }
 
     private static void DrawAnd(
