@@ -333,12 +333,39 @@
                           CanUserResizeColumns="True"
                           CanUserReorderColumns="False"
                           CanUserSortColumns="False"
+                          SelectionMode="Extended"
                           GridLinesVisibility="All"
                           HeadersVisibility="Column"
                           Background="{DynamicResource LogicFriday.Brush.SurfaceContainerLowest}"
                           Foreground="{DynamicResource LogicFriday.Brush.OnSurface}"
                           BorderBrush="{DynamicResource LogicFriday.Brush.OutlineVariant}"
-                          CellPointerPressed="TruthTableDataGrid_OnCellPointerPressed" />
+                          CellPointerPressed="TruthTableDataGrid_OnCellPointerPressed">
+                    <DataGrid.ContextMenu>
+                        <ContextMenu Opening="TruthTableContextMenu_OnOpening"
+                                     Closing="TruthTableContextMenu_OnClosing">
+                            <MenuItem Header="Select All"
+                                      Click="TruthTableSelectAll_OnClick" />
+                            <Separator />
+                            <MenuItem x:Name="TruthTableSetTrueMenuItem"
+                                      Header="True"
+                                      Click="TruthTableSetTrue_OnClick" />
+                            <MenuItem x:Name="TruthTableSetFalseMenuItem"
+                                      Header="False"
+                                      Click="TruthTableSetFalse_OnClick" />
+                            <MenuItem x:Name="TruthTableSetDontCareMenuItem"
+                                      Header="Don't Care"
+                                      Click="TruthTableSetDontCare_OnClick" />
+                            <MenuItem x:Name="TruthTableInvertMenuItem"
+                                      Header="Invert"
+                                      Click="TruthTableInvert_OnClick" />
+                            <Separator />
+                            <MenuItem Header="Submit"
+                                      Click="TruthTableSubmit_OnClick" />
+                            <MenuItem Header="Cancel"
+                                      Click="TruthTableCancel_OnClick" />
+                        </ContextMenu>
+                    </DataGrid.ContextMenu>
+                </DataGrid>
                 <Grid Grid.Row="2"
                       IsVisible="{Binding IsGateDiagramVisible}"
                       ColumnDefinitions="*,280"

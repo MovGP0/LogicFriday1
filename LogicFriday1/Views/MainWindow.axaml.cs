@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -22,10 +23,12 @@ public partial class MainWindow : Window
 {
     private const string HelpFileName = "lf.chm";
     private const string HelpContentsTopic = "features.htm";
+    private TruthTableRow? _truthTableContextRow;
 
     public MainWindow()
     {
         InitializeComponent();
+        TruthTableDataGrid.AddHandler(PointerPressedEvent, TruthTableDataGrid_OnPointerPressed, RoutingStrategies.Tunnel);
     }
 
     private async void HelpContents_OnClick(object? sender, RoutedEventArgs e)
@@ -209,6 +212,11 @@ public partial class MainWindow : Window
 
     private void TruthTableDataGrid_OnCellPointerPressed(object? sender, DataGridCellPointerPressedEventArgs e)
     {
+        if (e.PointerPressedEventArgs.GetCurrentPoint(TruthTableDataGrid).Properties.IsRightButtonPressed)
+        {
+            _truthTableContextRow = e.Row.DataContext as TruthTableRow;
+        }
+
         if (e.PointerPressedEventArgs.ClickCount < 2 ||
             e.Row.DataContext is not TruthTableRow row)
         {
@@ -222,6 +230,116 @@ public partial class MainWindow : Window
         }
 
         row.Cells[columnIndex].CycleOutputValue();
+    }
+
+    private void TruthTableDataGrid_OnPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (e.GetCurrentPoint(TruthTableDataGrid).Properties.IsRightButtonPressed)
+        {
+            _truthTableContextRow = null;
+        }
+    }
+
+    private void TruthTableContextMenu_OnOpening(object? sender, CancelEventArgs e)
+    {
+        var hasDataRow = _truthTableContextRow is not null;
+        TruthTableSetTrueMenuItem.IsEnabled = hasDataRow;
+        TruthTableSetFalseMenuItem.IsEnabled = hasDataRow;
+        TruthTableSetDontCareMenuItem.IsEnabled = hasDataRow;
+        TruthTableInvertMenuItem.IsEnabled = hasDataRow;
+    }
+
+    private void TruthTableContextMenu_OnClosing(object? sender, CancelEventArgs e)
+    {
+        _truthTableContextRow = null;
+    }
+
+    private void TruthTableSelectAll_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainWindowViewModel viewModel)
+        {
+            return;
+        }
+
+        TruthTableDataGrid.SelectedItems.Clear();
+        foreach (var row in viewModel.TruthTableRows)
+        {
+            TruthTableDataGrid.SelectedItems.Add(row);
+        }
+    }
+
+    private void TruthTableSetTrue_OnClick(object? sender, RoutedEventArgs e)
+    {
+        SetContextRowOutputValues("1");
+    }
+
+    private void TruthTableSetFalse_OnClick(object? sender, RoutedEventArgs e)
+    {
+        SetContextRowOutputValues("0");
+    }
+
+    private void TruthTableSetDontCare_OnClick(object? sender, RoutedEventArgs e)
+    {
+        SetContextRowOutputValues("X");
+    }
+
+    private void TruthTableInvert_OnClick(object? sender, RoutedEventArgs e)
+    {
+        foreach (var row in GetTruthTableContextRows())
+        {
+            foreach (var cell in row.Cells.Where(static cell => cell.IsOutput))
+            {
+                cell.Value = cell.Value switch
+                {
+                    "0" => "1",
+                    "1" => "0",
+                    _ => cell.Value
+                };
+            }
+        }
+    }
+
+    private void TruthTableSubmit_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is MainWindowViewModel viewModel)
+        {
+            viewModel.StatusText = "Truth table submitted";
+        }
+    }
+
+    private void TruthTableCancel_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is MainWindowViewModel viewModel)
+        {
+            viewModel.StatusText = "Truth table edit canceled";
+        }
+    }
+
+    private void SetContextRowOutputValues(string value)
+    {
+        foreach (var row in GetTruthTableContextRows())
+        {
+            foreach (var cell in row.Cells.Where(static cell => cell.IsOutput))
+            {
+                cell.Value = value;
+            }
+        }
+    }
+
+    private IReadOnlyList<TruthTableRow> GetTruthTableContextRows()
+    {
+        var selectedRows = TruthTableDataGrid.SelectedItems
+            .OfType<TruthTableRow>()
+            .ToArray();
+
+        if (selectedRows.Length > 0)
+        {
+            return selectedRows;
+        }
+
+        return _truthTableContextRow is null
+            ? []
+            : [ _truthTableContextRow ];
     }
 
     private static string? FindHelpFilePath()
