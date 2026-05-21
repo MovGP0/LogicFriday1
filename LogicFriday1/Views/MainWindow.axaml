@@ -26,6 +26,14 @@
             <Setter Property="HorizontalContentAlignment" Value="Center" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
         </Style>
+        <Style Selector="Button.toolbarButton icons|PackIcon">
+            <Setter Property="Width" Value="18" />
+            <Setter Property="Height" Value="18" />
+            <Setter Property="Foreground" Value="{DynamicResource LogicFriday.Brush.OnSurface}" />
+        </Style>
+        <Style Selector="Button.toolbarButton:pointerover icons|PackIcon">
+            <Setter Property="Foreground" Value="{DynamicResource LogicFriday.Brush.OnSecondaryContainer}" />
+        </Style>
         <Style Selector="Button.gatePaletteButton">
             <Setter Property="Width" Value="80" />
             <Setter Property="Height" Value="60" />
