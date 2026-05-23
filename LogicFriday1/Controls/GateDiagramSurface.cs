@@ -219,7 +219,7 @@ public sealed class GateDiagramSurface : Control
         Pen pen)
     {
         var inputOffset = xor ? -7 : 0;
-        var inputAdjustments = GetOrInputAdjustments(inputCount);
+        var inputAdjustments = GetOrInputAdjustments(inputCount, xor);
 
         var geometry = new StreamGeometry();
         using (var stream = geometry.Open())
@@ -364,13 +364,24 @@ public sealed class GateDiagramSurface : Control
             brush);
     }
 
-    private static IReadOnlyList<double> GetOrInputAdjustments(int inputCount)
+    private static IReadOnlyList<double> GetOrInputAdjustments(int inputCount, bool xor)
     {
+        if (xor)
+        {
+            return inputCount switch
+            {
+                2 => [4, 4],
+                3 => [0, 0, 4],
+                4 => [7, 4, 0, 4],
+                _ => []
+            };
+        }
+
         return inputCount switch
         {
-            2 => [4, 4],
-            3 => [0, 0, 4],
-            4 => [7, 4, 0, 4],
+            2 => [5.261, 5.261],
+            3 => [5.261, 7.5, 5.261],
+            4 => [5.261, 7.267, 7.267, 5.261],
             _ => []
         };
     }

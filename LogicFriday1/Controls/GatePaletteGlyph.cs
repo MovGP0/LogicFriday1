@@ -220,7 +220,7 @@ public sealed class GatePaletteGlyph : Control
             context.DrawLine(pen, p(80, 25), p(100, 25));
         }
 
-        DrawInputLines(context, inputCount, p, pen, xor ? 18 : 15);
+        DrawInputLines(context, inputCount, p, pen, xor ? 18 : 15, xor ? [] : GetOrInputAdjustments(inputCount));
     }
 
     private static void DrawMux(DrawingContext context, Func<double, double, Point> p, double scale, Pen pen, IBrush textBrush)
@@ -255,7 +255,13 @@ public sealed class GatePaletteGlyph : Control
         DrawText(context, value, p(22, 14), textBrush, 15 * scale);
     }
 
-    private static void DrawInputLines(DrawingContext context, int inputCount, Func<double, double, Point> p, Pen pen, double targetX)
+    private static void DrawInputLines(
+        DrawingContext context,
+        int inputCount,
+        Func<double, double, Point> p,
+        Pen pen,
+        double targetX,
+        IReadOnlyList<double>? targetAdjustments = null)
     {
         var offset = inputCount switch
         {
@@ -268,8 +274,22 @@ public sealed class GatePaletteGlyph : Control
         for (var index = 0; index < inputCount; index++)
         {
             var y = 10 + index * offset;
-            context.DrawLine(pen, p(0, y), p(targetX, y));
+            var adjustment = targetAdjustments is not null && index < targetAdjustments.Count
+                ? targetAdjustments[index]
+                : 0;
+            context.DrawLine(pen, p(0, y), p(targetX + adjustment, y));
         }
+    }
+
+    private static IReadOnlyList<double> GetOrInputAdjustments(int inputCount)
+    {
+        return inputCount switch
+        {
+            2 => [5.261, 5.261],
+            3 => [5.261, 7.5, 5.261],
+            4 => [5.261, 7.267, 7.267, 5.261],
+            _ => []
+        };
     }
 
     private static void DrawSelect(DrawingContext context, Rect bounds, Pen pen)
