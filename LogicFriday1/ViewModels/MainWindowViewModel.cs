@@ -66,6 +66,8 @@ public partial class MainWindowViewModel : ViewModelBase
         new("Help", GatePaletteKind.Help, 0x428, 0, "Decompiled/logicfriday_decompiled_functions/0040cabd_FUN_0040cabd.c")
     ];
 
+    public ObservableCollection<GateDiagramItem> GateDiagramItems { get; } = [];
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsUnminimizedViewSelected))]
     private bool _isMinimizedViewSelected;
@@ -159,6 +161,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
     public void StartNewGateDiagram()
     {
+        GateDiagramItems.Clear();
         IsEquationEditorVisible = false;
         IsTruthTableVisible = false;
         IsGateDiagramVisible = true;
@@ -236,6 +239,7 @@ public partial class MainWindowViewModel : ViewModelBase
         LogicEquationText = "";
         TruthTableRows.Clear();
         FunctionTruthTableRows.Clear();
+        GateDiagramItems.Clear();
         _truthTableInputNames = [];
         _truthTableOutputNames = [];
         SelectedGatePaletteItem = null;
