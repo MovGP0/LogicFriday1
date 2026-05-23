@@ -157,7 +157,7 @@ public sealed class GatePaletteGlyph : Control
             stream.LineTo(p(15, 0));
             stream.LineTo(p(15, 50));
             stream.LineTo(p(55, 50));
-            stream.CubicBezierTo(p(80, 50), p(80, 0), p(55, 0));
+            stream.CubicBezierTo(p(88.333, 50), p(88.333, 0), p(55, 0));
             stream.EndFigure(false);
         }
 

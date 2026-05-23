@@ -191,7 +191,7 @@ public sealed class GateDiagramSurface : Control
             stream.LineTo(p(15, 0));
             stream.LineTo(p(15, 50));
             stream.LineTo(p(55, 50));
-            stream.CubicBezierTo(p(80, 50), p(80, 0), p(55, 0));
+            stream.ArcTo(p(55, 0), new Size(25, 25), 0, false, SweepDirection.CounterClockwise);
             stream.EndFigure(false);
         }
 
