@@ -16,6 +16,19 @@ public sealed record GateDiagramConnectionPoint(
     double X,
     double Y);
 
+public sealed record GateDiagramWirePoint(
+    double X,
+    double Y);
+
 public sealed record GateDiagramWire(
     GateDiagramConnectionReference Start,
-    GateDiagramConnectionReference End);
+    GateDiagramConnectionReference End,
+    IReadOnlyList<GateDiagramWirePoint> RoutePoints)
+{
+    public GateDiagramWire(
+        GateDiagramConnectionReference start,
+        GateDiagramConnectionReference end)
+        : this(start, end, [])
+    {
+    }
+}

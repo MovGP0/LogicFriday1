@@ -24,6 +24,11 @@ public sealed class GateDiagramSurface : Control
     private GateDiagramConnectionPoint? _pendingWireStart;
     private Point? _pendingWirePreviewEnd;
     private Point? _invalidWirePoint;
+    private int? _selectedItemId;
+    private int? _selectedWireIndex;
+    private int? _selectedWireSegmentIndex;
+    private bool _isDraggingSelection;
+    private Point _lastSelectionDragPoint;
     private DispatcherTimer? _invalidWireTimer;
     private int _nextItemId = 1;
 
@@ -70,6 +75,12 @@ public sealed class GateDiagramSurface : Control
             return;
         }
 
+        if (item.Kind == GatePaletteKind.Select)
+        {
+            BeginSelect(e);
+            return;
+        }
+
         if (Items is null || !IsPlaceable(item))
         {
             return;
@@ -102,6 +113,7 @@ public sealed class GateDiagramSurface : Control
 
         if (_pendingWireStart is null)
         {
+            MoveSelection(e);
             return;
         }
 
@@ -130,6 +142,15 @@ public sealed class GateDiagramSurface : Control
     protected override void OnPointerReleased(PointerReleasedEventArgs e)
     {
         base.OnPointerReleased(e);
+
+        if (!_isDraggingSelection)
+        {
+            return;
+        }
+
+        _isDraggingSelection = false;
+        e.Pointer.Capture(null);
+        e.Handled = true;
     }
 
     public override void Render(DrawingContext context)
@@ -170,7 +191,7 @@ public sealed class GateDiagramSurface : Control
         }
     }
 
-    private static void DrawItem(DrawingContext context, GateDiagramItem item)
+    private void DrawItem(DrawingContext context, GateDiagramItem item)
     {
         var pen = new Pen(Brushes.Black, 1.5);
         var textBrush = Brushes.Black;
@@ -187,22 +208,37 @@ public sealed class GateDiagramSurface : Control
         {
             DrawCenteredText(context, item.ComponentLabel, P, 55, textBrush, 11);
         }
+
+        if (_selectedItemId == item.Id)
+        {
+            var selectionPen = new Pen(Brushes.Firebrick, 1.4, DashStyle.Dash);
+            context.DrawRectangle(null, selectionPen, GetItemBounds(item).Inflate(4));
+        }
     }
 
     private void DrawWires(DrawingContext context, Pen pen)
     {
+        var wireIndex = 0;
         foreach (var wire in Wires ?? [])
         {
             if (TryResolveConnection(wire.Start, out var wireStart) &&
                 TryResolveConnection(wire.End, out var wireEnd))
             {
-                DrawWireRoute(
-                    context,
-                    pen,
-                    CreateOrthogonalRoute(
-                        new Point(wireStart.X, wireStart.Y),
-                        new Point(wireEnd.X, wireEnd.Y)));
+                var points = GetWireRoute(wire, wireStart, wireEnd);
+                var wirePen = _selectedWireIndex == wireIndex
+                    ? new Pen(Brushes.Firebrick, 2.4)
+                    : pen;
+
+                DrawWireRoute(context, wirePen, points);
+
+                if (_selectedWireIndex == wireIndex &&
+                    _selectedWireSegmentIndex is { } selectedSegmentIndex)
+                {
+                    DrawSelectedWireSegment(context, points, selectedSegmentIndex);
+                }
             }
+
+            wireIndex++;
         }
 
         if (_pendingWireStart is { } start && _pendingWirePreviewEnd is { } end)
@@ -225,6 +261,22 @@ public sealed class GateDiagramSurface : Control
                 points[index - 1],
                 points[index]);
         }
+    }
+
+    private static void DrawSelectedWireSegment(
+        DrawingContext context,
+        IReadOnlyList<Point> points,
+        int segmentIndex)
+    {
+        if (segmentIndex < 0 || segmentIndex + 1 >= points.Count)
+        {
+            return;
+        }
+
+        context.DrawLine(
+            new Pen(Brushes.Firebrick, 4.2),
+            points[segmentIndex],
+            points[segmentIndex + 1]);
     }
 
     private void DrawInvalidWireTarget(DrawingContext context)
@@ -275,6 +327,7 @@ public sealed class GateDiagramSurface : Control
         }
 
         Focus();
+        ClearSelection();
 
         var position = e.GetPosition(this);
         if (_pendingWireStart is null)
@@ -308,11 +361,84 @@ public sealed class GateDiagramSurface : Control
         e.Handled = true;
     }
 
+    private void BeginSelect(PointerPressedEventArgs e)
+    {
+        if (Items is null)
+        {
+            return;
+        }
+
+        Focus();
+        CancelPendingWireState();
+
+        var position = e.GetPosition(this);
+        if (TryHitItem(position, out var item))
+        {
+            _selectedItemId = item.Id;
+            _selectedWireIndex = null;
+            _selectedWireSegmentIndex = null;
+            BeginSelectionDrag(e, position);
+            return;
+        }
+
+        if (TryHitWire(position, out var wireIndex, out var segmentIndex))
+        {
+            _selectedItemId = null;
+            _selectedWireIndex = wireIndex;
+            _selectedWireSegmentIndex = segmentIndex;
+            BeginSelectionDrag(e, position);
+            return;
+        }
+
+        ClearSelection();
+        InvalidateVisual();
+        e.Handled = true;
+    }
+
+    private void BeginSelectionDrag(PointerPressedEventArgs e, Point position)
+    {
+        _isDraggingSelection = true;
+        _lastSelectionDragPoint = Snap(position);
+        e.Pointer.Capture(this);
+        InvalidateVisual();
+        e.Handled = true;
+    }
+
+    private void MoveSelection(PointerEventArgs e)
+    {
+        if (!_isDraggingSelection)
+        {
+            return;
+        }
+
+        var position = Snap(e.GetPosition(this));
+        var delta = position - _lastSelectionDragPoint;
+        if (Math.Abs(delta.X) < WireGeometryTolerance &&
+            Math.Abs(delta.Y) < WireGeometryTolerance)
+        {
+            e.Handled = true;
+            return;
+        }
+
+        _lastSelectionDragPoint = position;
+
+        if (_selectedItemId is { } selectedItemId)
+        {
+            MoveSelectedItem(selectedItemId, delta);
+        }
+        else if (_selectedWireIndex is { } selectedWireIndex &&
+            _selectedWireSegmentIndex is { } selectedWireSegmentIndex)
+        {
+            MoveSelectedWireSegment(selectedWireIndex, selectedWireSegmentIndex, delta);
+        }
+
+        InvalidateVisual();
+        e.Handled = true;
+    }
+
     private void ClearPaletteSelection()
     {
-        _pendingWireStart = null;
-        _pendingWirePreviewEnd = null;
-        _invalidWirePoint = null;
+        CancelPendingWireState();
         SelectedPaletteItem = null;
         PaletteSelectionCleared?.Invoke(this, EventArgs.Empty);
     }
@@ -321,6 +447,21 @@ public sealed class GateDiagramSurface : Control
     {
         ClearPaletteSelection();
         InvalidateVisual();
+    }
+
+    private void CancelPendingWireState()
+    {
+        _pendingWireStart = null;
+        _pendingWirePreviewEnd = null;
+        _invalidWirePoint = null;
+    }
+
+    private void ClearSelection()
+    {
+        _selectedItemId = null;
+        _selectedWireIndex = null;
+        _selectedWireSegmentIndex = null;
+        _isDraggingSelection = false;
     }
 
     private void AddItem(GatePaletteItem item, double x, double y, string label)
@@ -367,6 +508,225 @@ public sealed class GateDiagramSurface : Control
     {
         const double spacing = 20;
         return Math.Round(value / spacing) * spacing;
+    }
+
+    private static Point Snap(Point point)
+    {
+        return new Point(Snap(point.X), Snap(point.Y));
+    }
+
+    private bool TryHitItem(Point position, out GateDiagramItem item)
+    {
+        item = default!;
+        if (Items is null)
+        {
+            return false;
+        }
+
+        for (var index = Items.Count - 1; index >= 0; index--)
+        {
+            var candidate = Items[index];
+            if (!GetItemBounds(candidate).Contains(position))
+            {
+                continue;
+            }
+
+            item = candidate;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static Rect GetItemBounds(GateDiagramItem item)
+    {
+        return item.Kind switch
+        {
+            GatePaletteKind.Input => new Rect(item.X, item.Y, 50, 50),
+            GatePaletteKind.Output => new Rect(item.X, item.Y, 60, 50),
+            GatePaletteKind.ConstantZero or GatePaletteKind.ConstantOne => new Rect(item.X, item.Y, 60, 50),
+            _ => new Rect(item.X, item.Y, 100, 66)
+        };
+    }
+
+    private bool TryHitWire(Point position, out int wireIndex, out int segmentIndex)
+    {
+        wireIndex = -1;
+        segmentIndex = -1;
+        if (Wires is null)
+        {
+            return false;
+        }
+
+        var bestDistance = 7d;
+        for (var index = 0; index < Wires.Count; index++)
+        {
+            var wire = Wires[index];
+            if (!TryResolveConnection(wire.Start, out var start) ||
+                !TryResolveConnection(wire.End, out var end))
+            {
+                continue;
+            }
+
+            var points = GetWireRoute(wire, start, end);
+            for (var routeIndex = 0; routeIndex + 1 < points.Count; routeIndex++)
+            {
+                var distance = DistanceToOrthogonalSegment(position, points[routeIndex], points[routeIndex + 1]);
+                if (distance > bestDistance)
+                {
+                    continue;
+                }
+
+                bestDistance = distance;
+                wireIndex = index;
+                segmentIndex = routeIndex;
+            }
+        }
+
+        return wireIndex >= 0;
+    }
+
+    private static double DistanceToOrthogonalSegment(Point point, Point start, Point end)
+    {
+        if (Math.Abs(start.Y - end.Y) < WireGeometryTolerance)
+        {
+            var left = Math.Min(start.X, end.X);
+            var right = Math.Max(start.X, end.X);
+            if (point.X < left || point.X > right)
+            {
+                return double.PositiveInfinity;
+            }
+
+            return Math.Abs(point.Y - start.Y);
+        }
+
+        if (Math.Abs(start.X - end.X) < WireGeometryTolerance)
+        {
+            var top = Math.Min(start.Y, end.Y);
+            var bottom = Math.Max(start.Y, end.Y);
+            if (point.Y < top || point.Y > bottom)
+            {
+                return double.PositiveInfinity;
+            }
+
+            return Math.Abs(point.X - start.X);
+        }
+
+        return double.PositiveInfinity;
+    }
+
+    private void MoveSelectedItem(int itemId, Vector delta)
+    {
+        if (Items is null)
+        {
+            return;
+        }
+
+        for (var index = 0; index < Items.Count; index++)
+        {
+            if (Items[index].Id != itemId)
+            {
+                continue;
+            }
+
+            var item = Items[index];
+            Items[index] = item with
+            {
+                X = item.X + delta.X,
+                Y = item.Y + delta.Y
+            };
+            return;
+        }
+    }
+
+    private void MoveSelectedWireSegment(int wireIndex, int segmentIndex, Vector delta)
+    {
+        if (Wires is null ||
+            wireIndex < 0 ||
+            wireIndex >= Wires.Count)
+        {
+            return;
+        }
+
+        var wire = Wires[wireIndex];
+        if (!TryResolveConnection(wire.Start, out var start) ||
+            !TryResolveConnection(wire.End, out var end))
+        {
+            return;
+        }
+
+        var route = GetWireRoute(wire, start, end).ToList();
+        if (segmentIndex < 0 || segmentIndex + 1 >= route.Count)
+        {
+            return;
+        }
+
+        var segmentStart = route[segmentIndex];
+        var segmentEnd = route[segmentIndex + 1];
+        if (Math.Abs(segmentStart.Y - segmentEnd.Y) < WireGeometryTolerance)
+        {
+            MoveHorizontalSegment(route, segmentIndex, delta.Y);
+        }
+        else if (Math.Abs(segmentStart.X - segmentEnd.X) < WireGeometryTolerance)
+        {
+            MoveVerticalSegment(route, segmentIndex, delta.X);
+        }
+
+        route = NormalizeRoute(OrthogonalizeRoute(route));
+        Wires[wireIndex] = wire with
+        {
+            RoutePoints = route
+                .Skip(1)
+                .Take(Math.Max(0, route.Count - 2))
+                .Select(static point => new GateDiagramWirePoint(point.X, point.Y))
+                .ToArray()
+        };
+    }
+
+    private static void MoveHorizontalSegment(List<Point> route, int segmentIndex, double deltaY)
+    {
+        if (Math.Abs(deltaY) < WireGeometryTolerance)
+        {
+            return;
+        }
+
+        var newY = route[segmentIndex].Y + deltaY;
+        if (segmentIndex == 0)
+        {
+            route.Insert(1, new Point(route[0].X, newY));
+            segmentIndex++;
+        }
+
+        if (segmentIndex + 1 == route.Count - 1)
+        {
+            route.Insert(route.Count - 1, new Point(route[^1].X, newY));
+        }
+
+        route[segmentIndex] = new Point(route[segmentIndex].X, newY);
+        route[segmentIndex + 1] = new Point(route[segmentIndex + 1].X, newY);
+    }
+
+    private static void MoveVerticalSegment(List<Point> route, int segmentIndex, double deltaX)
+    {
+        if (Math.Abs(deltaX) < WireGeometryTolerance)
+        {
+            return;
+        }
+
+        var newX = route[segmentIndex].X + deltaX;
+        if (segmentIndex == 0)
+        {
+            route.Insert(1, new Point(newX, route[0].Y));
+            segmentIndex++;
+        }
+
+        if (segmentIndex + 1 == route.Count - 1)
+        {
+            route.Insert(route.Count - 1, new Point(newX, route[^1].Y));
+        }
+
+        route[segmentIndex] = new Point(newX, route[segmentIndex].Y);
+        route[segmentIndex + 1] = new Point(newX, route[segmentIndex + 1].Y);
     }
 
     private bool TryHitConnection(Point position, out GateDiagramConnectionPoint connection)
@@ -563,6 +923,93 @@ public sealed class GateDiagramSurface : Control
 
         connection = match;
         return true;
+    }
+
+    private static IReadOnlyList<Point> GetWireRoute(
+        GateDiagramWire wire,
+        GateDiagramConnectionPoint start,
+        GateDiagramConnectionPoint end)
+    {
+        var startPoint = new Point(start.X, start.Y);
+        var endPoint = new Point(end.X, end.Y);
+        if (wire.RoutePoints.Count == 0)
+        {
+            return CreateOrthogonalRoute(startPoint, endPoint);
+        }
+
+        var route = new List<Point> { startPoint };
+        route.AddRange(wire.RoutePoints.Select(static point => new Point(point.X, point.Y)));
+        route.Add(endPoint);
+        return NormalizeRoute(OrthogonalizeRoute(route));
+    }
+
+    private static List<Point> OrthogonalizeRoute(IReadOnlyList<Point> route)
+    {
+        var points = new List<Point>();
+        foreach (var target in route)
+        {
+            if (points.Count == 0)
+            {
+                points.Add(target);
+                continue;
+            }
+
+            var current = points[^1];
+            if (AreSamePoint(current, target))
+            {
+                continue;
+            }
+
+            if (Math.Abs(current.X - target.X) > WireGeometryTolerance &&
+                Math.Abs(current.Y - target.Y) > WireGeometryTolerance)
+            {
+                points.Add(new Point(target.X, current.Y));
+            }
+
+            points.Add(target);
+        }
+
+        return points;
+    }
+
+    private static List<Point> NormalizeRoute(IEnumerable<Point> route)
+    {
+        var points = new List<Point>();
+        foreach (var point in route)
+        {
+            if (points.Count > 0 &&
+                AreSamePoint(points[^1], point))
+            {
+                continue;
+            }
+
+            points.Add(point);
+        }
+
+        for (var index = 1; index + 1 < points.Count;)
+        {
+            var previous = points[index - 1];
+            var current = points[index];
+            var next = points[index + 1];
+            if ((Math.Abs(previous.X - current.X) < WireGeometryTolerance &&
+                    Math.Abs(current.X - next.X) < WireGeometryTolerance) ||
+                (Math.Abs(previous.Y - current.Y) < WireGeometryTolerance &&
+                    Math.Abs(current.Y - next.Y) < WireGeometryTolerance))
+            {
+                points.RemoveAt(index);
+                continue;
+            }
+
+            index++;
+        }
+
+        return points;
+    }
+
+    private static bool AreSamePoint(Point left, Point right)
+    {
+        return Math.Abs(left.X - right.X) < WireGeometryTolerance &&
+            Math.Abs(left.Y - right.Y) < WireGeometryTolerance;
     }
 
     private static IReadOnlyList<Point> CreateOrthogonalRoute(Point start, Point end)
