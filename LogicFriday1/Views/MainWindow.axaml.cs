@@ -14,6 +14,7 @@ using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
+using LogicFriday1.Controls;
 using LogicFriday1.Models;
 using LogicFriday1.Services;
 using LogicFriday1.ViewModels;
@@ -31,6 +32,7 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         TruthTableDataGrid.AddHandler(PointerPressedEvent, TruthTableDataGrid_OnPointerPressed, RoutingStrategies.Tunnel);
+        GateDiagramSurface.VariableNameRequested += GateDiagramSurface_OnVariableNameRequested;
     }
 
     private async void HelpContents_OnClick(object? sender, RoutedEventArgs e)
@@ -165,6 +167,65 @@ public partial class MainWindow : Window
 
             viewModel.SelectGatePaletteItem(item);
         }
+    }
+
+    private async void GateDiagramSurface_OnVariableNameRequested(
+        object? sender,
+        GateDiagramVariableNameRequestedEventArgs e)
+    {
+        if (DataContext is not MainWindowViewModel viewModel)
+        {
+            return;
+        }
+
+        var dialog = new GateVariableNameDialog
+        {
+            ExistingNames = viewModel.GateDiagramItems
+                .Where(static item => item.Kind is GatePaletteKind.Input or GatePaletteKind.Output)
+                .Select(static item => item.Label),
+            VariableName = GetProposedGateVariableName(e.Item.Kind, viewModel.GateDiagramItems)
+        };
+
+        var result = await dialog.ShowDialog<bool?>(this);
+        if (result == true)
+        {
+            e.AddItem(dialog.VariableName);
+        }
+    }
+
+    private static string GetProposedGateVariableName(
+        GatePaletteKind kind,
+        IEnumerable<GateDiagramItem> items)
+    {
+        var existingNames = items
+            .Where(static item => item.Kind is GatePaletteKind.Input or GatePaletteKind.Output)
+            .Select(static item => item.Label)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        if (kind == GatePaletteKind.Output && !existingNames.Contains("X"))
+        {
+            return "X";
+        }
+
+        const string alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        foreach (var name in alphabet.Select(static character => character.ToString()))
+        {
+            if (!existingNames.Contains(name))
+            {
+                return name;
+            }
+        }
+
+        for (var index = 0; index < 100; index++)
+        {
+            var name = $"V{index}";
+            if (!existingNames.Contains(name))
+            {
+                return name;
+            }
+        }
+
+        return string.Empty;
     }
 
     private async Task OpenUrlAsync(string url, string errorMessage)

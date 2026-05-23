@@ -27,6 +27,8 @@ public sealed class GateDiagramSurface : Control
         set => SetValue(ItemsProperty, value);
     }
 
+    public event EventHandler<GateDiagramVariableNameRequestedEventArgs>? VariableNameRequested;
+
     protected override void OnPointerPressed(PointerPressedEventArgs e)
     {
         base.OnPointerPressed(e);
@@ -40,14 +42,23 @@ public sealed class GateDiagramSurface : Control
         }
 
         var position = e.GetPosition(this);
-        Items.Add(new GateDiagramItem(
-            item.Kind,
-            item.InputCount,
-            Snap(position.X - 50),
-            Snap(position.Y - 25),
-            item.Label));
+        var x = Snap(position.X - 50);
+        var y = Snap(position.Y - 25);
+        if (item.Kind is GatePaletteKind.Input or GatePaletteKind.Output)
+        {
+            VariableNameRequested?.Invoke(
+                this,
+                new GateDiagramVariableNameRequestedEventArgs(
+                    item,
+                    x,
+                    y,
+                    name => AddItem(item, x, y, name)));
 
-        InvalidateVisual();
+            e.Handled = true;
+            return;
+        }
+
+        AddItem(item, x, y, item.Label);
         e.Handled = true;
     }
 
@@ -132,6 +143,14 @@ public sealed class GateDiagramSurface : Control
 
             case GatePaletteKind.ConstantOne:
                 DrawConstant(context, "1", P, pen, textBrush);
+                break;
+
+            case GatePaletteKind.Input:
+                DrawInput(context, item.Label, P, pen, textBrush);
+                break;
+
+            case GatePaletteKind.Output:
+                DrawOutput(context, item.Label, P, pen, textBrush);
                 break;
         }
     }
@@ -262,6 +281,32 @@ public sealed class GateDiagramSurface : Control
         DrawText(context, value, p(22, 14), textBrush, 15);
     }
 
+    private static void DrawInput(
+        DrawingContext context,
+        string label,
+        Func<double, double, Point> p,
+        Pen pen,
+        IBrush textBrush)
+    {
+        context.DrawLine(pen, p(40, 25), p(20, 25));
+        context.DrawLine(pen, p(20, 15), p(20, 35));
+
+        var text = CreateText(label, textBrush, 12);
+        context.DrawText(text, p(16 - text.Width, 13));
+    }
+
+    private static void DrawOutput(
+        DrawingContext context,
+        string label,
+        Func<double, double, Point> p,
+        Pen pen,
+        IBrush textBrush)
+    {
+        context.DrawLine(pen, p(0, 25), p(20, 25));
+        context.DrawLine(pen, p(20, 15), p(20, 35));
+        DrawText(context, label, p(26, 13), textBrush, 12);
+    }
+
     private static void DrawInputLines(
         DrawingContext context,
         int inputCount,
@@ -288,15 +333,18 @@ public sealed class GateDiagramSurface : Control
 
     private static void DrawText(DrawingContext context, string text, Point point, IBrush brush, double fontSize)
     {
-        context.DrawText(
-            new FormattedText(
-                text,
-                CultureInfo.CurrentCulture,
-                FlowDirection.LeftToRight,
-                Typeface.Default,
-                fontSize,
-                brush),
-            point);
+        context.DrawText(CreateText(text, brush, fontSize), point);
+    }
+
+    private static FormattedText CreateText(string text, IBrush brush, double fontSize)
+    {
+        return new FormattedText(
+            text,
+            CultureInfo.CurrentCulture,
+            FlowDirection.LeftToRight,
+            Typeface.Default,
+            fontSize,
+            brush);
     }
 
     private static IReadOnlyList<double> GetOrInputAdjustments(int inputCount)
@@ -321,7 +369,21 @@ public sealed class GateDiagramSurface : Control
             GatePaletteKind.Or or
             GatePaletteKind.Xor or
             GatePaletteKind.ConstantZero or
-            GatePaletteKind.ConstantOne;
+            GatePaletteKind.ConstantOne or
+            GatePaletteKind.Input or
+            GatePaletteKind.Output;
+    }
+
+    private void AddItem(GatePaletteItem item, double x, double y, string label)
+    {
+        Items?.Add(new GateDiagramItem(
+            item.Kind,
+            item.InputCount,
+            x,
+            y,
+            label.Trim()));
+
+        InvalidateVisual();
     }
 
     private static double Snap(double value)
@@ -341,4 +403,22 @@ public sealed class GateDiagramSurface : Control
         return fallback;
     }
 
+}
+
+public sealed class GateDiagramVariableNameRequestedEventArgs(
+    GatePaletteItem item,
+    double x,
+    double y,
+    Action<string> addItem) : EventArgs
+{
+    public GatePaletteItem Item { get; } = item;
+
+    public double X { get; } = x;
+
+    public double Y { get; } = y;
+
+    public void AddItem(string variableName)
+    {
+        addItem(variableName);
+    }
 }

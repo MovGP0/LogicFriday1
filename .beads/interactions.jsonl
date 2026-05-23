@@ -74,3 +74,5 @@
 {"id":"int-4de1b796","kind":"field_change","created_at":"2026-05-23T15:46:33.0878658Z","actor":"Johann Dirry","issue_id":"LogicFriday1-cmz.3.17","extra":{"field":"status","new_value":"closed","old_value":"in_progress"}}
 {"id":"int-d296dd03","kind":"field_change","created_at":"2026-05-23T15:46:33.2203807Z","actor":"Johann Dirry","issue_id":"LogicFriday1-cmz.3.18","extra":{"field":"status","new_value":"closed","old_value":"in_progress"}}
 {"id":"int-ef1c14f9","kind":"field_change","created_at":"2026-05-23T15:46:33.3627375Z","actor":"Johann Dirry","issue_id":"LogicFriday1-cmz.3.19","extra":{"field":"status","new_value":"closed","old_value":"in_progress"}}
+{"id":"int-b458f7df","kind":"field_change","created_at":"2026-05-23T15:55:39.0841353Z","actor":"Johann Dirry","issue_id":"LogicFriday1-cmz.3.20","extra":{"field":"status","new_value":"closed","old_value":"in_progress"}}
+{"id":"int-12f81868","kind":"field_change","created_at":"2026-05-23T15:55:39.2127719Z","actor":"Johann Dirry","issue_id":"LogicFriday1-cmz.3.21","extra":{"field":"status","new_value":"closed","old_value":"in_progress"}}
