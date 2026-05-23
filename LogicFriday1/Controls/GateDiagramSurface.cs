@@ -28,6 +28,13 @@ public sealed class GateDiagramSurface : Control
     private const double ZoomStep = 1.2;
     private const double LogicalCanvasWidth = 2400;
     private const double LogicalCanvasHeight = 1600;
+    private const double RoutingGridStep = 20;
+    private const double RoutingPadding = 120;
+    private const double RoutingEscapeDistance = 20;
+    private const double RoutingObstacleInflation = 10;
+    private const double RoutingBendPenalty = 25;
+    private const double RoutingReusePenalty = 1800;
+    private const double RoutingCrossingPenalty = 90;
 
     private GateDiagramConnectionPoint? _pendingWireStart;
     private Point? _pendingWirePreviewEnd;
@@ -42,6 +49,90 @@ public sealed class GateDiagramSurface : Control
     private Point _selectionRectangleEnd;
     private DispatcherTimer? _invalidWireTimer;
     private int _nextItemId = 1;
+
+    private enum Direction
+    {
+        None,
+        Left,
+        Right,
+        Up,
+        Down
+    }
+
+    private sealed record ResolvedWire(
+        int Index,
+        GateDiagramWire Wire,
+        GateDiagramConnectionPoint Start,
+        GateDiagramConnectionPoint End);
+
+    private readonly record struct PathState(RoutingNode Node, Direction Direction);
+
+    private readonly record struct RoutingNode(double X, double Y);
+
+    private readonly record struct RoutingSegment(RoutingNode Start, RoutingNode End)
+    {
+        public bool IsHorizontal => Math.Abs(Start.Y - End.Y) < WireGeometryTolerance;
+
+        public static RoutingSegment Create(RoutingNode start, RoutingNode end)
+        {
+            if (start.X < end.X ||
+                (Math.Abs(start.X - end.X) < WireGeometryTolerance && start.Y <= end.Y))
+            {
+                return new RoutingSegment(start, end);
+            }
+
+            return new RoutingSegment(end, start);
+        }
+    }
+
+    private sealed class RoutingGrid
+    {
+        private readonly double[] _xCoordinates;
+        private readonly double[] _yCoordinates;
+        private readonly Dictionary<double, int> _xIndexes;
+        private readonly Dictionary<double, int> _yIndexes;
+
+        public RoutingGrid(double[] xCoordinates, double[] yCoordinates)
+        {
+            _xCoordinates = xCoordinates;
+            _yCoordinates = yCoordinates;
+            _xIndexes = xCoordinates
+                .Select((coordinate, index) => new { coordinate, index })
+                .ToDictionary(static item => item.coordinate, static item => item.index);
+            _yIndexes = yCoordinates
+                .Select((coordinate, index) => new { coordinate, index })
+                .ToDictionary(static item => item.coordinate, static item => item.index);
+        }
+
+        public IEnumerable<RoutingNode> GetNeighbors(RoutingNode node)
+        {
+            if (!_xIndexes.TryGetValue(node.X, out var xIndex) ||
+                !_yIndexes.TryGetValue(node.Y, out var yIndex))
+            {
+                yield break;
+            }
+
+            if (xIndex > 0)
+            {
+                yield return new RoutingNode(_xCoordinates[xIndex - 1], node.Y);
+            }
+
+            if (xIndex + 1 < _xCoordinates.Length)
+            {
+                yield return new RoutingNode(_xCoordinates[xIndex + 1], node.Y);
+            }
+
+            if (yIndex > 0)
+            {
+                yield return new RoutingNode(node.X, _yCoordinates[yIndex - 1]);
+            }
+
+            if (yIndex + 1 < _yCoordinates.Length)
+            {
+                yield return new RoutingNode(node.X, _yCoordinates[yIndex + 1]);
+            }
+        }
+    }
 
     public GateDiagramSurface()
     {
@@ -100,6 +191,75 @@ public sealed class GateDiagramSurface : Control
         DeleteSelection();
     }
 
+    public int AutoRedraw()
+    {
+        if (Wires is null || Wires.Count == 0)
+        {
+            CancelPendingWireState();
+            ClearSelection();
+            InvalidateVisual();
+            return 0;
+        }
+
+        var resolvedWires = new List<ResolvedWire>();
+        for (var index = 0; index < Wires.Count; index++)
+        {
+            var wire = Wires[index];
+            if (!TryResolveConnection(wire.Start, out var start) ||
+                !TryResolveConnection(wire.End, out var end))
+            {
+                continue;
+            }
+
+            resolvedWires.Add(new ResolvedWire(index, wire, start, end));
+        }
+
+        if (resolvedWires.Count == 0)
+        {
+            CancelPendingWireState();
+            ClearSelection();
+            InvalidateVisual();
+            return 0;
+        }
+
+        var obstacles = (Items ?? [])
+            .Select(static item => GetItemBounds(item).Inflate(RoutingObstacleInflation))
+            .ToArray();
+        var grid = CreateRoutingGrid(resolvedWires, obstacles);
+        var occupiedSegments = new Dictionary<RoutingSegment, int>();
+        var reroutedWireCount = 0;
+
+        foreach (var resolvedWire in resolvedWires
+                     .OrderByDescending(static wire => GetManhattanDistance(wire.Start, wire.End))
+                     .ThenBy(static wire => wire.Index))
+        {
+            var routedPoints = RouteWire(resolvedWire, grid, obstacles, occupiedSegments);
+            var routePoints = routedPoints
+                .Skip(1)
+                .Take(Math.Max(0, routedPoints.Count - 2))
+                .Select(static point => new GateDiagramWirePoint(point.X, point.Y))
+                .ToArray();
+
+            if (!AreSameRoute(GetWireRoute(resolvedWire.Wire, resolvedWire.Start, resolvedWire.End), routedPoints))
+            {
+                reroutedWireCount++;
+            }
+
+            Wires[resolvedWire.Index] = resolvedWire.Wire with
+            {
+                RoutePoints = routePoints
+            };
+
+            AddOccupiedSegments(routedPoints, occupiedSegments);
+        }
+
+        CancelPendingWireState();
+        ClearSelection();
+        InvalidateMeasure();
+        InvalidateVisual();
+        return reroutedWireCount;
+    }
+
     public void ZoomIn()
     {
         Zoom *= ZoomStep;
@@ -121,6 +281,415 @@ public sealed class GateDiagramSurface : Control
             availableHeight / Math.Max(1, contentBounds.Height));
 
         return contentBounds;
+    }
+
+    private static IReadOnlyList<Point> RouteWire(
+        ResolvedWire wire,
+        RoutingGrid grid,
+        IReadOnlyList<Rect> obstacles,
+        IReadOnlyDictionary<RoutingSegment, int> occupiedSegments)
+    {
+        var startPoint = new Point(wire.Start.X, wire.Start.Y);
+        var endPoint = new Point(wire.End.X, wire.End.Y);
+        var startEscape = GetEscapePoint(wire.Start);
+        var endEscape = GetEscapePoint(wire.End);
+        var startNode = new RoutingNode(startEscape.X, startEscape.Y);
+        var endNode = new RoutingNode(endEscape.X, endEscape.Y);
+
+        var escapedPath = FindRoutingPath(startNode, endNode, grid, obstacles, occupiedSegments);
+        if (escapedPath.Count == 0)
+        {
+            return CreateOrthogonalRoute(startPoint, endPoint);
+        }
+
+        var route = new List<Point> { startPoint };
+        route.AddRange(escapedPath.Select(static node => new Point(node.X, node.Y)));
+        route.Add(endPoint);
+        return NormalizeRoute(OrthogonalizeRoute(route));
+    }
+
+    private static IReadOnlyList<RoutingNode> FindRoutingPath(
+        RoutingNode start,
+        RoutingNode end,
+        RoutingGrid grid,
+        IReadOnlyList<Rect> obstacles,
+        IReadOnlyDictionary<RoutingSegment, int> occupiedSegments)
+    {
+        var open = new PriorityQueue<PathState, double>();
+        var startState = new PathState(start, Direction.None);
+        var costByState = new Dictionary<PathState, double>
+        {
+            [startState] = 0
+        };
+        var previousByState = new Dictionary<PathState, PathState>();
+        var bestEndState = (PathState?)null;
+
+        open.Enqueue(startState, GetManhattanDistance(start, end));
+
+        while (open.Count > 0)
+        {
+            open.TryDequeue(out var current, out _);
+            if (current.Node == end)
+            {
+                bestEndState = current;
+                break;
+            }
+
+            var currentCost = costByState[current];
+            foreach (var nextNode in grid.GetNeighbors(current.Node))
+            {
+                if (IsBlockedNode(nextNode, obstacles, start, end) ||
+                    IsBlockedSegment(current.Node, nextNode, obstacles, start, end))
+                {
+                    continue;
+                }
+
+                var direction = GetDirection(current.Node, nextNode);
+                var nextState = new PathState(nextNode, direction);
+                var edge = RoutingSegment.Create(current.Node, nextNode);
+                var reusePenalty = CountOverlaps(edge, occupiedSegments) * RoutingReusePenalty;
+                var bendPenalty = current.Direction is not Direction.None && current.Direction != direction
+                    ? RoutingBendPenalty
+                    : 0;
+                var crossingPenalty = CountCrossings(edge, occupiedSegments.Keys) * RoutingCrossingPenalty;
+                var nextCost = currentCost +
+                    GetManhattanDistance(current.Node, nextNode) +
+                    bendPenalty +
+                    reusePenalty +
+                    crossingPenalty;
+
+                if (costByState.TryGetValue(nextState, out var existingCost) && existingCost <= nextCost)
+                {
+                    continue;
+                }
+
+                costByState[nextState] = nextCost;
+                previousByState[nextState] = current;
+                open.Enqueue(nextState, nextCost + GetManhattanDistance(nextNode, end));
+            }
+        }
+
+        if (bestEndState is not { } endState)
+        {
+            return [];
+        }
+
+        var path = new List<RoutingNode>();
+        for (var state = endState; ; state = previousByState[state])
+        {
+            path.Add(state.Node);
+            if (state == startState)
+            {
+                break;
+            }
+        }
+
+        path.Reverse();
+        return path;
+    }
+
+    private static RoutingGrid CreateRoutingGrid(
+        IReadOnlyList<ResolvedWire> wires,
+        IReadOnlyList<Rect> obstacles)
+    {
+        Rect? bounds = null;
+        void AddBounds(Rect rect)
+        {
+            bounds = bounds is { } existing ? existing.Union(rect) : rect;
+        }
+
+        foreach (var wire in wires)
+        {
+            AddBounds(new Rect(new Point(wire.Start.X, wire.Start.Y), new Size(1, 1)));
+            AddBounds(new Rect(new Point(wire.End.X, wire.End.Y), new Size(1, 1)));
+            AddBounds(new Rect(GetEscapePoint(wire.Start), new Size(1, 1)));
+            AddBounds(new Rect(GetEscapePoint(wire.End), new Size(1, 1)));
+        }
+
+        foreach (var obstacle in obstacles)
+        {
+            AddBounds(obstacle);
+        }
+
+        var routingBounds = (bounds ?? new Rect(0, 0, LogicalCanvasWidth, LogicalCanvasHeight)).Inflate(RoutingPadding);
+        var minX = SnapDown(routingBounds.Left);
+        var maxX = SnapUp(routingBounds.Right);
+        var minY = SnapDown(routingBounds.Top);
+        var maxY = SnapUp(routingBounds.Bottom);
+        var xCoordinates = new SortedSet<double>();
+        var yCoordinates = new SortedSet<double>();
+
+        for (var x = minX; x <= maxX; x += RoutingGridStep)
+        {
+            xCoordinates.Add(x);
+        }
+
+        for (var y = minY; y <= maxY; y += RoutingGridStep)
+        {
+            yCoordinates.Add(y);
+        }
+
+        foreach (var wire in wires)
+        {
+            AddPoint(new Point(wire.Start.X, wire.Start.Y));
+            AddPoint(new Point(wire.End.X, wire.End.Y));
+            AddPoint(GetEscapePoint(wire.Start));
+            AddPoint(GetEscapePoint(wire.End));
+        }
+
+        foreach (var obstacle in obstacles)
+        {
+            xCoordinates.Add(obstacle.Left - RoutingGridStep);
+            xCoordinates.Add(obstacle.Left);
+            xCoordinates.Add(obstacle.Right);
+            xCoordinates.Add(obstacle.Right + RoutingGridStep);
+            yCoordinates.Add(obstacle.Top - RoutingGridStep);
+            yCoordinates.Add(obstacle.Top);
+            yCoordinates.Add(obstacle.Bottom);
+            yCoordinates.Add(obstacle.Bottom + RoutingGridStep);
+        }
+
+        return new RoutingGrid(xCoordinates.ToArray(), yCoordinates.ToArray());
+
+        void AddPoint(Point point)
+        {
+            xCoordinates.Add(point.X);
+            xCoordinates.Add(point.X - RoutingEscapeDistance);
+            xCoordinates.Add(point.X + RoutingEscapeDistance);
+            yCoordinates.Add(point.Y);
+            yCoordinates.Add(point.Y - RoutingEscapeDistance);
+            yCoordinates.Add(point.Y + RoutingEscapeDistance);
+        }
+    }
+
+    private static Point GetEscapePoint(GateDiagramConnectionPoint connection)
+    {
+        var direction = connection.Reference.Kind == GateDiagramConnectionKind.Output ? 1 : -1;
+        return new Point(connection.X + direction * RoutingEscapeDistance, connection.Y);
+    }
+
+    private static bool IsBlockedNode(
+        RoutingNode node,
+        IReadOnlyList<Rect> obstacles,
+        RoutingNode start,
+        RoutingNode end)
+    {
+        if (node == start || node == end)
+        {
+            return false;
+        }
+
+        return obstacles.Any(obstacle => ContainsStrict(obstacle, node));
+    }
+
+    private static bool IsBlockedSegment(
+        RoutingNode start,
+        RoutingNode end,
+        IReadOnlyList<Rect> obstacles,
+        RoutingNode routeStart,
+        RoutingNode routeEnd)
+    {
+        foreach (var obstacle in obstacles)
+        {
+            if (!SegmentIntersectsStrict(obstacle, start, end))
+            {
+                continue;
+            }
+
+            if ((start == routeStart || start == routeEnd || end == routeStart || end == routeEnd) &&
+                (ContainsStrict(obstacle, start) || ContainsStrict(obstacle, end)))
+            {
+                continue;
+            }
+
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool ContainsStrict(Rect rect, RoutingNode node)
+    {
+        return node.X > rect.Left &&
+            node.X < rect.Right &&
+            node.Y > rect.Top &&
+            node.Y < rect.Bottom;
+    }
+
+    private static bool SegmentIntersectsStrict(Rect rect, RoutingNode start, RoutingNode end)
+    {
+        if (Math.Abs(start.Y - end.Y) < WireGeometryTolerance)
+        {
+            var left = Math.Min(start.X, end.X);
+            var right = Math.Max(start.X, end.X);
+            return start.Y > rect.Top &&
+                start.Y < rect.Bottom &&
+                right > rect.Left &&
+                left < rect.Right;
+        }
+
+        if (Math.Abs(start.X - end.X) < WireGeometryTolerance)
+        {
+            var top = Math.Min(start.Y, end.Y);
+            var bottom = Math.Max(start.Y, end.Y);
+            return start.X > rect.Left &&
+                start.X < rect.Right &&
+                bottom > rect.Top &&
+                top < rect.Bottom;
+        }
+
+        return false;
+    }
+
+    private static int CountCrossings(RoutingSegment segment, IEnumerable<RoutingSegment> occupiedSegments)
+    {
+        var crossings = 0;
+        foreach (var occupied in occupiedSegments)
+        {
+            if (SegmentsCross(segment, occupied))
+            {
+                crossings++;
+            }
+        }
+
+        return crossings;
+    }
+
+    private static int CountOverlaps(
+        RoutingSegment segment,
+        IReadOnlyDictionary<RoutingSegment, int> occupiedSegments)
+    {
+        var overlaps = 0;
+        foreach (var (occupied, count) in occupiedSegments)
+        {
+            if (SegmentsOverlap(segment, occupied))
+            {
+                overlaps += count;
+            }
+        }
+
+        return overlaps;
+    }
+
+    private static bool SegmentsOverlap(RoutingSegment left, RoutingSegment right)
+    {
+        if (left.IsHorizontal != right.IsHorizontal)
+        {
+            return false;
+        }
+
+        if (left.IsHorizontal)
+        {
+            if (Math.Abs(left.Start.Y - right.Start.Y) >= WireGeometryTolerance)
+            {
+                return false;
+            }
+
+            var leftMin = Math.Min(left.Start.X, left.End.X);
+            var leftMax = Math.Max(left.Start.X, left.End.X);
+            var rightMin = Math.Min(right.Start.X, right.End.X);
+            var rightMax = Math.Max(right.Start.X, right.End.X);
+            return Math.Min(leftMax, rightMax) - Math.Max(leftMin, rightMin) > WireGeometryTolerance;
+        }
+
+        if (Math.Abs(left.Start.X - right.Start.X) >= WireGeometryTolerance)
+        {
+            return false;
+        }
+
+        var leftTop = Math.Min(left.Start.Y, left.End.Y);
+        var leftBottom = Math.Max(left.Start.Y, left.End.Y);
+        var rightTop = Math.Min(right.Start.Y, right.End.Y);
+        var rightBottom = Math.Max(right.Start.Y, right.End.Y);
+        return Math.Min(leftBottom, rightBottom) - Math.Max(leftTop, rightTop) > WireGeometryTolerance;
+    }
+
+    private static bool SegmentsCross(RoutingSegment left, RoutingSegment right)
+    {
+        if (left.IsHorizontal == right.IsHorizontal)
+        {
+            return false;
+        }
+
+        var horizontal = left.IsHorizontal ? left : right;
+        var vertical = left.IsHorizontal ? right : left;
+        var horizontalLeft = Math.Min(horizontal.Start.X, horizontal.End.X);
+        var horizontalRight = Math.Max(horizontal.Start.X, horizontal.End.X);
+        var verticalTop = Math.Min(vertical.Start.Y, vertical.End.Y);
+        var verticalBottom = Math.Max(vertical.Start.Y, vertical.End.Y);
+
+        return vertical.Start.X > horizontalLeft &&
+            vertical.Start.X < horizontalRight &&
+            horizontal.Start.Y > verticalTop &&
+            horizontal.Start.Y < verticalBottom;
+    }
+
+    private static void AddOccupiedSegments(
+        IReadOnlyList<Point> route,
+        IDictionary<RoutingSegment, int> occupiedSegments)
+    {
+        for (var index = 0; index + 1 < route.Count; index++)
+        {
+            var start = new RoutingNode(route[index].X, route[index].Y);
+            var end = new RoutingNode(route[index + 1].X, route[index + 1].Y);
+            if (start == end)
+            {
+                continue;
+            }
+
+            var segment = RoutingSegment.Create(start, end);
+            occupiedSegments[segment] = occupiedSegments.TryGetValue(segment, out var count)
+                ? count + 1
+                : 1;
+        }
+    }
+
+    private static Direction GetDirection(RoutingNode start, RoutingNode end)
+    {
+        if (Math.Abs(start.X - end.X) < WireGeometryTolerance)
+        {
+            return end.Y > start.Y ? Direction.Down : Direction.Up;
+        }
+
+        return end.X > start.X ? Direction.Right : Direction.Left;
+    }
+
+    private static double GetManhattanDistance(GateDiagramConnectionPoint start, GateDiagramConnectionPoint end)
+    {
+        return Math.Abs(start.X - end.X) + Math.Abs(start.Y - end.Y);
+    }
+
+    private static double GetManhattanDistance(RoutingNode start, RoutingNode end)
+    {
+        return Math.Abs(start.X - end.X) + Math.Abs(start.Y - end.Y);
+    }
+
+    private static double SnapDown(double value)
+    {
+        return Math.Floor(value / RoutingGridStep) * RoutingGridStep;
+    }
+
+    private static double SnapUp(double value)
+    {
+        return Math.Ceiling(value / RoutingGridStep) * RoutingGridStep;
+    }
+
+    private static bool AreSameRoute(IReadOnlyList<Point> left, IReadOnlyList<Point> right)
+    {
+        if (left.Count != right.Count)
+        {
+            return false;
+        }
+
+        for (var index = 0; index < left.Count; index++)
+        {
+            if (!AreSamePoint(left[index], right[index]))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     protected override Size MeasureOverride(Size availableSize)

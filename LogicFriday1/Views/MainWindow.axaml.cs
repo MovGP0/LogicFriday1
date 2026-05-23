@@ -104,6 +104,17 @@ public partial class MainWindow : Window
             Math.Max(0, contentBounds.Top * GateDiagramSurface.Zoom));
     }
 
+    private void GateAutoRedraw_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is MainWindowViewModel { IsGateDiagramVisible: true } viewModel)
+        {
+            var reroutedWireCount = GateDiagramSurface.AutoRedraw();
+            viewModel.StatusText = reroutedWireCount == 0
+                ? "Gate diagram redrawn"
+                : $"Gate diagram redrawn: {reroutedWireCount} wire routes reset";
+        }
+    }
+
     private async void NewTruthTable_OnClick(object? sender, RoutedEventArgs e)
     {
         var dialog = new TruthTableSetupDialog();

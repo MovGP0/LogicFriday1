@@ -182,7 +182,9 @@
                 <MenuItem Header="IC _Package Info..." />
                 <MenuItem Header="_Trace Gate Logic" />
                 <Separator />
-                <MenuItem Header="_Auto Redraw Diagram" />
+                <MenuItem Header="_Auto Redraw Diagram"
+                          IsEnabled="{Binding IsGateDiagramVisible}"
+                          Click="GateAutoRedraw_OnClick" />
                 <Separator />
                 <MenuItem Header="Zoom _In"
                           IsEnabled="{Binding IsGateDiagramVisible}"
