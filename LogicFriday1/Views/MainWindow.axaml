@@ -183,9 +183,15 @@
                 <Separator />
                 <MenuItem Header="_Auto Redraw Diagram" />
                 <Separator />
-                <MenuItem Header="Zoom _In" />
-                <MenuItem Header="Zoom _Out" />
-                <MenuItem Header="_Zoom All" />
+                <MenuItem Header="Zoom _In"
+                          IsEnabled="{Binding IsGateDiagramVisible}"
+                          Click="GateZoomIn_OnClick" />
+                <MenuItem Header="Zoom _Out"
+                          IsEnabled="{Binding IsGateDiagramVisible}"
+                          Click="GateZoomOut_OnClick" />
+                <MenuItem Header="_Zoom All"
+                          IsEnabled="{Binding IsGateDiagramVisible}"
+                          Click="GateZoomAll_OnClick" />
                 <Separator />
                 <MenuItem Header="_Delete Selected" />
                 <Separator />
@@ -298,11 +304,15 @@
                     <icons:PackIcon Kind="MapMarkerPath" />
                 </Button>
                 <Button Classes="toolbarButton"
-                        ToolTip.Tip="Zoom In">
+                        ToolTip.Tip="Zoom In"
+                        IsEnabled="{Binding IsGateDiagramVisible}"
+                        Click="GateZoomIn_OnClick">
                     <icons:PackIcon Kind="MagnifyPlus" />
                 </Button>
                 <Button Classes="toolbarButton"
-                        ToolTip.Tip="Zoom Out">
+                        ToolTip.Tip="Zoom Out"
+                        IsEnabled="{Binding IsGateDiagramVisible}"
+                        Click="GateZoomOut_OnClick">
                     <icons:PackIcon Kind="MagnifyMinus" />
                 </Button>
             </StackPanel>
@@ -479,11 +489,15 @@
                       IsVisible="{Binding IsGateDiagramVisible}"
                       ColumnDefinitions="*,280"
                       ClipToBounds="True">
-                    <controls:GateDiagramSurface x:Name="GateDiagramSurface"
-                                                 Grid.Column="0"
-                                                 SelectedPaletteItem="{Binding SelectedGatePaletteItem}"
-                                                 Items="{Binding GateDiagramItems}"
-                                                 Wires="{Binding GateDiagramWires}" />
+                    <ScrollViewer x:Name="GateDiagramScrollViewer"
+                                  Grid.Column="0"
+                                  VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Auto">
+                        <controls:GateDiagramSurface x:Name="GateDiagramSurface"
+                                                     SelectedPaletteItem="{Binding SelectedGatePaletteItem}"
+                                                     Items="{Binding GateDiagramItems}"
+                                                     Wires="{Binding GateDiagramWires}" />
+                    </ScrollViewer>
                     <Border Grid.Column="1"
                             BorderThickness="1,0,0,0"
                             BorderBrush="{DynamicResource LogicFriday.Brush.OutlineVariant}"

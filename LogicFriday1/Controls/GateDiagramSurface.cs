@@ -18,8 +18,16 @@ public sealed class GateDiagramSurface : Control
     public static readonly StyledProperty<IList<GateDiagramWire>?> WiresProperty =
         AvaloniaProperty.Register<GateDiagramSurface, IList<GateDiagramWire>?>(nameof(Wires));
 
+    public static readonly StyledProperty<double> ZoomProperty =
+        AvaloniaProperty.Register<GateDiagramSurface, double>(nameof(Zoom), 1d);
+
     private const double ConnectionHitRadius = 6;
     private const double WireGeometryTolerance = 0.001;
+    private const double MinimumZoom = 0.25;
+    private const double MaximumZoom = 4;
+    private const double ZoomStep = 1.2;
+    private const double LogicalCanvasWidth = 2400;
+    private const double LogicalCanvasHeight = 1600;
 
     private GateDiagramConnectionPoint? _pendingWireStart;
     private Point? _pendingWirePreviewEnd;
@@ -40,6 +48,17 @@ public sealed class GateDiagramSurface : Control
         Focusable = true;
     }
 
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+
+        if (change.Property == ZoomProperty)
+        {
+            InvalidateMeasure();
+            InvalidateVisual();
+        }
+    }
+
     public GatePaletteItem? SelectedPaletteItem
     {
         get => GetValue(SelectedPaletteItemProperty);
@@ -58,6 +77,12 @@ public sealed class GateDiagramSurface : Control
         set => SetValue(WiresProperty, value);
     }
 
+    public double Zoom
+    {
+        get => GetValue(ZoomProperty);
+        set => SetValue(ZoomProperty, ClampZoom(value));
+    }
+
     public event EventHandler<GateDiagramVariableNameRequestedEventArgs>? VariableNameRequested;
 
     public event EventHandler? PaletteSelectionCleared;
@@ -68,6 +93,37 @@ public sealed class GateDiagramSurface : Control
         ClearSelection();
         SelectedPaletteItem = null;
         InvalidateVisual();
+    }
+
+    public void ZoomIn()
+    {
+        Zoom *= ZoomStep;
+    }
+
+    public void ZoomOut()
+    {
+        Zoom /= ZoomStep;
+    }
+
+    public Rect ZoomAll(Size viewportSize)
+    {
+        var contentBounds = GetContentBounds().Inflate(80);
+        var availableWidth = Math.Max(1, viewportSize.Width);
+        var availableHeight = Math.Max(1, viewportSize.Height);
+
+        Zoom = Math.Min(
+            availableWidth / Math.Max(1, contentBounds.Width),
+            availableHeight / Math.Max(1, contentBounds.Height));
+
+        return contentBounds;
+    }
+
+    protected override Size MeasureOverride(Size availableSize)
+    {
+        var contentBounds = GetContentBounds();
+        return new Size(
+            Math.Max(LogicalCanvasWidth, contentBounds.Right + 120) * Zoom,
+            Math.Max(LogicalCanvasHeight, contentBounds.Bottom + 120) * Zoom);
     }
 
     protected override void OnPointerPressed(PointerPressedEventArgs e)
@@ -97,7 +153,7 @@ public sealed class GateDiagramSurface : Control
             return;
         }
 
-        var position = e.GetPosition(this);
+        var position = GetLogicalPosition(e);
         var x = Snap(position.X - 50);
         var y = Snap(position.Y - 25);
         if (item.Kind is GatePaletteKind.Input or GatePaletteKind.Output)
@@ -128,7 +184,7 @@ public sealed class GateDiagramSurface : Control
             return;
         }
 
-        var position = e.GetPosition(this);
+        var position = GetLogicalPosition(e);
         _pendingWirePreviewEnd = TryHitConnection(position, out var hitConnection)
             ? new Point(hitConnection.X, hitConnection.Y)
             : position;
@@ -157,6 +213,27 @@ public sealed class GateDiagramSurface : Control
         e.Handled = true;
     }
 
+    protected override void OnPointerWheelChanged(PointerWheelEventArgs e)
+    {
+        base.OnPointerWheelChanged(e);
+
+        if (!e.KeyModifiers.HasFlag(KeyModifiers.Control))
+        {
+            return;
+        }
+
+        if (e.Delta.Y > 0)
+        {
+            ZoomIn();
+        }
+        else if (e.Delta.Y < 0)
+        {
+            ZoomOut();
+        }
+
+        e.Handled = true;
+    }
+
     protected override void OnPointerReleased(PointerReleasedEventArgs e)
     {
         base.OnPointerReleased(e);
@@ -182,11 +259,12 @@ public sealed class GateDiagramSurface : Control
     {
         base.Render(context);
 
-        var bounds = new Rect(0, 0, Bounds.Width, Bounds.Height);
+        var bounds = new Rect(0, 0, Bounds.Width / Zoom, Bounds.Height / Zoom);
         var backgroundBrush = FindBrush("LogicFriday.Brush.SurfaceContainerLowest", Brushes.White);
         var gridPen = new Pen(FindBrush("LogicFriday.Brush.OutlineVariant", Brushes.LightGray), 1);
         var borderPen = new Pen(FindBrush("LogicFriday.Brush.Outline", Brushes.Gray), 1);
 
+        using var zoomScope = context.PushTransform(Matrix.CreateScale(Zoom, Zoom));
         context.FillRectangle(backgroundBrush, bounds);
         DrawGrid(context, bounds, gridPen);
         context.DrawRectangle(null, borderPen, bounds.Deflate(0.5));
@@ -366,7 +444,7 @@ public sealed class GateDiagramSurface : Control
         Focus();
         ClearSelection();
 
-        var position = e.GetPosition(this);
+        var position = GetLogicalPosition(e);
         if (_pendingWireStart is null)
         {
             if (!TryHitConnection(position, out var start))
@@ -408,7 +486,7 @@ public sealed class GateDiagramSurface : Control
         Focus();
         CancelPendingWireState();
 
-        var position = e.GetPosition(this);
+        var position = GetLogicalPosition(e);
         if (TryHitItem(position, out var item))
         {
             if (!_selectedItemIds.Contains(item.Id))
@@ -461,13 +539,13 @@ public sealed class GateDiagramSurface : Control
 
         if (_isDraggingSelectionRectangle)
         {
-            _selectionRectangleEnd = e.GetPosition(this);
+            _selectionRectangleEnd = GetLogicalPosition(e);
             InvalidateVisual();
             e.Handled = true;
             return;
         }
 
-        var position = Snap(e.GetPosition(this));
+        var position = Snap(GetLogicalPosition(e));
         var delta = position - _lastSelectionDragPoint;
         if (Math.Abs(delta.X) < WireGeometryTolerance &&
             Math.Abs(delta.Y) < WireGeometryTolerance)
@@ -520,6 +598,26 @@ public sealed class GateDiagramSurface : Control
         _selectedWireSegmentIndex = null;
         _isDraggingSelection = false;
         _isDraggingSelectionRectangle = false;
+    }
+
+    private Point GetLogicalPosition(PointerEventArgs e)
+    {
+        return ToLogical(e.GetPosition(this));
+    }
+
+    private Point ToLogical(Point point)
+    {
+        return new Point(point.X / Zoom, point.Y / Zoom);
+    }
+
+    private static double ClampZoom(double zoom)
+    {
+        if (double.IsNaN(zoom) || double.IsInfinity(zoom))
+        {
+            return 1;
+        }
+
+        return Math.Clamp(zoom, MinimumZoom, MaximumZoom);
     }
 
     private void AddItem(GatePaletteItem item, double x, double y, string label)
@@ -676,6 +774,37 @@ public sealed class GateDiagramSurface : Control
     private Rect GetSelectionRectangle()
     {
         return new Rect(_selectionRectangleStart, _selectionRectangleEnd).Normalize();
+    }
+
+    private Rect GetContentBounds()
+    {
+        Rect? bounds = null;
+
+        foreach (var item in Items ?? [])
+        {
+            AddBounds(GetItemBounds(item));
+        }
+
+        foreach (var wire in Wires ?? [])
+        {
+            if (!TryResolveConnection(wire.Start, out var start) ||
+                !TryResolveConnection(wire.End, out var end))
+            {
+                continue;
+            }
+
+            foreach (var point in GetWireRoute(wire, start, end))
+            {
+                AddBounds(new Rect(point, new Size(1, 1)).Inflate(10));
+            }
+        }
+
+        return bounds ?? new Rect(0, 0, LogicalCanvasWidth, LogicalCanvasHeight);
+
+        void AddBounds(Rect rect)
+        {
+            bounds = bounds is { } existing ? existing.Union(rect) : rect;
+        }
     }
 
     private void SelectItemsInRectangle(Rect selectionRectangle)

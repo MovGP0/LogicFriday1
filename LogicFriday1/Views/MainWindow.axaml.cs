@@ -75,6 +75,35 @@ public partial class MainWindow : Window
         }
     }
 
+    private void GateZoomIn_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is MainWindowViewModel { IsGateDiagramVisible: true })
+        {
+            GateDiagramSurface.ZoomIn();
+        }
+    }
+
+    private void GateZoomOut_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is MainWindowViewModel { IsGateDiagramVisible: true })
+        {
+            GateDiagramSurface.ZoomOut();
+        }
+    }
+
+    private void GateZoomAll_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainWindowViewModel { IsGateDiagramVisible: true })
+        {
+            return;
+        }
+
+        var contentBounds = GateDiagramSurface.ZoomAll(GateDiagramScrollViewer.Bounds.Size);
+        GateDiagramScrollViewer.Offset = new Vector(
+            Math.Max(0, contentBounds.Left * GateDiagramSurface.Zoom),
+            Math.Max(0, contentBounds.Top * GateDiagramSurface.Zoom));
+    }
+
     private async void NewTruthTable_OnClick(object? sender, RoutedEventArgs e)
     {
         var dialog = new TruthTableSetupDialog();
