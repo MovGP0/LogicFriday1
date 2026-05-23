@@ -9,6 +9,7 @@ using Avalonia;
 using Avalonia.Data;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
@@ -223,15 +224,29 @@ public partial class MainWindow : Window
         return Brushes.Black;
     }
 
-    private void EquationEditorContextMenu_OnOpening(object? sender, CancelEventArgs e)
+    private async void EquationEditorContextMenu_OnOpening(object? sender, CancelEventArgs e)
     {
         var hasSelection = HasEquationEditorSelection();
         EquationEditorUndoMenuItem.IsEnabled = EquationEditor.CanUndo;
         EquationEditorRedoMenuItem.IsEnabled = EquationEditor.CanRedo;
         EquationEditorCutMenuItem.IsEnabled = hasSelection;
         EquationEditorCopyMenuItem.IsEnabled = hasSelection;
+        EquationEditorPasteMenuItem.IsEnabled = false;
         EquationEditorDeleteMenuItem.IsEnabled = hasSelection;
         EquationEditorSelectAllMenuItem.IsEnabled = !string.IsNullOrEmpty(EquationEditor.Text);
+
+        try
+        {
+            var clipboard = TopLevel.GetTopLevel(EquationEditor)?.Clipboard;
+            if (clipboard is not null)
+            {
+                EquationEditorPasteMenuItem.IsEnabled = !string.IsNullOrEmpty(await clipboard.TryGetTextAsync());
+            }
+        }
+        catch
+        {
+            EquationEditorPasteMenuItem.IsEnabled = false;
+        }
     }
 
     private void EquationEditorUndo_OnClick(object? sender, RoutedEventArgs e)
