@@ -17,18 +17,30 @@ public partial class MainWindowViewModel : ViewModelBase
     private string _logicEquationText = "";
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsFunctionViewModeEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsMinimizedViewEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsOperationMinimizeEnabled))]
     private bool _isEquationEditorVisible;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsFunctionViewModeEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsMinimizedViewEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsOperationMinimizeEnabled))]
     private bool _isTruthTableVisible;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsFunctionViewModeEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsMinimizedViewEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsOperationMinimizeEnabled))]
     private bool _isGateDiagramVisible;
 
     [ObservableProperty]
     private bool _isFunctionDetailVisible;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsFunctionViewModeEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsMinimizedViewEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsOperationMinimizeEnabled))]
     private FunctionSummaryRow? _selectedFunctionSummary;
 
     [ObservableProperty]
@@ -88,10 +100,89 @@ public partial class MainWindowViewModel : ViewModelBase
         set => IsMinimizedViewSelected = !value;
     }
 
+    public bool IsFunctionViewModeEnabled
+    {
+        get => SelectedFunctionSummary?.LogicFunction is not null &&
+            !IsEquationEditorVisible &&
+            !IsTruthTableVisible &&
+            !IsGateDiagramVisible;
+    }
+
+    public bool IsMinimizedViewEnabled
+    {
+        get => IsFunctionViewModeEnabled && HasMinimizedView(SelectedFunctionSummary);
+    }
+
+    public bool IsOperationMinimizeEnabled
+    {
+        get => IsFunctionViewModeEnabled;
+    }
+
+    public void ShowUnminimizedView()
+    {
+        if (!IsFunctionViewModeEnabled)
+        {
+            StatusText = "No function is selected";
+            return;
+        }
+
+        IsMinimizedViewSelected = false;
+        NotifyFunctionViewModeChanged();
+        if (SelectedFunctionSummary?.LogicFunction is { } logicFunction)
+        {
+            ShowFunction(logicFunction);
+        }
+
+        StatusText = "Showing unminimized function view";
+    }
+
     public void ShowMinimizedView()
     {
+        if (!IsMinimizedViewEnabled)
+        {
+            StatusText = "Minimized function view is not available";
+            return;
+        }
+
         IsMinimizedViewSelected = true;
+        NotifyFunctionViewModeChanged();
+        if (SelectedFunctionSummary?.LogicFunction is { } logicFunction)
+        {
+            ShowFunction(logicFunction);
+        }
+
         StatusText = "Showing minimized function view";
+    }
+
+    public void MinimizeSelectedFunction()
+    {
+        if (!IsOperationMinimizeEnabled || SelectedFunctionSummary is not { LogicFunction: { } logicFunction } summary)
+        {
+            StatusText = "No function is selected";
+            return;
+        }
+
+        try
+        {
+            var minimizedFunction = LogicFunctionMinimizer.Minimize(logicFunction);
+            var updatedFunction = WithMinimizedFunction(logicFunction, minimizedFunction);
+            var updatedSummary = CreateFunctionSummary(updatedFunction);
+            var summaryIndex = FunctionSummaries.IndexOf(summary);
+            IsMinimizedViewSelected = true;
+            if (summaryIndex >= 0)
+            {
+                FunctionSummaries[summaryIndex] = updatedSummary;
+            }
+
+            SelectedFunctionSummary = updatedSummary;
+            NotifyFunctionViewModeChanged();
+            ShowFunction(updatedFunction);
+            StatusText = $"Function minimized: {minimizedFunction.Products.Count} product terms";
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"Minimize failed: {ex.Message}";
+        }
     }
 
     public void StartNewLogicEquation()
@@ -243,11 +334,7 @@ public partial class MainWindowViewModel : ViewModelBase
                 conversion.InputNames,
                 conversion.OutputNames,
                 conversion.OutputValues,
-                GenerateSumOfProductsEquation(
-                    conversion.InputNames,
-                    conversion.OutputNames,
-                    conversion.OutputValues,
-                    "Entered by gate diagram:"),
+                conversion.EquationText,
                 GateDiagramItems.ToArray(),
                 GateDiagramWires.ToArray());
 
@@ -328,8 +415,25 @@ public partial class MainWindowViewModel : ViewModelBase
 
     public void ShowFunction(LogicFunction logicFunction)
     {
-        LogicEquationText = logicFunction.EquationText;
-        RefreshFunctionTruthTable(logicFunction);
+        if (logicFunction.MinimizedFunction is null)
+        {
+            IsMinimizedViewSelected = false;
+            NotifyFunctionViewModeChanged();
+        }
+
+        LogicEquationText = IsMinimizedViewSelected && logicFunction.MinimizedFunction is { } minimizedFunction
+            ? minimizedFunction.EquationText
+            : logicFunction.EquationText;
+
+        if (IsMinimizedViewSelected && logicFunction.MinimizedFunction is not null)
+        {
+            RefreshMinimizedFunctionTruthTable(logicFunction);
+        }
+        else
+        {
+            RefreshFunctionTruthTable(logicFunction);
+        }
+
         IsEquationEditorVisible = false;
         IsTruthTableVisible = false;
         IsGateDiagramVisible = false;
@@ -457,9 +561,46 @@ public partial class MainWindowViewModel : ViewModelBase
             True: string.Join(", ", trueCounts),
             False: string.Join(", ", falseCounts),
             DC: string.Join(", ", dontCareCounts),
-            PI: "Unminimized",
+            PI: logicFunction.MinimizedFunction is null
+                ? "Unminimized"
+                : logicFunction.MinimizedFunction.Products.Count.ToString(),
             Gates: "Not Mapped",
             LogicFunction: logicFunction);
+    }
+
+    private static bool HasMinimizedView(FunctionSummaryRow? summary)
+    {
+        return summary?.LogicFunction?.MinimizedFunction is not null;
+    }
+
+    private void NotifyFunctionViewModeChanged()
+    {
+        OnPropertyChanged(nameof(IsUnminimizedViewSelected));
+        OnPropertyChanged(nameof(IsFunctionViewModeEnabled));
+        OnPropertyChanged(nameof(IsMinimizedViewEnabled));
+        OnPropertyChanged(nameof(IsOperationMinimizeEnabled));
+    }
+
+    private static LogicFunction WithMinimizedFunction(
+        LogicFunction logicFunction,
+        MinimizedLogicFunction minimizedFunction)
+    {
+        return logicFunction switch
+        {
+            TruthTableLogicFunction truthTableFunction => truthTableFunction with
+            {
+                MinimizedFunction = minimizedFunction
+            },
+            LogicEquationFunction logicEquationFunction => logicEquationFunction with
+            {
+                MinimizedFunction = minimizedFunction
+            },
+            GateDiagramFunction gateDiagramFunction => gateDiagramFunction with
+            {
+                MinimizedFunction = minimizedFunction
+            },
+            _ => throw new InvalidOperationException("Unsupported function type.")
+        };
     }
 
     private void RefreshFunctionTruthTable(LogicFunction logicFunction)
@@ -480,6 +621,48 @@ public partial class MainWindowViewModel : ViewModelBase
                 outputs,
                 outputCellsEditable: false));
         }
+    }
+
+    private void RefreshMinimizedFunctionTruthTable(LogicFunction logicFunction)
+    {
+        FunctionTruthTableRows.Clear();
+        if (logicFunction.MinimizedFunction is null)
+        {
+            return;
+        }
+
+        for (var productIndex = 0; productIndex < logicFunction.MinimizedFunction.Products.Count; productIndex++)
+        {
+            FunctionTruthTableRows.Add(CreateMinimizedTruthTableRow(
+                productIndex + 1,
+                logicFunction.MinimizedFunction.Products[productIndex],
+                outputCellsEditable: false));
+        }
+    }
+
+    private static TruthTableRow CreateMinimizedTruthTableRow(
+        int productIndex,
+        MinimizedProductTerm product,
+        bool outputCellsEditable)
+    {
+        var cells = new List<TruthTableCell>
+        {
+            new(productIndex.ToString(), false)
+        };
+
+        foreach (var inputValue in product.InputPattern)
+        {
+            cells.Add(new TruthTableCell(inputValue.ToString(), false));
+        }
+
+        cells.Add(new TruthTableCell("", false));
+
+        foreach (var outputValue in product.OutputValues)
+        {
+            cells.Add(new TruthTableCell(outputValue, outputCellsEditable));
+        }
+
+        return new TruthTableRow(cells);
     }
 
     private static TruthTableRow CreateTruthTableRow(

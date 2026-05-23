@@ -118,7 +118,9 @@
             </MenuItem>
 
             <MenuItem Header="_Operation">
-                <MenuItem Header="_Minimize..." />
+                <MenuItem Header="_Minimize..."
+                          IsEnabled="{Binding IsOperationMinimizeEnabled}"
+                          Click="Minimize_OnClick" />
                 <MenuItem Header="Map to _Gates..." />
                 <MenuItem Header="Generate C _Lookup Function..." />
                 <Separator />
@@ -195,11 +197,14 @@
                 <MenuItem Header="_Unminimized"
                           ToggleType="Radio"
                           GroupName="FunctionViewMode"
-                          IsChecked="{Binding IsUnminimizedViewSelected}" />
+                          IsChecked="{Binding IsUnminimizedViewSelected}"
+                          IsEnabled="{Binding IsFunctionViewModeEnabled}"
+                          Click="UnminimizedView_OnClick" />
                 <MenuItem Header="_Minimized"
                           ToggleType="Radio"
                           GroupName="FunctionViewMode"
                           IsChecked="{Binding IsMinimizedViewSelected}"
+                          IsEnabled="{Binding IsMinimizedViewEnabled}"
                           Click="MinimizedView_OnClick" />
             </MenuItem>
 
@@ -283,7 +288,9 @@
                         Background="{DynamicResource SystemControlForegroundBaseLowBrush}" />
 
                 <Button Classes="toolbarButton"
-                        ToolTip.Tip="Minimize...">
+                        ToolTip.Tip="Minimize..."
+                        IsEnabled="{Binding IsOperationMinimizeEnabled}"
+                        Click="Minimize_OnClick">
                     <icons:PackIcon Kind="ChartBellCurve" />
                 </Button>
                 <Button Classes="toolbarButton"

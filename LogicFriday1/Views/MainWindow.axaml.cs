@@ -47,11 +47,31 @@ public partial class MainWindow : Window
         await dialog.ShowDialog(this);
     }
 
+    private void UnminimizedView_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is MainWindowViewModel viewModel)
+        {
+            viewModel.ShowUnminimizedView();
+        }
+    }
+
     private void MinimizedView_OnClick(object? sender, RoutedEventArgs e)
     {
         if (DataContext is MainWindowViewModel viewModel)
         {
             viewModel.ShowMinimizedView();
+        }
+    }
+
+    private void Minimize_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is MainWindowViewModel viewModel)
+        {
+            viewModel.MinimizeSelectedFunction();
+            if (viewModel.GetSelectedFunction() is { } logicFunction)
+            {
+                ConfigureTruthTableColumns(FunctionTruthTableDataGrid, logicFunction.InputNames, logicFunction.OutputNames);
+            }
         }
     }
 

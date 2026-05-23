@@ -24,8 +24,9 @@ public static class GateDiagramConverter
         var inputNames = inputs.Select(static item => item.Label).ToArray();
         var outputNames = outputs.Select(static item => item.Label).ToArray();
         var outputValues = EvaluateTruthTable(inputs, outputs, driverByInput, itemById);
+        var equationText = BuildStructuralEquationText(outputs, driverByInput, itemById);
 
-        return new GateDiagramConversionResult(inputNames, outputNames, outputValues);
+        return new GateDiagramConversionResult(inputNames, outputNames, outputValues, equationText);
     }
 
     private static void ValidateTerminalCounts(int inputCount, int outputCount)
@@ -343,6 +344,138 @@ public static class GateDiagramConverter
     {
         var input = new GateDiagramConnectionReference(item.Id, GateDiagramConnectionKind.Input, pinIndex);
         return EvaluateDriver(driverByInput[input], term, inputIndexById, itemById, driverByInput, valueCache);
+    }
+
+    private static string BuildStructuralEquationText(
+        IReadOnlyList<GateDiagramItem> outputs,
+        IReadOnlyDictionary<GateDiagramConnectionReference, GateDiagramConnectionReference> driverByInput,
+        IReadOnlyDictionary<int, GateDiagramItem> itemById)
+    {
+        var equations = new List<string>
+        {
+            "Entered by gate diagram:"
+        };
+
+        foreach (var output in outputs)
+        {
+            var outputInput = new GateDiagramConnectionReference(
+                output.Id,
+                GateDiagramConnectionKind.Input,
+                0);
+            var expression = BuildDriverExpression(
+                driverByInput[outputInput],
+                itemById,
+                driverByInput,
+                []);
+            equations.Add($"{output.Label} = {expression};");
+        }
+
+        return string.Join(Environment.NewLine, equations);
+    }
+
+    private static string BuildDriverExpression(
+        GateDiagramConnectionReference driver,
+        IReadOnlyDictionary<int, GateDiagramItem> itemById,
+        IReadOnlyDictionary<GateDiagramConnectionReference, GateDiagramConnectionReference> driverByInput,
+        Dictionary<int, string> expressionCache)
+    {
+        if (expressionCache.TryGetValue(driver.ItemId, out var cached))
+        {
+            return cached;
+        }
+
+        var item = itemById[driver.ItemId];
+        var expression = item.Kind switch
+        {
+            GatePaletteKind.Input => item.Label,
+            GatePaletteKind.ConstantZero => "0",
+            GatePaletteKind.ConstantOne => "1",
+            GatePaletteKind.Not => FormatNot(BuildInputExpression(item, 0, itemById, driverByInput, expressionCache)),
+            GatePaletteKind.Nand => FormatNot(FormatAnd(BuildInputExpressions(item, itemById, driverByInput, expressionCache))),
+            GatePaletteKind.And => FormatAnd(BuildInputExpressions(item, itemById, driverByInput, expressionCache)),
+            GatePaletteKind.Nor => FormatNot(FormatOr(BuildInputExpressions(item, itemById, driverByInput, expressionCache))),
+            GatePaletteKind.Or => FormatOr(BuildInputExpressions(item, itemById, driverByInput, expressionCache)),
+            GatePaletteKind.Xor => FormatXor(BuildInputExpressions(item, itemById, driverByInput, expressionCache)),
+            GatePaletteKind.Mux => FormatMux(BuildInputExpressions(item, itemById, driverByInput, expressionCache)),
+            _ => throw new GateDiagramConversionException($"Gate {GetGateName(item)} cannot be converted to an equation.")
+        };
+
+        expressionCache[item.Id] = expression;
+        return expression;
+    }
+
+    private static string BuildInputExpression(
+        GateDiagramItem item,
+        int pinIndex,
+        IReadOnlyDictionary<int, GateDiagramItem> itemById,
+        IReadOnlyDictionary<GateDiagramConnectionReference, GateDiagramConnectionReference> driverByInput,
+        Dictionary<int, string> expressionCache)
+    {
+        var input = new GateDiagramConnectionReference(item.Id, GateDiagramConnectionKind.Input, pinIndex);
+        return BuildDriverExpression(driverByInput[input], itemById, driverByInput, expressionCache);
+    }
+
+    private static string[] BuildInputExpressions(
+        GateDiagramItem item,
+        IReadOnlyDictionary<int, GateDiagramItem> itemById,
+        IReadOnlyDictionary<GateDiagramConnectionReference, GateDiagramConnectionReference> driverByInput,
+        Dictionary<int, string> expressionCache)
+    {
+        return Enumerable
+            .Range(0, item.InputCount)
+            .Select(inputIndex => BuildInputExpression(item, inputIndex, itemById, driverByInput, expressionCache))
+            .ToArray();
+    }
+
+    private static string FormatNot(string expression)
+    {
+        return IsSimpleExpression(expression)
+            ? $"{expression}'"
+            : $"({expression})'";
+    }
+
+    private static string FormatAnd(IReadOnlyList<string> expressions)
+    {
+        return string.Join(" ", expressions.Select(static expression =>
+            expression.Contains(" + ", StringComparison.Ordinal)
+                ? $"({expression})"
+                : expression));
+    }
+
+    private static string FormatOr(IReadOnlyList<string> expressions)
+    {
+        return string.Join(" + ", expressions);
+    }
+
+    private static string FormatXor(IReadOnlyList<string> expressions)
+    {
+        if (expressions.Count != 2)
+        {
+            throw new GateDiagramConversionException("XOR equation conversion supports two inputs.");
+        }
+
+        var left = expressions[0];
+        var right = expressions[1];
+        return $"{FormatNot(left)} {right} + {left} {FormatNot(right)}";
+    }
+
+    private static string FormatMux(IReadOnlyList<string> expressions)
+    {
+        if (expressions.Count != 3)
+        {
+            throw new GateDiagramConversionException("MUX equation conversion requires two data inputs and one selector input.");
+        }
+
+        var d0 = expressions[0];
+        var d1 = expressions[1];
+        var selector = expressions[2];
+        return $"{d0} {FormatNot(selector)} + {d1} {selector}";
+    }
+
+    private static bool IsSimpleExpression(string expression)
+    {
+        return expression is "0" or "1" || expression.All(static character =>
+            char.IsLetterOrDigit(character) || character == '_');
     }
 
     private static int GetInputValue(int term, int inputIndex, int inputCount)
