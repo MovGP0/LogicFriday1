@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
-using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Avalonia;
@@ -23,8 +22,7 @@ namespace LogicFriday1.Views;
 
 public partial class MainWindow : Window
 {
-    private const string HelpFileName = "lf.chm";
-    private const string HelpContentsTopic = "features.htm";
+    private const string HelpContentsUrl = "https://github.com/MovGP0/LogicFriday1/wiki";
     private const string GateDiagramHelpUrl = "https://github.com/MovGP0/LogicFriday1/wiki/Entering-a-gate-diagram";
     private const string ActiveGatePaletteButtonClass = "active";
     private TruthTableRow? _truthTableContextRow;
@@ -40,32 +38,7 @@ public partial class MainWindow : Window
 
     private async void HelpContents_OnClick(object? sender, RoutedEventArgs e)
     {
-        if (!OperatingSystem.IsWindows())
-        {
-            await ShowMessageAsync("Help contents require Windows HTML Help.");
-            return;
-        }
-
-        var helpFilePath = FindHelpFilePath();
-        if (helpFilePath is null)
-        {
-            await ShowMessageAsync("Help contents are not available because lf.chm was not found.");
-            return;
-        }
-
-        try
-        {
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = "hh.exe",
-                Arguments = $"\"{helpFilePath}::/{HelpContentsTopic}\"",
-                UseShellExecute = true
-            });
-        }
-        catch (Exception ex)
-        {
-            await ShowMessageAsync($"Help contents could not be opened.\n{ex.Message}");
-        }
+        await OpenUrlAsync(HelpContentsUrl, "Help contents could not be opened.");
     }
 
     private async void AboutLogicFriday_OnClick(object? sender, RoutedEventArgs e)
@@ -736,27 +709,6 @@ public partial class MainWindow : Window
         return _truthTableContextRow is null
             ? []
             : [ _truthTableContextRow ];
-    }
-
-    private static string? FindHelpFilePath()
-    {
-        var candidateDirectories = new[]
-        {
-            AppContext.BaseDirectory,
-            Environment.CurrentDirectory,
-            Path.Combine(AppContext.BaseDirectory, "Help")
-        };
-
-        foreach (var directory in candidateDirectories)
-        {
-            var helpFilePath = Path.Combine(directory, HelpFileName);
-            if (File.Exists(helpFilePath))
-            {
-                return helpFilePath;
-            }
-        }
-
-        return null;
     }
 
     private async Task ShowMessageAsync(string message)
