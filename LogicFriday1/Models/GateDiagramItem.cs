@@ -5,4 +5,5 @@ public sealed record GateDiagramItem(
     int InputCount,
     double X,
     double Y,
-    string Label);
+    string Label,
+    string ComponentLabel = "");

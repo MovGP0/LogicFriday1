@@ -153,6 +153,11 @@ public sealed class GateDiagramSurface : Control
                 DrawOutput(context, item.Label, P, pen, textBrush);
                 break;
         }
+
+        if (item.ComponentLabel.Length > 0)
+        {
+            DrawCenteredText(context, item.ComponentLabel, P, 55, textBrush, 11);
+        }
     }
 
     private static void DrawNot(DrawingContext context, Func<double, double, Point> p, Pen pen)
@@ -336,6 +341,18 @@ public sealed class GateDiagramSurface : Control
         context.DrawText(CreateText(text, brush, fontSize), point);
     }
 
+    private static void DrawCenteredText(
+        DrawingContext context,
+        string text,
+        Func<double, double, Point> p,
+        double y,
+        IBrush brush,
+        double fontSize)
+    {
+        var formattedText = CreateText(text, brush, fontSize);
+        context.DrawText(formattedText, p((100 - formattedText.Width) / 2, y));
+    }
+
     private static FormattedText CreateText(string text, IBrush brush, double fontSize)
     {
         return new FormattedText(
@@ -381,9 +398,35 @@ public sealed class GateDiagramSurface : Control
             item.InputCount,
             x,
             y,
-            label.Trim()));
+            label.Trim(),
+            GetNextComponentLabel(item)));
 
         InvalidateVisual();
+    }
+
+    private string GetNextComponentLabel(GatePaletteItem item)
+    {
+        if (!HasComponentLabel(item.Kind))
+        {
+            return string.Empty;
+        }
+
+        var nextNumber = (Items ?? [])
+            .Count(static diagramItem => diagramItem.ComponentLabel.Length > 0) + 1;
+
+        return $"[{nextNumber}]";
+    }
+
+    private static bool HasComponentLabel(GatePaletteKind kind)
+    {
+        return kind is
+            GatePaletteKind.Not or
+            GatePaletteKind.Nand or
+            GatePaletteKind.Nor or
+            GatePaletteKind.Mux or
+            GatePaletteKind.And or
+            GatePaletteKind.Or or
+            GatePaletteKind.Xor;
     }
 
     private static double Snap(double value)
