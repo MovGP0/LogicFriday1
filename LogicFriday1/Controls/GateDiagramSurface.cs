@@ -730,6 +730,7 @@ public sealed class GateDiagramSurface : Control
         var position = GetLogicalPosition(e);
         var x = Snap(position.X - 50);
         var y = Snap(position.Y - 25);
+        (x, y) = AlignPrimaryConnectionPinToGrid(item, x, y);
         if (item.Kind is GatePaletteKind.Input or GatePaletteKind.Output)
         {
             VariableNameRequested?.Invoke(
@@ -1207,6 +1208,45 @@ public sealed class GateDiagramSurface : Control
 
         ClearPaletteSelection();
         InvalidateVisual();
+    }
+
+    private static (double X, double Y) AlignPrimaryConnectionPinToGrid(GatePaletteItem item, double x, double y)
+    {
+        return TryGetPlacementAlignmentPinOffset(item.Kind, out var offset)
+            ? (x + Snap(x + offset.X) - (x + offset.X), y + Snap(y + offset.Y) - (y + offset.Y))
+            : (x, y);
+    }
+
+    private static bool TryGetPlacementAlignmentPinOffset(GatePaletteKind kind, out Point offset)
+    {
+        offset = kind switch
+        {
+            GatePaletteKind.Not or
+            GatePaletteKind.Nand or
+            GatePaletteKind.And or
+            GatePaletteKind.Nor or
+            GatePaletteKind.Or or
+            GatePaletteKind.Xor or
+            GatePaletteKind.Mux => new Point(100, 25),
+            GatePaletteKind.Input => new Point(40, 25),
+            GatePaletteKind.ConstantZero or
+            GatePaletteKind.ConstantOne => new Point(55, 25),
+            GatePaletteKind.Output => new Point(0, 25),
+            _ => default
+        };
+
+        return kind is
+            GatePaletteKind.Not or
+            GatePaletteKind.Nand or
+            GatePaletteKind.And or
+            GatePaletteKind.Nor or
+            GatePaletteKind.Or or
+            GatePaletteKind.Xor or
+            GatePaletteKind.Mux or
+            GatePaletteKind.Input or
+            GatePaletteKind.Output or
+            GatePaletteKind.ConstantZero or
+            GatePaletteKind.ConstantOne;
     }
 
     private string GetNextComponentLabel(GatePaletteItem item)
