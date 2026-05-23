@@ -6,4 +6,5 @@ public sealed record GateDiagramItem(
     double X,
     double Y,
     string Label,
-    string ComponentLabel = "");
+    string ComponentLabel = "",
+    int Id = 0);

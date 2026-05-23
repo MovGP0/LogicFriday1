@@ -467,7 +467,8 @@
                     <controls:GateDiagramSurface x:Name="GateDiagramSurface"
                                                  Grid.Column="0"
                                                  SelectedPaletteItem="{Binding SelectedGatePaletteItem}"
-                                                 Items="{Binding GateDiagramItems}" />
+                                                 Items="{Binding GateDiagramItems}"
+                                                 Wires="{Binding GateDiagramWires}" />
                     <Border Grid.Column="1"
                             BorderThickness="1,0,0,0"
                             BorderBrush="{DynamicResource LogicFriday.Brush.OutlineVariant}"

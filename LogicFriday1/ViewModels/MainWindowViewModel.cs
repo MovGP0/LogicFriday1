@@ -68,6 +68,8 @@ public partial class MainWindowViewModel : ViewModelBase
 
     public ObservableCollection<GateDiagramItem> GateDiagramItems { get; } = [];
 
+    public ObservableCollection<GateDiagramWire> GateDiagramWires { get; } = [];
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsUnminimizedViewSelected))]
     private bool _isMinimizedViewSelected;
@@ -162,6 +164,7 @@ public partial class MainWindowViewModel : ViewModelBase
     public void StartNewGateDiagram()
     {
         GateDiagramItems.Clear();
+        GateDiagramWires.Clear();
         IsEquationEditorVisible = false;
         IsTruthTableVisible = false;
         IsGateDiagramVisible = true;
@@ -240,6 +243,7 @@ public partial class MainWindowViewModel : ViewModelBase
         TruthTableRows.Clear();
         FunctionTruthTableRows.Clear();
         GateDiagramItems.Clear();
+        GateDiagramWires.Clear();
         _truthTableInputNames = [];
         _truthTableOutputNames = [];
         SelectedGatePaletteItem = null;
