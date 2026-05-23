@@ -14,7 +14,8 @@
         Width="1100"
         Height="720"
         MinWidth="900"
-        MinHeight="560">
+        MinHeight="560"
+        KeyDown="MainWindow_OnKeyDown">
 
     <Window.Styles>
         <Style Selector="Button.toolbarButton">
@@ -193,10 +194,16 @@
                           IsEnabled="{Binding IsGateDiagramVisible}"
                           Click="GateZoomAll_OnClick" />
                 <Separator />
-                <MenuItem Header="_Delete Selected" />
+                <MenuItem Header="_Delete Selected"
+                          IsEnabled="{Binding IsGateDiagramVisible}"
+                          Click="GateDeleteSelected_OnClick" />
                 <Separator />
-                <MenuItem Header="_Submit (Enter)" />
-                <MenuItem Header="_Cancel (Esc)" />
+                <MenuItem Header="_Submit (Enter)"
+                          IsEnabled="{Binding IsGateDiagramVisible}"
+                          Click="GateSubmit_OnClick" />
+                <MenuItem Header="_Cancel (Esc)"
+                          IsEnabled="{Binding IsGateDiagramVisible}"
+                          Click="GateCancel_OnClick" />
             </MenuItem>
 
             <MenuItem Header="_View">

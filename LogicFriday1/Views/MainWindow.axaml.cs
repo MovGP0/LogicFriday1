@@ -207,6 +207,53 @@ public partial class MainWindow : Window
         }
     }
 
+    private void MainWindow_OnKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (DataContext is not MainWindowViewModel { IsGateDiagramVisible: true })
+        {
+            return;
+        }
+
+        if (e.Key == Key.Enter && e.KeyModifiers == KeyModifiers.None)
+        {
+            _ = SubmitGateDiagramEditingAsync();
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key != Key.Escape)
+        {
+            return;
+        }
+
+        CancelGateDiagramEditing();
+        e.Handled = true;
+    }
+
+    private void GateDeleteSelected_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is MainWindowViewModel { IsGateDiagramVisible: true })
+        {
+            GateDiagramSurface.DeleteSelected();
+        }
+    }
+
+    private async void GateSubmit_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is MainWindowViewModel { IsGateDiagramVisible: true })
+        {
+            await SubmitGateDiagramEditingAsync();
+        }
+    }
+
+    private void GateCancel_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is MainWindowViewModel { IsGateDiagramVisible: true })
+        {
+            CancelGateDiagramEditing();
+        }
+    }
+
     private async Task SubmitGateDiagramEditingAsync()
     {
         ClearActiveGatePaletteButton();

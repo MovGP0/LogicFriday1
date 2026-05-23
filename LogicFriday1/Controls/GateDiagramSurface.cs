@@ -95,6 +95,11 @@ public sealed class GateDiagramSurface : Control
         InvalidateVisual();
     }
 
+    public void DeleteSelected()
+    {
+        DeleteSelection();
+    }
+
     public void ZoomIn()
     {
         Zoom *= ZoomStep;
