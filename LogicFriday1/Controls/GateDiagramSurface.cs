@@ -24,11 +24,14 @@ public sealed class GateDiagramSurface : Control
     private GateDiagramConnectionPoint? _pendingWireStart;
     private Point? _pendingWirePreviewEnd;
     private Point? _invalidWirePoint;
-    private int? _selectedItemId;
-    private int? _selectedWireIndex;
+    private readonly HashSet<int> _selectedItemIds = [];
+    private readonly HashSet<int> _selectedWireIndices = [];
     private int? _selectedWireSegmentIndex;
     private bool _isDraggingSelection;
+    private bool _isDraggingSelectionRectangle;
     private Point _lastSelectionDragPoint;
+    private Point _selectionRectangleStart;
+    private Point _selectionRectangleEnd;
     private DispatcherTimer? _invalidWireTimer;
     private int _nextItemId = 1;
 
@@ -138,6 +141,13 @@ public sealed class GateDiagramSurface : Control
     {
         base.OnKeyDown(e);
 
+        if (e.Key == Key.Delete)
+        {
+            DeleteSelection();
+            e.Handled = true;
+            return;
+        }
+
         if (e.Key != Key.Escape || _pendingWireStart is null)
         {
             return;
@@ -156,8 +166,15 @@ public sealed class GateDiagramSurface : Control
             return;
         }
 
+        if (_isDraggingSelectionRectangle)
+        {
+            SelectItemsInRectangle(GetSelectionRectangle());
+            _isDraggingSelectionRectangle = false;
+        }
+
         _isDraggingSelection = false;
         e.Pointer.Capture(null);
+        InvalidateVisual();
         e.Handled = true;
     }
 
@@ -182,6 +199,7 @@ public sealed class GateDiagramSurface : Control
         }
 
         DrawInvalidWireTarget(context);
+        DrawSelectionRectangle(context);
     }
 
     private static void DrawGrid(DrawingContext context, Rect bounds, Pen pen)
@@ -217,7 +235,7 @@ public sealed class GateDiagramSurface : Control
             DrawCenteredText(context, item.ComponentLabel, P, 55, textBrush, 11);
         }
 
-        if (_selectedItemId == item.Id)
+        if (_selectedItemIds.Contains(item.Id))
         {
             var selectionPen = new Pen(Brushes.Firebrick, 1.4, DashStyle.Dash);
             context.DrawRectangle(null, selectionPen, GetItemBounds(item).Inflate(4));
@@ -233,13 +251,13 @@ public sealed class GateDiagramSurface : Control
                 TryResolveConnection(wire.End, out var wireEnd))
             {
                 var points = GetWireRoute(wire, wireStart, wireEnd);
-                var wirePen = _selectedWireIndex == wireIndex
+                var wirePen = _selectedWireIndices.Contains(wireIndex)
                     ? new Pen(Brushes.Firebrick, 2.4)
                     : pen;
 
                 DrawWireRoute(context, wirePen, points);
 
-                if (_selectedWireIndex == wireIndex &&
+                if (_selectedWireIndices.Contains(wireIndex) &&
                     _selectedWireSegmentIndex is { } selectedSegmentIndex)
                 {
                     DrawSelectedWireSegment(context, points, selectedSegmentIndex);
@@ -297,6 +315,17 @@ public sealed class GateDiagramSurface : Control
         var pen = new Pen(Brushes.Firebrick, 1.8);
         context.DrawEllipse(null, pen, point, 7, 7);
         context.DrawLine(pen, new Point(point.X - 5, point.Y + 5), new Point(point.X + 5, point.Y - 5));
+    }
+
+    private void DrawSelectionRectangle(DrawingContext context)
+    {
+        if (!_isDraggingSelectionRectangle)
+        {
+            return;
+        }
+
+        var pen = new Pen(Brushes.Firebrick, 1.2, DashStyle.Dash);
+        context.DrawRectangle(null, pen, GetSelectionRectangle());
     }
 
     private static void DrawCenteredText(
@@ -382,8 +411,12 @@ public sealed class GateDiagramSurface : Control
         var position = e.GetPosition(this);
         if (TryHitItem(position, out var item))
         {
-            _selectedItemId = item.Id;
-            _selectedWireIndex = null;
+            if (!_selectedItemIds.Contains(item.Id))
+            {
+                ClearSelection();
+                _selectedItemIds.Add(item.Id);
+            }
+
             _selectedWireSegmentIndex = null;
             BeginSelectionDrag(e, position);
             return;
@@ -391,16 +424,23 @@ public sealed class GateDiagramSurface : Control
 
         if (TryHitWire(position, out var wireIndex, out var segmentIndex))
         {
-            _selectedItemId = null;
-            _selectedWireIndex = wireIndex;
+            if (!_selectedWireIndices.Contains(wireIndex))
+            {
+                ClearSelection();
+                _selectedWireIndices.Add(wireIndex);
+            }
+
             _selectedWireSegmentIndex = segmentIndex;
             BeginSelectionDrag(e, position);
             return;
         }
 
         ClearSelection();
+        _isDraggingSelectionRectangle = true;
+        _selectionRectangleStart = position;
+        _selectionRectangleEnd = position;
+        BeginSelectionDrag(e, position);
         InvalidateVisual();
-        e.Handled = true;
     }
 
     private void BeginSelectionDrag(PointerPressedEventArgs e, Point position)
@@ -419,6 +459,14 @@ public sealed class GateDiagramSurface : Control
             return;
         }
 
+        if (_isDraggingSelectionRectangle)
+        {
+            _selectionRectangleEnd = e.GetPosition(this);
+            InvalidateVisual();
+            e.Handled = true;
+            return;
+        }
+
         var position = Snap(e.GetPosition(this));
         var delta = position - _lastSelectionDragPoint;
         if (Math.Abs(delta.X) < WireGeometryTolerance &&
@@ -430,11 +478,12 @@ public sealed class GateDiagramSurface : Control
 
         _lastSelectionDragPoint = position;
 
-        if (_selectedItemId is { } selectedItemId)
+        if (_selectedItemIds.Count > 0)
         {
-            MoveSelectedItem(selectedItemId, delta);
+            MoveSelectedItems(delta);
         }
-        else if (_selectedWireIndex is { } selectedWireIndex &&
+        else if (_selectedWireIndices.Count == 1 &&
+            _selectedWireIndices.FirstOrDefault() is var selectedWireIndex &&
             _selectedWireSegmentIndex is { } selectedWireSegmentIndex)
         {
             MoveSelectedWireSegment(selectedWireIndex, selectedWireSegmentIndex, delta);
@@ -466,10 +515,11 @@ public sealed class GateDiagramSurface : Control
 
     private void ClearSelection()
     {
-        _selectedItemId = null;
-        _selectedWireIndex = null;
+        _selectedItemIds.Clear();
+        _selectedWireIndices.Clear();
         _selectedWireSegmentIndex = null;
         _isDraggingSelection = false;
+        _isDraggingSelectionRectangle = false;
     }
 
     private void AddItem(GatePaletteItem item, double x, double y, string label)
@@ -623,7 +673,39 @@ public sealed class GateDiagramSurface : Control
         return double.PositiveInfinity;
     }
 
-    private void MoveSelectedItem(int itemId, Vector delta)
+    private Rect GetSelectionRectangle()
+    {
+        return new Rect(_selectionRectangleStart, _selectionRectangleEnd).Normalize();
+    }
+
+    private void SelectItemsInRectangle(Rect selectionRectangle)
+    {
+        ClearSelection();
+
+        if (Items is not null)
+        {
+            foreach (var item in Items)
+            {
+                if (selectionRectangle.Contains(GetItemBounds(item)))
+                {
+                    _selectedItemIds.Add(item.Id);
+                }
+            }
+        }
+
+        if (Wires is not null)
+        {
+            for (var index = 0; index < Wires.Count; index++)
+            {
+                if (WireIntersectsRectangle(Wires[index], selectionRectangle))
+                {
+                    _selectedWireIndices.Add(index);
+                }
+            }
+        }
+    }
+
+    private void MoveSelectedItems(Vector delta)
     {
         if (Items is null)
         {
@@ -632,7 +714,7 @@ public sealed class GateDiagramSurface : Control
 
         for (var index = 0; index < Items.Count; index++)
         {
-            if (Items[index].Id != itemId)
+            if (!_selectedItemIds.Contains(Items[index].Id))
             {
                 continue;
             }
@@ -643,8 +725,105 @@ public sealed class GateDiagramSurface : Control
                 X = item.X + delta.X,
                 Y = item.Y + delta.Y
             };
+        }
+    }
+
+    private void DeleteSelection()
+    {
+        if (_selectedItemIds.Count == 0 && _selectedWireIndices.Count == 0)
+        {
             return;
         }
+
+        DeleteSelectedWires();
+        DeleteSelectedItems();
+        ClearSelection();
+        InvalidateVisual();
+    }
+
+    private void DeleteSelectedWires()
+    {
+        if (Wires is null)
+        {
+            return;
+        }
+
+        for (var index = Wires.Count - 1; index >= 0; index--)
+        {
+            var wire = Wires[index];
+            if (_selectedWireIndices.Contains(index) ||
+                _selectedItemIds.Contains(wire.Start.ItemId) ||
+                _selectedItemIds.Contains(wire.End.ItemId))
+            {
+                Wires.RemoveAt(index);
+            }
+        }
+    }
+
+    private void DeleteSelectedItems()
+    {
+        if (Items is null)
+        {
+            return;
+        }
+
+        for (var index = Items.Count - 1; index >= 0; index--)
+        {
+            if (_selectedItemIds.Contains(Items[index].Id))
+            {
+                Items.RemoveAt(index);
+            }
+        }
+    }
+
+    private bool WireIntersectsRectangle(GateDiagramWire wire, Rect rectangle)
+    {
+        if (!TryResolveConnection(wire.Start, out var start) ||
+            !TryResolveConnection(wire.End, out var end))
+        {
+            return false;
+        }
+
+        var points = GetWireRoute(wire, start, end);
+        for (var index = 1; index < points.Count; index++)
+        {
+            if (SegmentIntersectsRectangle(points[index - 1], points[index], rectangle))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool SegmentIntersectsRectangle(Point start, Point end, Rect rectangle)
+    {
+        if (rectangle.Contains(start) || rectangle.Contains(end))
+        {
+            return true;
+        }
+
+        if (Math.Abs(start.Y - end.Y) < WireGeometryTolerance)
+        {
+            var segmentLeft = Math.Min(start.X, end.X);
+            var segmentRight = Math.Max(start.X, end.X);
+            return start.Y >= rectangle.Top &&
+                start.Y <= rectangle.Bottom &&
+                segmentRight >= rectangle.Left &&
+                segmentLeft <= rectangle.Right;
+        }
+
+        if (Math.Abs(start.X - end.X) < WireGeometryTolerance)
+        {
+            var segmentTop = Math.Min(start.Y, end.Y);
+            var segmentBottom = Math.Max(start.Y, end.Y);
+            return start.X >= rectangle.Left &&
+                start.X <= rectangle.Right &&
+                segmentBottom >= rectangle.Top &&
+                segmentTop <= rectangle.Bottom;
+        }
+
+        return false;
     }
 
     private void MoveSelectedWireSegment(int wireIndex, int segmentIndex, Vector delta)
