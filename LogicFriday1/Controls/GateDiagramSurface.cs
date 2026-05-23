@@ -35,6 +35,7 @@ public sealed class GateDiagramSurface : Control
     private const double RoutingBendPenalty = 25;
     private const double RoutingReusePenalty = 1800;
     private const double RoutingCrossingPenalty = 90;
+    private const int WireHuePrimeStep = 137;
 
     private GateDiagramConnectionPoint? _pendingWireStart;
     private Point? _pendingWirePreviewEnd;
@@ -844,7 +845,7 @@ public sealed class GateDiagramSurface : Control
         DrawGrid(context, bounds, gridPen);
         context.DrawRectangle(null, borderPen, bounds.Deflate(0.5));
 
-        DrawWires(context, new Pen(Brushes.Black, 1.5));
+        DrawWires(context);
 
         foreach (var item in Items ?? [])
         {
@@ -895,7 +896,7 @@ public sealed class GateDiagramSurface : Control
         }
     }
 
-    private void DrawWires(DrawingContext context, Pen pen)
+    private void DrawWires(DrawingContext context)
     {
         var wireIndex = 0;
         foreach (var wire in Wires ?? [])
@@ -906,7 +907,7 @@ public sealed class GateDiagramSurface : Control
                 var points = GetWireRoute(wire, wireStart, wireEnd);
                 var wirePen = _selectedWireIndices.Contains(wireIndex)
                     ? new Pen(Brushes.Firebrick, 2.4)
-                    : pen;
+                    : new Pen(GetWireBrush(wireIndex), 1.7);
 
                 DrawWireRoute(context, wirePen, points);
 
@@ -940,6 +941,40 @@ public sealed class GateDiagramSurface : Control
                 points[index - 1],
                 points[index]);
         }
+    }
+
+    private static IBrush GetWireBrush(int wireIndex)
+    {
+        var hue = wireIndex * WireHuePrimeStep % 360;
+        var color = HslToRgb(hue, 0.72, 0.36);
+        return new SolidColorBrush(color);
+    }
+
+    private static Color HslToRgb(double hue, double saturation, double lightness)
+    {
+        var chroma = (1 - Math.Abs(2 * lightness - 1)) * saturation;
+        var huePrime = hue / 60;
+        var x = chroma * (1 - Math.Abs(huePrime % 2 - 1));
+        var (red, green, blue) = huePrime switch
+        {
+            >= 0 and < 1 => (chroma, x, 0d),
+            >= 1 and < 2 => (x, chroma, 0d),
+            >= 2 and < 3 => (0d, chroma, x),
+            >= 3 and < 4 => (0d, x, chroma),
+            >= 4 and < 5 => (x, 0d, chroma),
+            _ => (chroma, 0d, x)
+        };
+
+        var match = lightness - chroma / 2;
+        return Color.FromRgb(
+            ToByte(red + match),
+            ToByte(green + match),
+            ToByte(blue + match));
+    }
+
+    private static byte ToByte(double component)
+    {
+        return (byte)Math.Round(Math.Clamp(component, 0, 1) * 255);
     }
 
     private static void DrawSelectedWireSegment(
