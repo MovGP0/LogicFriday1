@@ -31,6 +31,15 @@
             <Setter Property="Height" Value="18" />
             <Setter Property="Foreground" Value="{DynamicResource LogicFriday.Brush.OnSurface}" />
         </Style>
+        <Style Selector="Button.toolbarButton:disabled">
+            <Setter Property="Opacity" Value="0.42" />
+        </Style>
+        <Style Selector="Button.toolbarButton:disabled icons|PackIcon">
+            <Setter Property="Foreground" Value="{DynamicResource LogicFriday.Brush.OnSurfaceVariant}" />
+        </Style>
+        <Style Selector="Button.toolbarButton:disabled:pointerover icons|PackIcon">
+            <Setter Property="Foreground" Value="{DynamicResource LogicFriday.Brush.OnSurfaceVariant}" />
+        </Style>
         <Style Selector="Button.toolbarButton:pointerover icons|PackIcon">
             <Setter Property="Foreground" Value="{DynamicResource LogicFriday.Brush.OnSecondaryContainer}" />
         </Style>
@@ -224,24 +233,39 @@
                         Margin="4,3"
                         Background="{DynamicResource SystemControlForegroundBaseLowBrush}" />
 
-                <Button Classes="toolbarButton"
-                        ToolTip.Tip="Cut">
+                <Button x:Name="EquationEditorCutToolbarButton"
+                        Classes="toolbarButton"
+                        ToolTip.Tip="Cut"
+                        IsEnabled="False"
+                        Click="EquationEditorCut_OnClick">
                     <icons:PackIcon Kind="ContentCut" />
                 </Button>
-                <Button Classes="toolbarButton"
-                        ToolTip.Tip="Copy">
+                <Button x:Name="EquationEditorCopyToolbarButton"
+                        Classes="toolbarButton"
+                        ToolTip.Tip="Copy"
+                        IsEnabled="False"
+                        Click="EquationEditorCopy_OnClick">
                     <icons:PackIcon Kind="ContentCopy" />
                 </Button>
-                <Button Classes="toolbarButton"
-                        ToolTip.Tip="Paste">
+                <Button x:Name="EquationEditorPasteToolbarButton"
+                        Classes="toolbarButton"
+                        ToolTip.Tip="Paste"
+                        IsEnabled="False"
+                        Click="EquationEditorPaste_OnClick">
                     <icons:PackIcon Kind="ContentPaste" />
                 </Button>
-                <Button Classes="toolbarButton"
-                        ToolTip.Tip="Undo">
+                <Button x:Name="EquationEditorUndoToolbarButton"
+                        Classes="toolbarButton"
+                        ToolTip.Tip="Undo"
+                        IsEnabled="False"
+                        Click="EquationEditorUndo_OnClick">
                     <icons:PackIcon Kind="Undo" />
                 </Button>
-                <Button Classes="toolbarButton"
-                        ToolTip.Tip="Redo">
+                <Button x:Name="EquationEditorRedoToolbarButton"
+                        Classes="toolbarButton"
+                        ToolTip.Tip="Redo"
+                        IsEnabled="False"
+                        Click="EquationEditorRedo_OnClick">
                     <icons:PackIcon Kind="Redo" />
                 </Button>
 
@@ -327,6 +351,10 @@
                          Text="{Binding LogicEquationText, Mode=TwoWay}"
                          AcceptsReturn="True"
                          KeyDown="EquationEditor_OnKeyDown"
+                         KeyUp="EquationEditor_OnKeyUp"
+                         PointerReleased="EquationEditor_OnPointerReleased"
+                         TextChanged="EquationEditor_OnTextChanged"
+                         GotFocus="EquationEditor_OnGotFocus"
                          FontFamily="Courier New"
                          TextWrapping="NoWrap"
                          PlaceholderText="Enter a logic equation...">

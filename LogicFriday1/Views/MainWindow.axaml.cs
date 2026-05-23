@@ -249,46 +249,83 @@ public partial class MainWindow : Window
         }
     }
 
+    private async void RefreshEquationEditorToolbarButtons()
+    {
+        var isEditingEquation = EquationEditor.IsVisible;
+        var hasSelection = isEditingEquation && HasEquationEditorSelection();
+
+        EquationEditorCutToolbarButton.IsEnabled = hasSelection;
+        EquationEditorCopyToolbarButton.IsEnabled = hasSelection;
+        EquationEditorUndoToolbarButton.IsEnabled = isEditingEquation && EquationEditor.CanUndo;
+        EquationEditorRedoToolbarButton.IsEnabled = isEditingEquation && EquationEditor.CanRedo;
+        EquationEditorPasteToolbarButton.IsEnabled = false;
+
+        if (!isEditingEquation)
+        {
+            return;
+        }
+
+        try
+        {
+            var clipboard = TopLevel.GetTopLevel(EquationEditor)?.Clipboard;
+            if (clipboard is not null)
+            {
+                EquationEditorPasteToolbarButton.IsEnabled = !string.IsNullOrEmpty(await clipboard.TryGetTextAsync());
+            }
+        }
+        catch
+        {
+            EquationEditorPasteToolbarButton.IsEnabled = false;
+        }
+    }
+
     private void EquationEditorUndo_OnClick(object? sender, RoutedEventArgs e)
     {
         EquationEditor.Focus();
         EquationEditor.Undo();
+        RefreshEquationEditorToolbarButtons();
     }
 
     private void EquationEditorRedo_OnClick(object? sender, RoutedEventArgs e)
     {
         EquationEditor.Focus();
         EquationEditor.Redo();
+        RefreshEquationEditorToolbarButtons();
     }
 
     private void EquationEditorCut_OnClick(object? sender, RoutedEventArgs e)
     {
         EquationEditor.Focus();
         EquationEditor.Cut();
+        RefreshEquationEditorToolbarButtons();
     }
 
     private void EquationEditorCopy_OnClick(object? sender, RoutedEventArgs e)
     {
         EquationEditor.Focus();
         EquationEditor.Copy();
+        RefreshEquationEditorToolbarButtons();
     }
 
     private void EquationEditorPaste_OnClick(object? sender, RoutedEventArgs e)
     {
         EquationEditor.Focus();
         EquationEditor.Paste();
+        RefreshEquationEditorToolbarButtons();
     }
 
     private void EquationEditorDelete_OnClick(object? sender, RoutedEventArgs e)
     {
         EquationEditor.Focus();
         EquationEditor.SelectedText = "";
+        RefreshEquationEditorToolbarButtons();
     }
 
     private void EquationEditorSelectAll_OnClick(object? sender, RoutedEventArgs e)
     {
         EquationEditor.Focus();
         EquationEditor.SelectAll();
+        RefreshEquationEditorToolbarButtons();
     }
 
     private void EquationEditorSubmit_OnClick(object? sender, RoutedEventArgs e)
@@ -342,6 +379,26 @@ public partial class MainWindow : Window
 
         SubmitLogicEquationEditing();
         e.Handled = true;
+    }
+
+    private void EquationEditor_OnKeyUp(object? sender, KeyEventArgs e)
+    {
+        RefreshEquationEditorToolbarButtons();
+    }
+
+    private void EquationEditor_OnPointerReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        RefreshEquationEditorToolbarButtons();
+    }
+
+    private void EquationEditor_OnTextChanged(object? sender, TextChangedEventArgs e)
+    {
+        RefreshEquationEditorToolbarButtons();
+    }
+
+    private void EquationEditor_OnGotFocus(object? sender, RoutedEventArgs e)
+    {
+        RefreshEquationEditorToolbarButtons();
     }
 
     private void TruthTableDataGrid_OnCellPointerPressed(object? sender, DataGridCellPointerPressedEventArgs e)
