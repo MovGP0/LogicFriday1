@@ -150,7 +150,8 @@
                 <MenuItem Header="_Delete (Del)" />
                 <MenuItem Header="Select _All (Ctrl+A)" />
                 <Separator />
-                <MenuItem Header="_Submit (Enter)" />
+                <MenuItem Header="_Submit (Enter)"
+                          Click="EquationEditorSubmit_OnClick" />
                 <MenuItem Header="_Cancel (Esc)" />
             </MenuItem>
 
@@ -325,6 +326,7 @@
                          IsVisible="{Binding IsEquationEditorVisible}"
                          Text="{Binding LogicEquationText, Mode=TwoWay}"
                          AcceptsReturn="True"
+                         KeyDown="EquationEditor_OnKeyDown"
                          FontFamily="Courier New"
                          TextWrapping="NoWrap"
                          PlaceholderText="Enter a logic equation...">

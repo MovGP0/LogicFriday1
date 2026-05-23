@@ -293,9 +293,18 @@ public partial class MainWindow : Window
 
     private void EquationEditorSubmit_OnClick(object? sender, RoutedEventArgs e)
     {
+        SubmitLogicEquationEditing();
+    }
+
+    private void SubmitLogicEquationEditing()
+    {
         if (DataContext is MainWindowViewModel viewModel)
         {
             viewModel.SubmitLogicEquationEditing();
+            if (viewModel.GetSelectedFunction() is { } logicFunction)
+            {
+                ConfigureTruthTableColumns(FunctionTruthTableDataGrid, logicFunction.InputNames, logicFunction.OutputNames);
+            }
         }
     }
 
@@ -310,6 +319,29 @@ public partial class MainWindow : Window
     private bool HasEquationEditorSelection()
     {
         return EquationEditor.SelectionStart != EquationEditor.SelectionEnd;
+    }
+
+    private void EquationEditor_OnKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter)
+        {
+            return;
+        }
+
+        var keyModifiers = e.KeyModifiers;
+        if (keyModifiers.HasFlag(KeyModifiers.Control))
+        {
+            return;
+        }
+
+        if (keyModifiers.HasFlag(KeyModifiers.Shift) || keyModifiers.HasFlag(KeyModifiers.Alt))
+        {
+            e.Handled = true;
+            return;
+        }
+
+        SubmitLogicEquationEditing();
+        e.Handled = true;
     }
 
     private void TruthTableDataGrid_OnCellPointerPressed(object? sender, DataGridCellPointerPressedEventArgs e)

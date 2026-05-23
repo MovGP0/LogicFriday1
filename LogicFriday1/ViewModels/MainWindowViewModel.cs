@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using LogicFriday1.Models;
+using LogicFriday1.Services;
 
 namespace LogicFriday1.ViewModels;
 
@@ -174,7 +175,23 @@ public partial class MainWindowViewModel : ViewModelBase
             return;
         }
 
-        StatusText = "Logic equation submit is not implemented";
+        try
+        {
+            var parsedEquation = LogicEquationParser.Parse(LogicEquationText);
+            var logicFunction = new LogicEquationFunction(
+                parsedEquation.InputNames,
+                parsedEquation.OutputNames,
+                parsedEquation.OutputValues,
+                parsedEquation.EquationText);
+
+            AddFunction(logicFunction);
+            ShowFunction(logicFunction);
+            StatusText = "Logic equation submitted";
+        }
+        catch (LogicEquationParseException ex)
+        {
+            StatusText = ex.Message;
+        }
     }
 
     public void CancelLogicEquationEditing()
