@@ -176,11 +176,38 @@ public partial class MainWindow : Window
 
             if (item.Kind == GatePaletteKind.Submit)
             {
+                await SubmitGateDiagramEditingAsync();
                 return;
             }
 
             SetActiveGatePaletteButton((Button)sender);
             viewModel.SelectGatePaletteItem(item);
+        }
+    }
+
+    private async Task SubmitGateDiagramEditingAsync()
+    {
+        ClearActiveGatePaletteButton();
+        GateDiagramSurface.CancelInteraction();
+
+        if (DataContext is not MainWindowViewModel viewModel)
+        {
+            return;
+        }
+
+        if (!viewModel.SubmitGateDiagramEditing(out var errorMessage))
+        {
+            if (!string.IsNullOrWhiteSpace(errorMessage))
+            {
+                await ShowMessageAsync(errorMessage, "Diagram Error");
+            }
+
+            return;
+        }
+
+        if (viewModel.GetSelectedFunction() is { } logicFunction)
+        {
+            ConfigureTruthTableColumns(FunctionTruthTableDataGrid, logicFunction.InputNames, logicFunction.OutputNames);
         }
     }
 
@@ -734,9 +761,14 @@ public partial class MainWindow : Window
 
     private async Task ShowMessageAsync(string message)
     {
+        await ShowMessageAsync(message, "Logic Friday");
+    }
+
+    private async Task ShowMessageAsync(string message, string title)
+    {
         var dialog = new Window
         {
-            Title = "Logic Friday",
+            Title = title,
             Width = 380,
             Height = 150,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,

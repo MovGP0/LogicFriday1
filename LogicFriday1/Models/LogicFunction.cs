@@ -24,5 +24,7 @@ public sealed record GateDiagramFunction(
     string[] InputNames,
     string[] OutputNames,
     IReadOnlyList<string[]> OutputValues,
-    string EquationText)
+    string EquationText,
+    IReadOnlyList<GateDiagramItem> Items,
+    IReadOnlyList<GateDiagramWire> Wires)
     : LogicFunction(InputNames, OutputNames, OutputValues, EquationText);

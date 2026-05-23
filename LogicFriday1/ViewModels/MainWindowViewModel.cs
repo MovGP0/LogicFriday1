@@ -226,6 +226,46 @@ public partial class MainWindowViewModel : ViewModelBase
         StatusText = "Ready";
     }
 
+    public bool SubmitGateDiagramEditing(out string? errorMessage)
+    {
+        errorMessage = null;
+        if (!IsGateDiagramVisible)
+        {
+            errorMessage = "No gate diagram is active";
+            StatusText = errorMessage;
+            return false;
+        }
+
+        try
+        {
+            var conversion = GateDiagramConverter.Convert(GateDiagramItems, GateDiagramWires);
+            var logicFunction = new GateDiagramFunction(
+                conversion.InputNames,
+                conversion.OutputNames,
+                conversion.OutputValues,
+                GenerateSumOfProductsEquation(
+                    conversion.InputNames,
+                    conversion.OutputNames,
+                    conversion.OutputValues,
+                    "Entered by gate diagram:"),
+                GateDiagramItems.ToArray(),
+                GateDiagramWires.ToArray());
+
+            AddFunction(logicFunction);
+            ShowFunction(logicFunction);
+            SelectedGatePaletteItem = null;
+            IsGateDiagramVisible = false;
+            StatusText = "Gate diagram submitted";
+            return true;
+        }
+        catch (GateDiagramConversionException ex)
+        {
+            errorMessage = ex.Message;
+            StatusText = ex.Message;
+            return false;
+        }
+    }
+
     public void SubmitTruthTableEditing()
     {
         if (_truthTableInputNames.Length == 0 || _truthTableOutputNames.Length == 0)
