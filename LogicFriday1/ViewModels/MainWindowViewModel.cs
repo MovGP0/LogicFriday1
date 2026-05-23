@@ -217,6 +217,15 @@ public partial class MainWindowViewModel : ViewModelBase
         StatusText = "Ready";
     }
 
+    public void CancelGateDiagramEditing()
+    {
+        GateDiagramItems.Clear();
+        GateDiagramWires.Clear();
+        SelectedGatePaletteItem = null;
+        IsGateDiagramVisible = false;
+        StatusText = "Ready";
+    }
+
     public void SubmitTruthTableEditing()
     {
         if (_truthTableInputNames.Length == 0 || _truthTableOutputNames.Length == 0)

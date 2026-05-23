@@ -59,6 +59,14 @@ public sealed class GateDiagramSurface : Control
 
     public event EventHandler? PaletteSelectionCleared;
 
+    public void CancelInteraction()
+    {
+        CancelPendingWireState();
+        ClearSelection();
+        SelectedPaletteItem = null;
+        InvalidateVisual();
+    }
+
     protected override void OnPointerPressed(PointerPressedEventArgs e)
     {
         base.OnPointerPressed(e);

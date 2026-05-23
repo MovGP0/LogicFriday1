@@ -168,13 +168,30 @@ public partial class MainWindow : Window
                 return;
             }
 
-            if (item.Kind is GatePaletteKind.Submit or GatePaletteKind.Cancel)
+            if (item.Kind == GatePaletteKind.Cancel)
+            {
+                CancelGateDiagramEditing();
+                return;
+            }
+
+            if (item.Kind == GatePaletteKind.Submit)
             {
                 return;
             }
 
             SetActiveGatePaletteButton((Button)sender);
             viewModel.SelectGatePaletteItem(item);
+        }
+    }
+
+    private void CancelGateDiagramEditing()
+    {
+        ClearActiveGatePaletteButton();
+        GateDiagramSurface.CancelInteraction();
+
+        if (DataContext is MainWindowViewModel viewModel)
+        {
+            viewModel.CancelGateDiagramEditing();
         }
     }
 
