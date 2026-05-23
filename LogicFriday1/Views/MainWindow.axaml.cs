@@ -24,6 +24,7 @@ public partial class MainWindow : Window
 {
     private const string HelpFileName = "lf.chm";
     private const string HelpContentsTopic = "features.htm";
+    private const string GateDiagramHelpUrl = "https://github.com/MovGP0/LogicFriday1/wiki/Entering-a-gate-diagram";
     private TruthTableRow? _truthTableContextRow;
 
     public MainWindow()
@@ -151,12 +152,34 @@ public partial class MainWindow : Window
         }
     }
 
-    private void GatePaletteButton_OnClick(object? sender, RoutedEventArgs e)
+    private async void GatePaletteButton_OnClick(object? sender, RoutedEventArgs e)
     {
         if (sender is Button { Tag: GatePaletteItem item } &&
             DataContext is MainWindowViewModel viewModel)
         {
+            if (item.Kind == GatePaletteKind.Help)
+            {
+                await OpenUrlAsync(GateDiagramHelpUrl, "Gate diagram help could not be opened.");
+                return;
+            }
+
             viewModel.SelectGatePaletteItem(item);
+        }
+    }
+
+    private async Task OpenUrlAsync(string url, string errorMessage)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = url,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            await ShowMessageAsync($"{errorMessage}\n{ex.Message}");
         }
     }
 
