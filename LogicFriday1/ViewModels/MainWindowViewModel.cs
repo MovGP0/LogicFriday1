@@ -266,6 +266,12 @@ public partial class MainWindowViewModel : ViewModelBase
         StatusText = $"Selected gate diagram tool: {item.Label}";
     }
 
+    public void ClearGatePaletteSelection()
+    {
+        SelectedGatePaletteItem = null;
+        StatusText = "Ready";
+    }
+
     public LogicFunction? GetSelectedFunction()
     {
         return SelectedFunctionSummary?.LogicFunction;

@@ -26,13 +26,16 @@ public partial class MainWindow : Window
     private const string HelpFileName = "lf.chm";
     private const string HelpContentsTopic = "features.htm";
     private const string GateDiagramHelpUrl = "https://github.com/MovGP0/LogicFriday1/wiki/Entering-a-gate-diagram";
+    private const string ActiveGatePaletteButtonClass = "active";
     private TruthTableRow? _truthTableContextRow;
+    private Button? _activeGatePaletteButton;
 
     public MainWindow()
     {
         InitializeComponent();
         TruthTableDataGrid.AddHandler(PointerPressedEvent, TruthTableDataGrid_OnPointerPressed, RoutingStrategies.Tunnel);
         GateDiagramSurface.VariableNameRequested += GateDiagramSurface_OnVariableNameRequested;
+        GateDiagramSurface.PaletteSelectionCleared += GateDiagramSurface_OnPaletteSelectionCleared;
     }
 
     private async void HelpContents_OnClick(object? sender, RoutedEventArgs e)
@@ -165,8 +168,47 @@ public partial class MainWindow : Window
                 return;
             }
 
+            if (item.Kind is GatePaletteKind.Submit or GatePaletteKind.Cancel)
+            {
+                return;
+            }
+
+            SetActiveGatePaletteButton((Button)sender);
             viewModel.SelectGatePaletteItem(item);
         }
+    }
+
+    private void GateDiagramSurface_OnPaletteSelectionCleared(object? sender, EventArgs e)
+    {
+        ClearActiveGatePaletteButton();
+
+        if (DataContext is MainWindowViewModel viewModel)
+        {
+            viewModel.ClearGatePaletteSelection();
+        }
+    }
+
+    private void SetActiveGatePaletteButton(Button button)
+    {
+        if (ReferenceEquals(_activeGatePaletteButton, button))
+        {
+            return;
+        }
+
+        ClearActiveGatePaletteButton();
+        button.Classes.Add(ActiveGatePaletteButtonClass);
+        _activeGatePaletteButton = button;
+    }
+
+    private void ClearActiveGatePaletteButton()
+    {
+        if (_activeGatePaletteButton is null)
+        {
+            return;
+        }
+
+        _activeGatePaletteButton.Classes.Remove(ActiveGatePaletteButtonClass);
+        _activeGatePaletteButton = null;
     }
 
     private async void GateDiagramSurface_OnVariableNameRequested(

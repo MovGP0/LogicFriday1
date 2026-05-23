@@ -52,6 +52,8 @@ public sealed class GateDiagramSurface : Control
 
     public event EventHandler<GateDiagramVariableNameRequestedEventArgs>? VariableNameRequested;
 
+    public event EventHandler? PaletteSelectionCleared;
+
     protected override void OnPointerPressed(PointerPressedEventArgs e)
     {
         base.OnPointerPressed(e);
@@ -301,18 +303,23 @@ public sealed class GateDiagramSurface : Control
         }
 
         Wires.Add(new GateDiagramWire(_pendingWireStart.Reference, end.Reference));
-        _pendingWireStart = null;
-        _pendingWirePreviewEnd = null;
-        _invalidWirePoint = null;
+        ClearPaletteSelection();
         InvalidateVisual();
         e.Handled = true;
     }
 
-    private void CancelPendingWire()
+    private void ClearPaletteSelection()
     {
         _pendingWireStart = null;
         _pendingWirePreviewEnd = null;
         _invalidWirePoint = null;
+        SelectedPaletteItem = null;
+        PaletteSelectionCleared?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void CancelPendingWire()
+    {
+        ClearPaletteSelection();
         InvalidateVisual();
     }
 
@@ -327,6 +334,7 @@ public sealed class GateDiagramSurface : Control
             GetNextComponentLabel(item),
             _nextItemId++));
 
+        ClearPaletteSelection();
         InvalidateVisual();
     }
 

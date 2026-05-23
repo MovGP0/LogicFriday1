@@ -60,6 +60,14 @@
         <Style Selector="Button.gatePaletteButton:pointerover icons|PackIcon">
             <Setter Property="Foreground" Value="{DynamicResource LogicFriday.Brush.OnSecondaryContainer}" />
         </Style>
+        <Style Selector="Button.gatePaletteButton.active">
+            <Setter Property="Background" Value="{DynamicResource LogicFriday.Brush.SecondaryContainer}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource LogicFriday.Brush.Primary}" />
+            <Setter Property="BorderThickness" Value="2" />
+        </Style>
+        <Style Selector="Button.gatePaletteButton.active TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource LogicFriday.Brush.OnSecondaryContainer}" />
+        </Style>
     </Window.Styles>
 
     <Window.DataTemplates>
