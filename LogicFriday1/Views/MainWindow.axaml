@@ -136,7 +136,9 @@
             </MenuItem>
 
             <MenuItem Header="T_ruthtable">
-                <MenuItem Header="_Modify Truth Table" />
+                <MenuItem Header="_Modify Truth Table"
+                          IsEnabled="{Binding IsTruthTableModifyEnabled}"
+                          Click="ModifyTruthTable_OnClick" />
                 <Separator />
                 <MenuItem Header="Show Tr_ue and Don't Care" />
                 <MenuItem Header="Show All _Rows" />

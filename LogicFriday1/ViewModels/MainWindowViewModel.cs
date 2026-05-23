@@ -9,6 +9,7 @@ public partial class MainWindowViewModel : ViewModelBase
 {
     private string[] _truthTableInputNames = [];
     private string[] _truthTableOutputNames = [];
+    private FunctionSummaryRow? _truthTableEditTarget;
 
     [ObservableProperty]
     private string _statusText = "Ready";
@@ -20,18 +21,21 @@ public partial class MainWindowViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(IsFunctionViewModeEnabled))]
     [NotifyPropertyChangedFor(nameof(IsMinimizedViewEnabled))]
     [NotifyPropertyChangedFor(nameof(IsOperationMinimizeEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsTruthTableModifyEnabled))]
     private bool _isEquationEditorVisible;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsFunctionViewModeEnabled))]
     [NotifyPropertyChangedFor(nameof(IsMinimizedViewEnabled))]
     [NotifyPropertyChangedFor(nameof(IsOperationMinimizeEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsTruthTableModifyEnabled))]
     private bool _isTruthTableVisible;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsFunctionViewModeEnabled))]
     [NotifyPropertyChangedFor(nameof(IsMinimizedViewEnabled))]
     [NotifyPropertyChangedFor(nameof(IsOperationMinimizeEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsTruthTableModifyEnabled))]
     private bool _isGateDiagramVisible;
 
     [ObservableProperty]
@@ -41,7 +45,12 @@ public partial class MainWindowViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(IsFunctionViewModeEnabled))]
     [NotifyPropertyChangedFor(nameof(IsMinimizedViewEnabled))]
     [NotifyPropertyChangedFor(nameof(IsOperationMinimizeEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsTruthTableModifyEnabled))]
     private FunctionSummaryRow? _selectedFunctionSummary;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsTruthTableModifyEnabled))]
+    private int _selectedFunctionCount;
 
     [ObservableProperty]
     private GatePaletteItem? _selectedGatePaletteItem;
@@ -118,6 +127,13 @@ public partial class MainWindowViewModel : ViewModelBase
         get => IsFunctionViewModeEnabled;
     }
 
+    public bool IsTruthTableModifyEnabled
+    {
+        get => IsFunctionViewModeEnabled &&
+            SelectedFunctionCount == 1 &&
+            SelectedFunctionSummary?.LogicFunction is TruthTableLogicFunction;
+    }
+
     public void ShowUnminimizedView()
     {
         if (!IsFunctionViewModeEnabled)
@@ -188,6 +204,7 @@ public partial class MainWindowViewModel : ViewModelBase
     public void StartNewLogicEquation()
     {
         LogicEquationText = "";
+        _truthTableEditTarget = null;
         IsEquationEditorVisible = true;
         IsTruthTableVisible = false;
         IsGateDiagramVisible = false;
@@ -210,13 +227,33 @@ public partial class MainWindowViewModel : ViewModelBase
         StartTruthTable(inputNames, outputNames, outputValues, "Imported truth table");
     }
 
+    public bool StartModifyTruthTable()
+    {
+        if (!IsTruthTableModifyEnabled ||
+            SelectedFunctionSummary is not { LogicFunction: { } logicFunction } summary)
+        {
+            StatusText = "No function is selected";
+            return false;
+        }
+
+        StartTruthTable(
+            logicFunction.InputNames,
+            logicFunction.OutputNames,
+            logicFunction.OutputValues,
+            "Modifying truth table",
+            summary);
+        return true;
+    }
+
     private void StartTruthTable(
         string[] inputNames,
         string[] outputNames,
         IReadOnlyList<string[]> outputValues,
-        string statusPrefix)
+        string statusPrefix,
+        FunctionSummaryRow? editTarget = null)
     {
         TruthTableRows.Clear();
+        _truthTableEditTarget = editTarget;
         _truthTableInputNames = [.. inputNames];
         _truthTableOutputNames = [.. outputNames];
 
@@ -256,6 +293,7 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         GateDiagramItems.Clear();
         GateDiagramWires.Clear();
+        _truthTableEditTarget = null;
         IsEquationEditorVisible = false;
         IsTruthTableVisible = false;
         IsGateDiagramVisible = true;
@@ -303,6 +341,7 @@ public partial class MainWindowViewModel : ViewModelBase
         TruthTableRows.Clear();
         _truthTableInputNames = [];
         _truthTableOutputNames = [];
+        _truthTableEditTarget = null;
         IsTruthTableVisible = false;
         IsFunctionDetailVisible = false;
         StatusText = "Ready";
@@ -362,15 +401,25 @@ public partial class MainWindowViewModel : ViewModelBase
         }
 
         var logicFunction = CreateTruthTableFunction();
-        AddFunction(logicFunction);
+        var editTarget = _truthTableEditTarget;
+        if (editTarget is not null)
+        {
+            ReplaceFunction(editTarget, logicFunction);
+        }
+        else
+        {
+            AddFunction(logicFunction);
+        }
+
         ShowFunction(logicFunction);
         TruthTableRows.Clear();
         _truthTableInputNames = [];
         _truthTableOutputNames = [];
+        _truthTableEditTarget = null;
         IsEquationEditorVisible = false;
         IsTruthTableVisible = false;
         IsGateDiagramVisible = false;
-        StatusText = "Truth table submitted";
+        StatusText = editTarget is null ? "Truth table submitted" : "Truth table modified";
     }
 
     public void CloseCurrentDocument()
@@ -382,8 +431,10 @@ public partial class MainWindowViewModel : ViewModelBase
         GateDiagramWires.Clear();
         _truthTableInputNames = [];
         _truthTableOutputNames = [];
+        _truthTableEditTarget = null;
         SelectedGatePaletteItem = null;
         SelectedFunctionSummary = null;
+        SelectedFunctionCount = 0;
         FunctionSummaries.Clear();
         FunctionSummaries.Add(new FunctionSummaryRow
         {
@@ -406,6 +457,11 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         SelectedGatePaletteItem = null;
         StatusText = "Ready";
+    }
+
+    public void SetSelectedFunctionCount(int selectedFunctionCount)
+    {
+        SelectedFunctionCount = selectedFunctionCount;
     }
 
     public LogicFunction? GetSelectedFunction()
@@ -527,6 +583,22 @@ public partial class MainWindowViewModel : ViewModelBase
         var summary = CreateFunctionSummary(logicFunction);
         FunctionSummaries.Add(summary);
         SelectedFunctionSummary = summary;
+        SelectedFunctionCount = 1;
+    }
+
+    private void ReplaceFunction(FunctionSummaryRow editTarget, LogicFunction logicFunction)
+    {
+        var summary = CreateFunctionSummary(logicFunction);
+        var summaryIndex = FunctionSummaries.IndexOf(editTarget);
+        if (summaryIndex < 0)
+        {
+            AddFunction(logicFunction);
+            return;
+        }
+
+        FunctionSummaries[summaryIndex] = summary;
+        SelectedFunctionSummary = summary;
+        SelectedFunctionCount = 1;
     }
 
     private static FunctionSummaryRow CreateFunctionSummary(LogicFunction logicFunction)
@@ -579,6 +651,7 @@ public partial class MainWindowViewModel : ViewModelBase
         OnPropertyChanged(nameof(IsFunctionViewModeEnabled));
         OnPropertyChanged(nameof(IsMinimizedViewEnabled));
         OnPropertyChanged(nameof(IsOperationMinimizeEnabled));
+        OnPropertyChanged(nameof(IsTruthTableModifyEnabled));
     }
 
     private static LogicFunction WithMinimizedFunction(

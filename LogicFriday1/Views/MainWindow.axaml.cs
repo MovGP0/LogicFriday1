@@ -128,6 +128,18 @@ public partial class MainWindow : Window
         ConfigureTruthTableColumns(TruthTableDataGrid, dialog.InputNames, dialog.OutputNames);
     }
 
+    private void ModifyTruthTable_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainWindowViewModel viewModel ||
+            !viewModel.StartModifyTruthTable() ||
+            viewModel.GetSelectedFunction() is not { } logicFunction)
+        {
+            return;
+        }
+
+        ConfigureTruthTableColumns(TruthTableDataGrid, logicFunction.InputNames, logicFunction.OutputNames);
+    }
+
     private void NewLogicEquation_OnClick(object? sender, RoutedEventArgs e)
     {
         if (DataContext is MainWindowViewModel viewModel)
@@ -427,7 +439,13 @@ public partial class MainWindow : Window
 
     private void FunctionSummaryDataGrid_OnSelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
-        if (DataContext is not MainWindowViewModel viewModel ||
+        if (DataContext is not MainWindowViewModel viewModel)
+        {
+            return;
+        }
+
+        viewModel.SetSelectedFunctionCount(FunctionSummaryDataGrid.SelectedItems.Count);
+        if (FunctionSummaryDataGrid.SelectedItems.Count != 1 ||
             viewModel.GetSelectedFunction() is not { } logicFunction)
         {
             return;
