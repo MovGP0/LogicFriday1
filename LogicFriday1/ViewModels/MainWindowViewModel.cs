@@ -49,6 +49,7 @@ public partial class MainWindowViewModel : ViewModelBase
     private FunctionSummaryRow? _selectedFunctionSummary;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsOperationMinimizeEnabled))]
     [NotifyPropertyChangedFor(nameof(IsTruthTableModifyEnabled))]
     private int _selectedFunctionCount;
 
@@ -124,7 +125,9 @@ public partial class MainWindowViewModel : ViewModelBase
 
     public bool IsOperationMinimizeEnabled
     {
-        get => IsFunctionViewModeEnabled;
+        get => IsFunctionViewModeEnabled &&
+            SelectedFunctionCount == 1 &&
+            SelectedFunctionSummary?.LogicFunction?.MinimizedFunction is null;
     }
 
     public bool IsTruthTableModifyEnabled
