@@ -1,3 +1,6 @@
 [submodule "Espresso"]
 	path = Espresso
 	url = https://github.com/Gigantua/Espresso.git
+[submodule "LogicSynthesis"]
+	path = LogicSynthesis
+	url = https://github.com/JackHack96/logic-synthesis.git
