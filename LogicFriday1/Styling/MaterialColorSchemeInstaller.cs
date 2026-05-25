@@ -29,24 +29,15 @@ public static class MaterialColorSchemeInstaller
             neutralVariant: null,
             error: null);
 
-        AddRole(application, "Primary", s_materialDynamicColors.Primary, scheme);
-        AddRole(application, "OnPrimary", s_materialDynamicColors.OnPrimary, scheme);
-        AddRole(application, "PrimaryContainer", s_materialDynamicColors.PrimaryContainer, scheme);
-        AddRole(application, "OnPrimaryContainer", s_materialDynamicColors.OnPrimaryContainer, scheme);
-        AddRole(application, "SecondaryContainer", s_materialDynamicColors.SecondaryContainer, scheme);
-        AddRole(application, "OnSecondaryContainer", s_materialDynamicColors.OnSecondaryContainer, scheme);
-        AddRole(application, "Surface", s_materialDynamicColors.Surface, scheme);
-        AddRole(application, "SurfaceContainerLowest", s_materialDynamicColors.SurfaceContainerLowest, scheme);
-        AddRole(application, "SurfaceContainerLow", s_materialDynamicColors.SurfaceContainerLow, scheme);
-        AddRole(application, "SurfaceContainer", s_materialDynamicColors.SurfaceContainer, scheme);
-        AddRole(application, "SurfaceContainerHigh", s_materialDynamicColors.SurfaceContainerHigh, scheme);
-        AddRole(application, "SurfaceContainerHighest", s_materialDynamicColors.SurfaceContainerHighest, scheme);
-        AddRole(application, "OnSurface", s_materialDynamicColors.OnSurface, scheme);
-        AddRole(application, "OnSurfaceVariant", s_materialDynamicColors.OnSurfaceVariant, scheme);
-        AddRole(application, "Outline", s_materialDynamicColors.Outline, scheme);
-        AddRole(application, "OutlineVariant", s_materialDynamicColors.OutlineVariant, scheme);
-        AddRole(application, "Error", s_materialDynamicColors.Error, scheme);
-        AddRole(application, "OnError", s_materialDynamicColors.OnError, scheme);
+        foreach (var dynamicColor in s_materialDynamicColors.AllDynamicColors())
+        {
+            if (dynamicColor is null)
+            {
+                continue;
+            }
+
+            AddRole(application, ToResourceName(dynamicColor.name), dynamicColor, scheme);
+        }
 
         application.Resources["SystemAccentColor"] = ToAvaloniaColor(s_materialDynamicColors.Primary.GetColor(scheme));
         application.Resources["SystemAccentColorBrush"] = application.Resources["LogicFriday.Brush.Primary"];
@@ -59,6 +50,25 @@ public static class MaterialColorSchemeInstaller
 
         application.Resources[$"LogicFriday.Color.{name}"] = color;
         application.Resources[$"LogicFriday.Brush.{name}"] = new SolidColorBrush(color);
+    }
+
+    private static string ToResourceName(string dynamicColorName)
+    {
+        var parts = dynamicColorName.Split('_', StringSplitOptions.RemoveEmptyEntries);
+        Span<char> resourceName = stackalloc char[dynamicColorName.Length];
+        var length = 0;
+
+        foreach (var part in parts)
+        {
+            resourceName[length++] = char.ToUpperInvariant(part[0]);
+
+            for (var i = 1; i < part.Length; i++)
+            {
+                resourceName[length++] = part[i];
+            }
+        }
+
+        return resourceName[..length].ToString();
     }
 
     private static Color ToAvaloniaColor(WpfColor color)
