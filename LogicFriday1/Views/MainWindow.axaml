@@ -122,7 +122,9 @@
                 <MenuItem Header="_Minimize..."
                           IsEnabled="{Binding IsOperationMinimizeEnabled}"
                           Click="Minimize_OnClick" />
-                <MenuItem Header="Map to _Gates..." />
+                <MenuItem Header="Map to _Gates..."
+                          IsEnabled="{Binding IsOperationMapToGatesEnabled}"
+                          Click="MapToGates_OnClick" />
                 <MenuItem Header="Generate C _Lookup Function..." />
                 <Separator />
                 <MenuItem Header="Clo_ne Function" />
@@ -311,7 +313,9 @@
                     <icons:PackIcon Kind="ChartBellCurve" />
                 </Button>
                 <Button Classes="toolbarButton"
-                        ToolTip.Tip="Map to Gates...">
+                        ToolTip.Tip="Map to Gates..."
+                        IsEnabled="{Binding IsOperationMapToGatesEnabled}"
+                        Click="MapToGates_OnClick">
                     <icons:PackIcon Kind="MapMarkerPath" />
                 </Button>
                 <Button Classes="toolbarButton"

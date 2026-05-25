@@ -21,6 +21,7 @@ public partial class MainWindowViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(IsFunctionViewModeEnabled))]
     [NotifyPropertyChangedFor(nameof(IsMinimizedViewEnabled))]
     [NotifyPropertyChangedFor(nameof(IsOperationMinimizeEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsOperationMapToGatesEnabled))]
     [NotifyPropertyChangedFor(nameof(IsTruthTableModifyEnabled))]
     private bool _isEquationEditorVisible;
 
@@ -28,6 +29,7 @@ public partial class MainWindowViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(IsFunctionViewModeEnabled))]
     [NotifyPropertyChangedFor(nameof(IsMinimizedViewEnabled))]
     [NotifyPropertyChangedFor(nameof(IsOperationMinimizeEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsOperationMapToGatesEnabled))]
     [NotifyPropertyChangedFor(nameof(IsTruthTableModifyEnabled))]
     private bool _isTruthTableVisible;
 
@@ -35,6 +37,7 @@ public partial class MainWindowViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(IsFunctionViewModeEnabled))]
     [NotifyPropertyChangedFor(nameof(IsMinimizedViewEnabled))]
     [NotifyPropertyChangedFor(nameof(IsOperationMinimizeEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsOperationMapToGatesEnabled))]
     [NotifyPropertyChangedFor(nameof(IsTruthTableModifyEnabled))]
     private bool _isGateDiagramVisible;
 
@@ -45,11 +48,13 @@ public partial class MainWindowViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(IsFunctionViewModeEnabled))]
     [NotifyPropertyChangedFor(nameof(IsMinimizedViewEnabled))]
     [NotifyPropertyChangedFor(nameof(IsOperationMinimizeEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsOperationMapToGatesEnabled))]
     [NotifyPropertyChangedFor(nameof(IsTruthTableModifyEnabled))]
     private FunctionSummaryRow? _selectedFunctionSummary;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsOperationMinimizeEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsOperationMapToGatesEnabled))]
     [NotifyPropertyChangedFor(nameof(IsTruthTableModifyEnabled))]
     private int _selectedFunctionCount;
 
@@ -128,6 +133,12 @@ public partial class MainWindowViewModel : ViewModelBase
         get => IsFunctionViewModeEnabled &&
             SelectedFunctionCount == 1 &&
             SelectedFunctionSummary?.LogicFunction?.MinimizedFunction is null;
+    }
+
+    public bool IsOperationMapToGatesEnabled
+    {
+        get => IsFunctionViewModeEnabled &&
+            SelectedFunctionCount == 1;
     }
 
     public bool IsTruthTableModifyEnabled
@@ -654,6 +665,7 @@ public partial class MainWindowViewModel : ViewModelBase
         OnPropertyChanged(nameof(IsFunctionViewModeEnabled));
         OnPropertyChanged(nameof(IsMinimizedViewEnabled));
         OnPropertyChanged(nameof(IsOperationMinimizeEnabled));
+        OnPropertyChanged(nameof(IsOperationMapToGatesEnabled));
         OnPropertyChanged(nameof(IsTruthTableModifyEnabled));
     }
 

@@ -75,6 +75,20 @@ public partial class MainWindow : Window
         }
     }
 
+    private async void MapToGates_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainWindowViewModel { IsOperationMapToGatesEnabled: true } viewModel)
+        {
+            return;
+        }
+
+        var dialog = new MapToGatesDialog();
+        var result = await dialog.ShowDialog<bool?>(this);
+        viewModel.StatusText = result == true
+            ? "Map to Gates options selected"
+            : "Map to Gates canceled";
+    }
+
     private void GateZoomIn_OnClick(object? sender, RoutedEventArgs e)
     {
         if (DataContext is MainWindowViewModel { IsGateDiagramVisible: true })

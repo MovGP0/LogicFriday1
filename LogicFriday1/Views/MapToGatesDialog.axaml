@@ -1,0 +1,122 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:views="using:LogicFriday1.Views"
+        x:Class="LogicFriday1.Views.MapToGatesDialog"
+        x:DataType="views:MapToGatesDialog"
+        Title="Map to Gates"
+        Width="520"
+        Height="500"
+        MinWidth="520"
+        MinHeight="500"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False">
+
+    <Grid RowDefinitions="*,Auto"
+          Margin="12"
+          RowSpacing="10">
+        <Grid ColumnDefinitions="*,170"
+              ColumnSpacing="12">
+            <GroupBox Header="Gate Types">
+                <Grid Margin="4"
+                      RowDefinitions="Auto,Auto,Auto,Auto,Auto"
+                      ColumnDefinitions="*,*,*"
+                      RowSpacing="8"
+                      ColumnSpacing="10">
+                    <CheckBox Grid.Row="0"
+                              Grid.Column="0"
+                              Content="Inverter"
+                              IsChecked="{Binding UseInverter, Mode=TwoWay}" />
+                    <CheckBox Grid.Row="0"
+                              Grid.Column="1"
+                              Content="2-IN NAND"
+                              IsChecked="{Binding UseNand2, Mode=TwoWay}" />
+                    <CheckBox Grid.Row="0"
+                              Grid.Column="2"
+                              Content="3-IN NAND"
+                              IsChecked="{Binding UseNand3, Mode=TwoWay}" />
+                    <CheckBox Grid.Row="1"
+                              Grid.Column="0"
+                              Content="4-In NAND"
+                              IsChecked="{Binding UseNand4, Mode=TwoWay}" />
+                    <CheckBox Grid.Row="1"
+                              Grid.Column="1"
+                              Content="2-In NOR"
+                              IsChecked="{Binding UseNor2, Mode=TwoWay}" />
+                    <CheckBox Grid.Row="1"
+                              Grid.Column="2"
+                              Content="3-In NOR"
+                              IsChecked="{Binding UseNor3, Mode=TwoWay}" />
+                    <CheckBox Grid.Row="2"
+                              Grid.Column="0"
+                              Content="4-In NOR"
+                              IsChecked="{Binding UseNor4, Mode=TwoWay}" />
+                    <CheckBox Grid.Row="2"
+                              Grid.Column="1"
+                              Content="2-In XOR"
+                              IsChecked="{Binding UseXor2, Mode=TwoWay}" />
+                    <CheckBox Grid.Row="2"
+                              Grid.Column="2"
+                              Content="2-In MUX"
+                              IsChecked="{Binding UseMux2, Mode=TwoWay}" />
+                    <CheckBox Grid.Row="3"
+                              Grid.Column="0"
+                              Content="2-In AND"
+                              IsChecked="{Binding UseAnd2, Mode=TwoWay}" />
+                    <CheckBox Grid.Row="3"
+                              Grid.Column="1"
+                              Content="3-In AND"
+                              IsChecked="{Binding UseAnd3, Mode=TwoWay}" />
+                    <CheckBox Grid.Row="3"
+                              Grid.Column="2"
+                              Content="4-In AND"
+                              IsChecked="{Binding UseAnd4, Mode=TwoWay}" />
+                    <CheckBox Grid.Row="4"
+                              Grid.Column="0"
+                              Content="2-In OR"
+                              IsChecked="{Binding UseOr2, Mode=TwoWay}" />
+                    <CheckBox Grid.Row="4"
+                              Grid.Column="1"
+                              Content="3-In OR"
+                              IsChecked="{Binding UseOr3, Mode=TwoWay}" />
+                    <CheckBox Grid.Row="4"
+                              Grid.Column="2"
+                              Content="4-In OR"
+                              IsChecked="{Binding UseOr4, Mode=TwoWay}" />
+                </Grid>
+            </GroupBox>
+
+            <GroupBox Grid.Column="1"
+                      Header="Optimization">
+                <StackPanel Margin="4"
+                            Spacing="8">
+                    <ToggleButton x:Name="StandardLogicToggle"
+                                  Content="Standard Logic ICs"
+                                  IsChecked="{Binding UseStandardLogicIcs, Mode=TwoWay}"
+                                  Click="StandardLogicToggle_OnClick" />
+                    <ToggleButton x:Name="DieAreaToggle"
+                                  Content="Die AREA"
+                                  IsChecked="{Binding UseDieArea, Mode=TwoWay}"
+                                  Click="DieAreaToggle_OnClick" />
+                </StackPanel>
+            </GroupBox>
+        </Grid>
+
+        <Grid Grid.Row="1"
+              ColumnDefinitions="Auto,*,Auto,Auto"
+              ColumnSpacing="8">
+            <Button Content="Help"
+                    MinWidth="80"
+                    Click="HelpButton_OnClick" />
+            <Button Grid.Column="2"
+                    Content="OK"
+                    MinWidth="80"
+                    IsDefault="True"
+                    Click="OkButton_OnClick" />
+            <Button Grid.Column="3"
+                    Content="Cancel"
+                    MinWidth="80"
+                    IsCancel="True"
+                    Click="CancelButton_OnClick" />
+        </Grid>
+    </Grid>
+</Window>
