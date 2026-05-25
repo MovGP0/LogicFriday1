@@ -84,9 +84,10 @@ public partial class MainWindow : Window
 
         var dialog = new MapToGatesDialog();
         var result = await dialog.ShowDialog<bool?>(this);
-        viewModel.StatusText = result == true
-            ? "Map to Gates options selected"
-            : "Map to Gates canceled";
+        if (result == true)
+        {
+            viewModel.StatusText = "Map to Gates options selected";
+        }
     }
 
     private void GateZoomIn_OnClick(object? sender, RoutedEventArgs e)
@@ -138,8 +139,8 @@ public partial class MainWindow : Window
             return;
         }
 
-        viewModel.StartNewTruthTable(dialog.InputNames, dialog.OutputNames);
-        ConfigureTruthTableColumns(TruthTableDataGrid, dialog.InputNames, dialog.OutputNames);
+        viewModel.StartNewTruthTable(dialog.ViewModel.InputNames, dialog.ViewModel.OutputNames);
+        ConfigureTruthTableColumns(TruthTableDataGrid, dialog.ViewModel.InputNames, dialog.ViewModel.OutputNames);
     }
 
     private void ModifyTruthTable_OnClick(object? sender, RoutedEventArgs e)
@@ -370,18 +371,16 @@ public partial class MainWindow : Window
             return;
         }
 
-        var dialog = new GateVariableNameDialog
-        {
-            ExistingNames = viewModel.GateDiagramItems
+        var dialog = new GateVariableNameDialog();
+        dialog.ViewModel.ExistingNames = viewModel.GateDiagramItems
                 .Where(static item => item.Kind is GatePaletteKind.Input or GatePaletteKind.Output)
-                .Select(static item => item.Label),
-            VariableName = GetProposedGateVariableName(e.Item.Kind, viewModel.GateDiagramItems)
-        };
+                .Select(static item => item.Label);
+        dialog.ViewModel.VariableName = GetProposedGateVariableName(e.Item.Kind, viewModel.GateDiagramItems);
 
         var result = await dialog.ShowDialog<bool?>(this);
         if (result == true)
         {
-            e.AddItem(dialog.VariableName);
+            e.AddItem(dialog.ViewModel.VariableName);
         }
     }
 

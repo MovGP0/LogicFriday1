@@ -2,7 +2,7 @@ using System;
 using System.Diagnostics.CodeAnalysis;
 using Avalonia.Controls;
 using Avalonia.Controls.Templates;
-using LogicFriday1.ViewModels;
+using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace LogicFriday1;
 
@@ -32,6 +32,6 @@ public class ViewLocator : IDataTemplate
 
     public bool Match(object? data)
     {
-        return data is ViewModelBase;
+        return data is ObservableObject;
     }
 }

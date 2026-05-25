@@ -1,71 +1,49 @@
+using System.Diagnostics;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
+using LogicFriday1.ViewModels;
 
 namespace LogicFriday1.Views;
 
 public partial class MapToGatesDialog : Window
 {
+    private const string MappingHelpUrl = "https://github.com/MovGP0/LogicFriday1/wiki/Mapping-a-function-to-a-gate-diagram";
+
     public MapToGatesDialog()
     {
         InitializeComponent();
-        DataContext = this;
+        ViewModel = new MapToGatesDialogViewModel();
+        DataContext = ViewModel;
     }
 
-    public bool UseInverter { get; set; } = true;
-
-    public bool UseNand2 { get; set; } = true;
-
-    public bool UseNand3 { get; set; }
-
-    public bool UseNand4 { get; set; }
-
-    public bool UseNor2 { get; set; } = true;
-
-    public bool UseNor3 { get; set; }
-
-    public bool UseNor4 { get; set; }
-
-    public bool UseXor2 { get; set; }
-
-    public bool UseMux2 { get; set; }
-
-    public bool UseAnd2 { get; set; }
-
-    public bool UseAnd3 { get; set; }
-
-    public bool UseAnd4 { get; set; }
-
-    public bool UseOr2 { get; set; }
-
-    public bool UseOr3 { get; set; }
-
-    public bool UseOr4 { get; set; }
-
-    public bool UseStandardLogicIcs { get; set; } = true;
-
-    public bool UseDieArea { get; set; }
+    public MapToGatesDialogViewModel ViewModel { get; }
 
     private void StandardLogicToggle_OnClick(object? sender, RoutedEventArgs e)
     {
-        UseStandardLogicIcs = true;
-        UseDieArea = false;
-        StandardLogicToggle.IsChecked = true;
-        DieAreaToggle.IsChecked = false;
+        ViewModel.SelectStandardLogicIcs();
     }
 
     private void DieAreaToggle_OnClick(object? sender, RoutedEventArgs e)
     {
-        UseStandardLogicIcs = false;
-        UseDieArea = true;
-        StandardLogicToggle.IsChecked = false;
-        DieAreaToggle.IsChecked = true;
+        ViewModel.SelectDieArea();
     }
 
     private async void HelpButton_OnClick(object? sender, RoutedEventArgs e)
     {
-        await ShowMessageAsync("Map to Gates help is tracked by LogicFriday1-8j8.2.2.");
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = MappingHelpUrl,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            await ShowMessageAsync($"Map to Gates help could not be opened.\n{ex.Message}");
+        }
     }
 
     private void OkButton_OnClick(object? sender, RoutedEventArgs e)

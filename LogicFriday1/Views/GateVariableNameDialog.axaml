@@ -1,8 +1,8 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:views="using:LogicFriday1.Views"
+        xmlns:vm="using:LogicFriday1.ViewModels"
         x:Class="LogicFriday1.Views.GateVariableNameDialog"
-        x:DataType="views:GateVariableNameDialog"
+        x:DataType="vm:GateVariableNameDialogViewModel"
         Title="Variable Name"
         Width="340"
         Height="230"
@@ -29,9 +29,9 @@
                    FontFamily="Consolas"
                    Text="@   #   ^   &quot;   \  {   }" />
 
-        <TextBlock x:Name="ErrorTextBlock"
-                   Grid.Row="4"
+        <TextBlock Grid.Row="4"
                    Foreground="{DynamicResource LogicFriday.Brush.Error}"
+                   Text="{Binding ErrorText}"
                    TextWrapping="Wrap" />
 
         <Grid Grid.Row="5"

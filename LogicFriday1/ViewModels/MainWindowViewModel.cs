@@ -5,7 +5,7 @@ using LogicFriday1.Services;
 
 namespace LogicFriday1.ViewModels;
 
-public partial class MainWindowViewModel : ViewModelBase
+public partial class MainWindowViewModel : ObservableObject
 {
     private string[] _truthTableInputNames = [];
     private string[] _truthTableOutputNames = [];
