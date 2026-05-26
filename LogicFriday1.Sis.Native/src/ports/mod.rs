@@ -1,5 +1,7 @@
 pub mod command;
 pub mod decomp;
+pub mod espresso;
+pub mod extract;
 pub mod factor;
 pub mod gcd;
 pub mod genlib;
