@@ -1,3 +1,4 @@
+pub mod map;
 pub mod pld;
 pub mod power;
 pub mod resub;
