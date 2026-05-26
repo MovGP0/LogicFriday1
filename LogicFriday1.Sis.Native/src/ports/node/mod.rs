@@ -1,5 +1,19 @@
 pub mod cofct;
 pub mod collapse;
+pub mod com_node;
+pub mod cubehack;
+pub mod divide;
 pub mod fan;
+pub mod invert;
 pub mod iphase;
+pub mod libhack;
+pub mod names;
+#[allow(dead_code)]
 pub mod node;
+pub mod nodecheck;
+pub mod nodeindex;
+pub mod nodemisc;
+pub mod nodeutil;
+pub mod print;
+pub mod sethack;
+pub mod substitute;

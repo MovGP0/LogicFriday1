@@ -6,6 +6,8 @@ pub mod map;
 pub mod maxflow;
 pub mod network;
 pub mod node;
+pub mod ntbdd;
+pub mod octio;
 pub mod order;
 pub mod phase;
 pub mod pld;

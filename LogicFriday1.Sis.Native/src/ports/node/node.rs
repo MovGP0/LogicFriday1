@@ -4,6 +4,8 @@
 //! operations with owned Rust data. It deliberately exposes Rust APIs only;
 //! interop belongs at a higher integration boundary.
 
+#![allow(dead_code)]
+
 use std::error::Error;
 use std::fmt;
 
