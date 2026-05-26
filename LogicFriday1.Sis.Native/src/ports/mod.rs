@@ -1,6 +1,11 @@
 pub mod command;
 pub mod decomp;
 pub mod factor;
+pub mod graph;
+pub mod io;
+pub mod latch;
+pub mod linsolv;
+pub mod list;
 pub mod main;
 pub mod map;
 pub mod maxflow;
