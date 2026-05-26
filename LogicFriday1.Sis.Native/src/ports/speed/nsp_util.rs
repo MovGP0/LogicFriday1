@@ -3,7 +3,7 @@
 //! The C unit combines small timing/name/selection rules with large routines
 //! that mutate SIS `network_t` and `node_t` graphs. This module ports the
 //! rules that can be expressed over owned Rust data and reports explicit
-//! dependency errors for behavior still blocked on native SIS graph ports.
+//! graph API errors for behavior still blocked on native SIS graph ports.
 
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
@@ -16,7 +16,8 @@ pub const NSP_INPUT_SEPARATOR: char = '#';
 pub const NSP_OUTPUT_SEPARATOR: char = '%';
 pub const POS_LARGE: f64 = 10_000.0;
 pub const NEG_LARGE: f64 = -10_000.0;
-pub const V_SMALL: f64 = 1.0e-5;
+pub const V_SMALL: f64 = 1.0e-6;
+pub const NSP_EPSILON: f64 = 1.0e-6;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct DelayTime {
@@ -141,6 +142,29 @@ pub fn summarize_delay_data(outputs: &[OutputDelayData], total_gate_area: f64) -
     }
 
     summary
+}
+
+pub fn format_delay_data_summary(summary: &DelayDataSummary) -> String {
+    format!(
+        "# of outputs:          {}\n\
+total gate area:       {:.2}\n\
+maximum arrival time: ({:.2},{:.2})\n\
+maximum po slack:     ({:.2},{:.2})\n\
+minimum po slack:     ({:.2},{:.2})\n\
+total neg slack:      ({:.2},{:.2})\n\
+# of failing outputs:  {}\n",
+        summary.output_count,
+        summary.total_gate_area,
+        summary.maximum_arrival.rise,
+        summary.maximum_arrival.fall,
+        summary.maximum_output_slack.rise,
+        summary.maximum_output_slack.fall,
+        summary.minimum_output_slack.rise,
+        summary.minimum_output_slack.fall,
+        summary.total_negative_slack.rise,
+        summary.total_negative_slack.fall,
+        summary.failing_outputs
+    )
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -365,6 +389,27 @@ pub fn inactive_transform_names(transforms: &[LocalTransform]) -> Vec<&'static s
         .collect()
 }
 
+pub fn format_local_transforms(transforms: &[LocalTransform]) -> String {
+    let in_use = active_transform_names(transforms)
+        .into_iter()
+        .map(|name| format!("\"{name}\""))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let not_in_use = inactive_transform_names(transforms)
+        .into_iter()
+        .map(|name| format!("\"{name}\""))
+        .collect::<Vec<_>>()
+        .join(" ");
+
+    format!("Tech-Indep methods in use: {in_use}\nTech-Indep methods not in use: {not_in_use}\n")
+}
+
+pub fn is_fanout_primary_output(fanout_kinds: &[NodeKind]) -> bool {
+    fanout_kinds
+        .iter()
+        .any(|kind| *kind == NodeKind::PrimaryOutput)
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct OriginalEdgeName<'a> {
     pub fanout_name: &'a str,
@@ -474,6 +519,74 @@ pub fn min_required_input_time(inputs: &[RequiredInputTiming]) -> DelayTime {
         .fold(DelayTime::pos_large(), DelayTime::edge_min)
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct DelayValues {
+    pub arrival: DelayTime,
+    pub required: DelayTime,
+    pub slack: DelayTime,
+}
+
+pub fn new_delay_arrival(values: DelayValues) -> DelayTime {
+    values.arrival
+}
+
+pub fn new_delay_required(values: DelayValues) -> DelayTime {
+    values.required
+}
+
+pub fn new_delay_slack(values: DelayValues) -> DelayTime {
+    values.slack
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct LoadLimitInput {
+    pub current_pin_load: f64,
+    pub fanin_fanout_count: usize,
+    pub fanin_pin_drives: Vec<DelayTime>,
+    pub fanin_arrival: DelayTime,
+    pub original_wire_required: DelayTime,
+    pub sibling_wire_required: Vec<DelayTime>,
+}
+
+pub fn load_limit(input: &LoadLimitInput) -> Result<f64, NspUtilError> {
+    if input.fanin_fanout_count == 1 {
+        return Ok(input.current_pin_load * POS_LARGE);
+    }
+    if input.fanin_pin_drives.is_empty() {
+        return Err(NspUtilError::MissingFaninPinDrive);
+    }
+
+    let drive = input
+        .fanin_pin_drives
+        .iter()
+        .copied()
+        .fold(DelayTime::neg_large(), DelayTime::edge_max);
+    let original_slack = DelayTime::new(
+        input.original_wire_required.rise - input.fanin_arrival.rise,
+        input.original_wire_required.fall - input.fanin_arrival.fall,
+    );
+    let minimum_fanout_slack = input
+        .sibling_wire_required
+        .iter()
+        .map(|required| {
+            DelayTime::new(
+                required.rise - input.fanin_arrival.rise,
+                required.fall - input.fanin_arrival.fall,
+            )
+        })
+        .fold(DelayTime::pos_large(), DelayTime::edge_min);
+
+    let diff = minimum_fanout_slack.min_edge() - original_slack.min_edge();
+    let mut load = input.current_pin_load;
+    if diff > 0.0 {
+        load += diff / drive.max_edge();
+    } else {
+        load += NSP_EPSILON;
+    }
+
+    Ok(load)
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SplitFanoutsAction {
     SkipUnitDelayModel,
@@ -489,6 +602,59 @@ pub fn split_fanouts_action(model: DelayModel, root_fanout_count: usize) -> Spli
     } else {
         SplitFanoutsAction::EvaluateDuplication
     }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SplitFanoutsPlan {
+    pub action: SplitFanoutsAction,
+    pub best_index: Option<usize>,
+    pub duplicate_root: bool,
+    pub fanouts_moved_to_duplicate: Vec<usize>,
+}
+
+pub fn plan_split_fanouts(
+    model: DelayModel,
+    root_fanout_count: usize,
+    initial_required_time: DelayTime,
+    incremental_required_times: &[DelayTime],
+) -> SplitFanoutsPlan {
+    let action = split_fanouts_action(model, root_fanout_count);
+    if action != SplitFanoutsAction::EvaluateDuplication || incremental_required_times.is_empty() {
+        return SplitFanoutsPlan {
+            action,
+            best_index: None,
+            duplicate_root: false,
+            fanouts_moved_to_duplicate: Vec::new(),
+        };
+    }
+
+    let mut best = initial_required_time;
+    let mut best_index = None;
+    for (index, required) in incremental_required_times.iter().copied().enumerate() {
+        if req_improved(best, required) {
+            best = required;
+            best_index = Some(index);
+        }
+    }
+
+    if best_index == Some(incremental_required_times.len() - 1) {
+        best_index = None;
+    }
+
+    let fanouts_moved_to_duplicate = best_index
+        .map(|index| (0..=index).collect())
+        .unwrap_or_default();
+
+    SplitFanoutsPlan {
+        action,
+        best_index,
+        duplicate_root: best_index.is_some(),
+        fanouts_moved_to_duplicate,
+    }
+}
+
+pub fn req_improved(old: DelayTime, new: DelayTime) -> bool {
+    new.rise - old.rise > V_SMALL && new.fall - old.fall > V_SMALL
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -683,13 +849,14 @@ pub enum NspUtilError {
     MissingOutputSeparator(String),
     InvalidEdgeIndex(String),
     MissingCubeCount,
+    MissingFaninPinDrive,
 }
 
 impl fmt::Display for NspUtilError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::MissingSisPorts { operation } => {
-                write!(f, "{operation} is blocked by unported SIS dependencies")
+                write!(f, "{operation} is blocked by unported SIS graph APIs")
             }
             Self::MissingOutputSeparator(name) => {
                 write!(
@@ -699,6 +866,7 @@ impl fmt::Display for NspUtilError {
             }
             Self::InvalidEdgeIndex(index) => write!(f, "invalid edge fanin index {index}"),
             Self::MissingCubeCount => write!(f, "optimization plan requires collapsed cube count"),
+            Self::MissingFaninPinDrive => write!(f, "load limit requires at least one fanin drive"),
         }
     }
 }
@@ -786,6 +954,16 @@ mod tests {
                 failing_outputs: 2,
             }
         );
+        assert_eq!(
+            format_delay_data_summary(&summarize_delay_data(&outputs, 12.5)),
+            "# of outputs:          3\n\
+total gate area:       12.50\n\
+maximum arrival time: (5.00,7.00)\n\
+maximum po slack:     (2.00,3.00)\n\
+minimum po slack:     (-1.50,-2.00)\n\
+total neg slack:      (-1.50,-2.50)\n\
+# of failing outputs:  2\n"
+        );
     }
 
     #[test]
@@ -844,6 +1022,11 @@ mod tests {
             vec!["fanout", "duplicate", "bypass"]
         );
         assert_eq!(local_transform_from_index(&selected, 20), None);
+        assert_eq!(
+            format_local_transforms(&selected),
+            "Tech-Indep methods in use: \"fanout\" \"duplicate\" \"bypass\"\n\
+Tech-Indep methods not in use: \"noalg\" \"repower\" \"and_or\" \"divisor\" \"2c_kernel\" \"comp_div\" \"comp_2c\" \"cofactor\" \"dualize\"\n"
+        );
     }
 
     #[test]
@@ -932,6 +1115,78 @@ mod tests {
     }
 
     #[test]
+    fn delay_accessors_and_fanout_po_detection_are_direct_field_ports() {
+        let values = DelayValues {
+            arrival: DelayTime::new(1.0, 2.0),
+            required: DelayTime::new(3.0, 4.0),
+            slack: DelayTime::new(2.0, 2.0),
+        };
+
+        assert_eq!(new_delay_arrival(values), DelayTime::new(1.0, 2.0));
+        assert_eq!(new_delay_required(values), DelayTime::new(3.0, 4.0));
+        assert_eq!(new_delay_slack(values), DelayTime::new(2.0, 2.0));
+        assert!(is_fanout_primary_output(&[
+            NodeKind::Internal,
+            NodeKind::PrimaryOutput
+        ]));
+        assert!(!is_fanout_primary_output(&[
+            NodeKind::PrimaryInput,
+            NodeKind::Internal
+        ]));
+    }
+
+    #[test]
+    fn load_limit_matches_c_slack_and_drive_formula() {
+        assert_eq!(
+            load_limit(&LoadLimitInput {
+                current_pin_load: 2.5,
+                fanin_fanout_count: 1,
+                fanin_pin_drives: Vec::new(),
+                fanin_arrival: DelayTime::new(0.0, 0.0),
+                original_wire_required: DelayTime::new(0.0, 0.0),
+                sibling_wire_required: Vec::new(),
+            })
+            .unwrap(),
+            25_000.0
+        );
+
+        let limit = load_limit(&LoadLimitInput {
+            current_pin_load: 3.0,
+            fanin_fanout_count: 3,
+            fanin_pin_drives: vec![DelayTime::new(0.5, 2.0), DelayTime::new(1.5, 1.0)],
+            fanin_arrival: DelayTime::new(10.0, 20.0),
+            original_wire_required: DelayTime::new(15.0, 24.0),
+            sibling_wire_required: vec![DelayTime::new(20.0, 28.0), DelayTime::new(18.0, 27.0)],
+        })
+        .unwrap();
+        assert_close(limit, 4.5);
+
+        let limited = load_limit(&LoadLimitInput {
+            current_pin_load: 3.0,
+            fanin_fanout_count: 2,
+            fanin_pin_drives: vec![DelayTime::new(1.0, 1.0)],
+            fanin_arrival: DelayTime::new(10.0, 20.0),
+            original_wire_required: DelayTime::new(15.0, 24.0),
+            sibling_wire_required: vec![DelayTime::new(11.0, 21.0)],
+        })
+        .unwrap();
+        assert_close(limited, 3.0 + NSP_EPSILON);
+
+        assert_eq!(
+            load_limit(&LoadLimitInput {
+                current_pin_load: 3.0,
+                fanin_fanout_count: 2,
+                fanin_pin_drives: Vec::new(),
+                fanin_arrival: DelayTime::new(10.0, 20.0),
+                original_wire_required: DelayTime::new(15.0, 24.0),
+                sibling_wire_required: Vec::new(),
+            })
+            .unwrap_err(),
+            NspUtilError::MissingFaninPinDrive
+        );
+    }
+
+    #[test]
     fn fanout_patch_plan_preserves_c_reverse_patch_order() {
         assert_eq!(
             patch_fanouts_plan(&["fo1", "fo2", "fo3"], "new"),
@@ -954,6 +1209,46 @@ mod tests {
         assert_eq!(
             split_fanouts_action(DelayModel::Mapped, 3),
             SplitFanoutsAction::EvaluateDuplication
+        );
+        assert!(req_improved(
+            DelayTime::new(1.0, 1.0),
+            DelayTime::new(1.0 + V_SMALL * 2.0, 1.0 + V_SMALL * 2.0)
+        ));
+        assert!(!req_improved(
+            DelayTime::new(1.0, 1.0),
+            DelayTime::new(1.0 + V_SMALL * 2.0, 1.0)
+        ));
+        assert_eq!(
+            plan_split_fanouts(
+                DelayModel::Mapped,
+                4,
+                DelayTime::new(5.0, 5.0),
+                &[
+                    DelayTime::new(6.0, 6.0),
+                    DelayTime::new(6.5, 6.5),
+                    DelayTime::new(6.2, 5.0),
+                ]
+            ),
+            SplitFanoutsPlan {
+                action: SplitFanoutsAction::EvaluateDuplication,
+                best_index: Some(1),
+                duplicate_root: true,
+                fanouts_moved_to_duplicate: vec![0, 1],
+            }
+        );
+        assert_eq!(
+            plan_split_fanouts(
+                DelayModel::Mapped,
+                4,
+                DelayTime::new(5.0, 5.0),
+                &[DelayTime::new(5.0, 5.0), DelayTime::new(6.0, 6.0)]
+            ),
+            SplitFanoutsPlan {
+                action: SplitFanoutsAction::EvaluateDuplication,
+                best_index: None,
+                duplicate_root: false,
+                fanouts_moved_to_duplicate: Vec::new(),
+            }
         );
         assert!(cube_count_allows_decomposition(199));
         assert!(!cube_count_allows_decomposition(200));
@@ -1019,7 +1314,7 @@ mod tests {
     }
 
     #[test]
-    fn graph_bound_entry_points_report_missing_dependencies() {
+    fn graph_bound_entry_points_report_missing_graph_apis() {
         assert_eq!(
             optimize_sis_network(),
             Err(NspUtilError::MissingSisPorts {

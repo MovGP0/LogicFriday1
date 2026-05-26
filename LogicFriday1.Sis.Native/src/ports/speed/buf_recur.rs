@@ -1,12 +1,10 @@
-//! Native Rust planning port for `sis/speed/buf_recur.c`.
+﻿//! Native Rust planning port for `sis/speed/buf_recur.c`.
 //!
 //! The C module combines two concerns: selecting a recursive buffering
-//! transformation and mutating SIS nodes/networks to apply it.  The native
-//! Rust port keeps the feasible, testable part as a pure planner: fanout
-//! ordering, cumulative capacitance tables, required-time propagation, the
-//! unbalanced `trans3` cost search, recursive branch planning, and load-limit
-//! checks.  Direct SIS graph mutation is represented by explicit dependency
-//! errors until the node, network, delay, and library layers are native Rust.
+//! transformation and mutating SIS nodes/networks to apply it. The native Rust
+//! port represents that behavior as a pure plan: fanout ordering, cumulative
+//! capacitance tables, required-time propagation, the unbalanced `trans3` cost
+//! search, topology planning, recursive branch planning, and load-limit checks.
 
 use super::sp_buffer::{DelayTime, NEG_LARGE, POS_LARGE, V_SMALL};
 use std::cmp::Ordering;
@@ -150,6 +148,37 @@ pub struct Trans3Selection {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Trans3NodeKind {
+    RootGate,
+    ExistingInverter,
+    NewPositiveBuffer,
+    NewNegativeBuffer,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Trans3NodePlan {
+    pub kind: Trans3NodeKind,
+    pub implementation_index: usize,
+    pub fanout_ids: Vec<usize>,
+    pub required: DelayTime,
+    pub driven_load: f64,
+    pub input_load: f64,
+    pub max_load: f64,
+    pub violates_load_limit: bool,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Trans3TopologyPlan {
+    pub use_noninverting_buffers: bool,
+    pub reuses_existing_inverter_as_negative_buffer: bool,
+    pub root: Trans3NodePlan,
+    pub existing_inverter: Option<Trans3NodePlan>,
+    pub new_positive_buffer: Option<Trans3NodePlan>,
+    pub new_negative_buffer: Option<Trans3NodePlan>,
+    pub load_violation_count: usize,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RecursiveBranchKind {
     NewPositiveBuffer,
     NewNegativeBuffer,
@@ -172,6 +201,7 @@ pub enum BufferRecurAction {
     ReplaceSingleFanoutCell,
     UseUnbalancedTrans3 {
         selection: Trans3Selection,
+        topology: Trans3TopologyPlan,
         recursive_branches: Vec<RecursiveBranchPlan>,
     },
     TryBalancedDecomposition {
@@ -264,6 +294,17 @@ pub fn plan_buffer_recursion(input: &BufferRecurInput) -> Result<BufferRecurPlan
             if selection.met_target
                 || req_improved(selection.required_at_root_input, adjusted_original)
             {
+                if should_prefer_balanced_for_all_negative(input, &selection) {
+                    return Ok(BufferRecurPlan {
+                        action: BufferRecurAction::TryBalancedDecomposition {
+                            reason: BalancedFallbackReason::BetterForAllNegativeFanouts,
+                        },
+                        target,
+                        original_required_after_previous_drive: adjusted_original,
+                        cumulative_capacitance: Some(cumulative),
+                    });
+                }
+
                 if input.interactive
                     && !selection.met_target
                     && input.gate_versions.len() > selection.gate_index
@@ -284,9 +325,11 @@ pub fn plan_buffer_recursion(input: &BufferRecurInput) -> Result<BufferRecurPlan
                     target,
                     adjusted_original,
                 );
+                let topology = trans3_topology_for_selection(input, &sorted, &selection);
                 return Ok(BufferRecurPlan {
                     action: BufferRecurAction::UseUnbalancedTrans3 {
                         selection,
+                        topology,
                         recursive_branches: branches,
                     },
                     target,
@@ -298,6 +341,36 @@ pub fn plan_buffer_recursion(input: &BufferRecurInput) -> Result<BufferRecurPlan
     }
 
     balanced_or_duplication(input, target, adjusted_original, Some(cumulative))
+}
+
+fn should_prefer_balanced_for_all_negative(
+    input: &BufferRecurInput,
+    selection: &Trans3Selection,
+) -> bool {
+    if selection.met_target
+        || input.positive_count != 0
+        || selection.use_noninverting_buffers
+        || (input.mode & BALANCED_MASK) == 0
+    {
+        return false;
+    }
+
+    let gate = &input.gate_versions[selection.gate_index];
+    let inverter = &input.buffers[selection.inverter_index];
+    let big_b = &input.buffers[selection.big_b_index];
+    let adjusted_inverter = drive_adjustment(
+        gate.drive,
+        inverter.input_load + input.auto_route,
+        selection.required_inverter,
+    );
+    let adjusted_big_b = drive_adjustment(
+        gate.drive,
+        big_b.input_load + input.auto_route,
+        selection.required_big_b,
+    );
+
+    adjusted_inverter.rise - adjusted_big_b.rise < EPS
+        || adjusted_inverter.fall - adjusted_big_b.fall < EPS
 }
 
 fn balanced_or_duplication(
@@ -601,6 +674,176 @@ pub fn recursive_branches_for_selection(
     branches
 }
 
+pub fn trans3_topology_for_selection(
+    input: &BufferRecurInput,
+    sorted_fanouts: &[Fanout],
+    selection: &Trans3Selection,
+) -> Trans3TopologyPlan {
+    let num_pos = input.positive_count;
+    let num_neg = input.negative_count;
+    let old_pos = selection.positive_split;
+    let old_neg = selection.negative_split;
+    let use_noninverting_buffers = selection.use_noninverting_buffers;
+    let need_positive_buffer = old_pos != num_pos;
+    let negative_buffer_has_fanouts = old_neg != num_neg;
+    let need_negative_buffer =
+        negative_buffer_has_fanouts || (!use_noninverting_buffers && need_positive_buffer);
+    let reuses_existing_inverter_as_negative_buffer =
+        need_negative_buffer && !use_noninverting_buffers && old_neg == 0;
+    let mut load_violation_count = 0;
+
+    let positive_buffer = if need_positive_buffer {
+        let buffer = &input.buffers[selection.b_index];
+        let fanouts = &sorted_fanouts[old_pos..num_pos];
+        let driven_load = sum_load(fanouts);
+        let required = buffer.output_required_time(min_required(fanouts), driven_load);
+        let violates_load_limit = driven_load > buffer.max_load;
+        load_violation_count += usize::from(violates_load_limit);
+        Some(Trans3NodePlan {
+            kind: Trans3NodeKind::NewPositiveBuffer,
+            implementation_index: selection.b_index,
+            fanout_ids: fanout_ids(fanouts),
+            required,
+            driven_load,
+            input_load: buffer.input_load + input.auto_route,
+            max_load: buffer.max_load,
+            violates_load_limit,
+        })
+    } else {
+        None
+    };
+
+    let positive_buffer_input_load = positive_buffer.as_ref().map_or(0.0, |plan| plan.input_load);
+    let negative_buffer = if need_negative_buffer {
+        let buffer = &input.buffers[selection.big_b_index];
+        let fanouts = &sorted_fanouts[num_pos + old_neg..num_pos + num_neg];
+        let mut driven_load = sum_load(fanouts);
+        let mut required = if use_noninverting_buffers {
+            large_required_time()
+        } else {
+            positive_buffer
+                .as_ref()
+                .map_or(selection.required_b, |plan| plan.required)
+        };
+        if !use_noninverting_buffers {
+            driven_load += positive_buffer_input_load;
+        }
+        required = min_delay(required, min_required(fanouts));
+        required = buffer.output_required_time(required, driven_load);
+        let violates_load_limit = driven_load > buffer.max_load;
+        load_violation_count += usize::from(violates_load_limit);
+        Some(Trans3NodePlan {
+            kind: Trans3NodeKind::NewNegativeBuffer,
+            implementation_index: selection.big_b_index,
+            fanout_ids: fanout_ids(fanouts),
+            required,
+            driven_load,
+            input_load: buffer.input_load + input.auto_route,
+            max_load: buffer.max_load,
+            violates_load_limit,
+        })
+    } else {
+        None
+    };
+
+    let negative_buffer_input_load = negative_buffer.as_ref().map_or(0.0, |plan| plan.input_load);
+    let existing_inverter = if old_neg > 0 {
+        let inverter = &input.buffers[selection.inverter_index];
+        let fanouts = &sorted_fanouts[num_pos..num_pos + old_neg];
+        let mut driven_load = sum_load(fanouts);
+        if use_noninverting_buffers {
+            driven_load += negative_buffer_input_load;
+        }
+        let mut required = min_required(fanouts);
+        if use_noninverting_buffers {
+            required = min_delay(
+                required,
+                negative_buffer
+                    .as_ref()
+                    .map_or(large_required_time(), |plan| plan.required),
+            );
+        }
+        required = inverter.output_required_time(required, driven_load);
+        let violates_load_limit = driven_load > inverter.max_load;
+        load_violation_count += usize::from(violates_load_limit);
+        Some(Trans3NodePlan {
+            kind: Trans3NodeKind::ExistingInverter,
+            implementation_index: selection.inverter_index,
+            fanout_ids: fanout_ids(fanouts),
+            required,
+            driven_load,
+            input_load: inverter.input_load + input.auto_route,
+            max_load: inverter.max_load,
+            violates_load_limit,
+        })
+    } else {
+        None
+    };
+
+    let gate = &input.gate_versions[selection.gate_index];
+    let root_fanouts = &sorted_fanouts[..old_pos];
+    let mut root_load = sum_load(root_fanouts);
+    let mut root_required = min_required(root_fanouts);
+    if use_noninverting_buffers {
+        root_load += positive_buffer_input_load
+            + existing_inverter
+                .as_ref()
+                .map_or(0.0, |plan| plan.input_load);
+        root_required = min_delay(
+            root_required,
+            positive_buffer
+                .as_ref()
+                .map_or(large_required_time(), |plan| plan.required),
+        );
+        root_required = min_delay(
+            root_required,
+            existing_inverter
+                .as_ref()
+                .map_or(large_required_time(), |plan| plan.required),
+        );
+    } else {
+        root_load += negative_buffer_input_load
+            + existing_inverter
+                .as_ref()
+                .map_or(0.0, |plan| plan.input_load);
+        root_required = min_delay(
+            root_required,
+            negative_buffer
+                .as_ref()
+                .map_or(large_required_time(), |plan| plan.required),
+        );
+        root_required = min_delay(
+            root_required,
+            existing_inverter
+                .as_ref()
+                .map_or(large_required_time(), |plan| plan.required),
+        );
+    }
+    root_required = gate.output_required_time(root_required, root_load);
+    let root_violates_load_limit = root_load > gate.output_load_limit;
+    load_violation_count += usize::from(root_violates_load_limit);
+    let root = Trans3NodePlan {
+        kind: Trans3NodeKind::RootGate,
+        implementation_index: selection.gate_index,
+        fanout_ids: fanout_ids(root_fanouts),
+        required: root_required,
+        driven_load: root_load,
+        input_load: gate.input_load,
+        max_load: gate.output_load_limit,
+        violates_load_limit: root_violates_load_limit,
+    };
+
+    Trans3TopologyPlan {
+        use_noninverting_buffers,
+        reuses_existing_inverter_as_negative_buffer,
+        root,
+        existing_inverter,
+        new_positive_buffer: positive_buffer,
+        new_negative_buffer: negative_buffer,
+        load_violation_count,
+    }
+}
+
 pub fn sort_fanouts_like_sis(fanouts: &[Fanout]) -> Vec<Fanout> {
     let mut sorted = fanouts.to_vec();
     sorted.sort_by(compare_fanout);
@@ -746,14 +989,6 @@ pub fn load_constraint_met(node: Option<&AnnotatedLoad>) -> bool {
     }
 }
 
-pub fn sp_buffer_recur_network_bound<Network>(
-    _network: &mut Network,
-) -> Result<BufferRecurPlan, BufRecurError> {
-    Err(BufRecurError::MissingSisDependency {
-        operation: "sp_buffer_recur",
-    })
-}
-
 fn validate_input(input: &BufferRecurInput) -> Result<(), BufRecurError> {
     if input.positive_count + input.negative_count != input.fanouts.len() {
         return Err(BufRecurError::InvalidFanoutCounts {
@@ -838,6 +1073,14 @@ fn min_delay(left: DelayTime, right: DelayTime) -> DelayTime {
     DelayTime::new(left.rise.min(right.rise), left.fall.min(right.fall))
 }
 
+fn sum_load(fanouts: &[Fanout]) -> f64 {
+    fanouts.iter().map(|fanout| fanout.load).sum()
+}
+
+fn fanout_ids(fanouts: &[Fanout]) -> Vec<usize> {
+    fanouts.iter().map(|fanout| fanout.id).collect()
+}
+
 fn delay_difference(left: DelayTime, right: DelayTime) -> DelayTime {
     DelayTime::new(left.rise - right.rise, left.fall - right.fall)
 }
@@ -869,9 +1112,6 @@ pub enum BufRecurError {
     NoBuffers,
     NoGateVersions,
     NonFiniteDelayData,
-    MissingSisDependency {
-        operation: &'static str,
-    },
 }
 
 impl fmt::Display for BufRecurError {
@@ -906,10 +1146,6 @@ impl fmt::Display for BufRecurError {
             Self::NonFiniteDelayData => write!(
                 f,
                 "buffer recursion delay, load, and area data must be finite"
-            ),
-            Self::MissingSisDependency { operation } => write!(
-                f,
-                "{operation} requires native Rust SIS node/network/delay/library ports"
             ),
         }
     }
@@ -1089,6 +1325,7 @@ mod tests {
 
         let BufferRecurAction::UseUnbalancedTrans3 {
             selection,
+            topology,
             recursive_branches,
         } = plan.action
         else {
@@ -1096,11 +1333,11 @@ mod tests {
         };
 
         assert!(selection.met_target);
-        assert!(
-            recursive_branches
-                .iter()
-                .all(|branch| branch.req_diff.rise >= 0.0 && branch.req_diff.fall >= 0.0)
-        );
+        assert_eq!(topology.root.kind, Trans3NodeKind::RootGate);
+        assert_eq!(topology.root.implementation_index, selection.gate_index);
+        assert!(recursive_branches
+            .iter()
+            .all(|branch| branch.req_diff.rise >= 0.0 && branch.req_diff.fall >= 0.0));
     }
 
     #[test]
@@ -1132,7 +1369,41 @@ mod tests {
     }
 
     #[test]
-    fn load_constraint_and_dependency_errors_are_explicit() {
+    fn trans3_topology_tracks_loads_without_mutating_network() {
+        let input = base_input();
+        let sorted = input.sorted_fanouts();
+        let caps = cumulative_capacitance(
+            &sorted,
+            input.positive_count,
+            input.negative_count,
+            input.min_req_diff,
+        )
+        .unwrap();
+        let adjusted_original = drive_adjustment(
+            input.previous_drive,
+            input.original_load,
+            input.original_required,
+        );
+        let target = DelayTime::new(adjusted_original.rise + 1.0, adjusted_original.fall + 1.0);
+        let selection = select_unbalanced_trans3(&input, &sorted, &caps, adjusted_original, target)
+            .unwrap()
+            .unwrap();
+
+        let topology = trans3_topology_for_selection(&input, &sorted, &selection);
+
+        assert_eq!(topology.root.driven_load, selection.gate_output_load);
+        assert!(
+            topology.new_positive_buffer.is_some()
+                || selection.positive_split == input.positive_count
+        );
+        assert!(
+            topology.new_negative_buffer.is_some()
+                || selection.negative_split == input.negative_count
+        );
+    }
+
+    #[test]
+    fn load_constraint_checks_match_c_limit_rule() {
         assert!(load_constraint_met(None));
         assert!(load_constraint_met(Some(&AnnotatedLoad {
             implementation: LoadImplementation::None,
@@ -1146,13 +1417,5 @@ mod tests {
             implementation: LoadImplementation::Gate { max_load: 3.1 },
             load: 3.0,
         })));
-
-        let mut network = ();
-        assert_eq!(
-            sp_buffer_recur_network_bound(&mut network),
-            Err(BufRecurError::MissingSisDependency {
-                operation: "sp_buffer_recur",
-            })
-        );
     }
 }

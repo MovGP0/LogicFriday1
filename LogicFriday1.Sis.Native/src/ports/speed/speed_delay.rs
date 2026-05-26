@@ -1,11 +1,10 @@
 //! Native Rust model for feasible behavior in `sis/speed/speed_delay.c`.
 //!
-//! The original C file mixes delay arithmetic with direct `network_t`,
-//! `node_t`, delay-library, and mapped-library access. This module ports the
-//! arrival/slack decision rules into an owned Rust graph model and leaves the
-//! SIS-bound entry points as explicit dependency errors until those C files have
-//! native ports.
+//! The original C implementation mixes delay arithmetic with direct `network_t`,
+//! `node_t`, delay-library, and mapped-library access. This module exposes the
+//! same timing behavior through an owned Rust graph model.
 
+use std::collections::HashSet;
 use std::error::Error;
 use std::fmt;
 
@@ -273,7 +272,7 @@ pub enum SpeedDelayError {
     MissingFanin { node: NodeId, pin: usize },
     MissingPinDelay { node: NodeId, pin: usize },
     MissingPrimitiveDelay(PrimitiveFunction),
-    MissingSisPorts { operation: &'static str },
+    CycleDetected(NodeId),
 }
 
 impl fmt::Display for SpeedDelayError {
@@ -295,9 +294,7 @@ impl fmt::Display for SpeedDelayError {
                     function
                 )
             }
-            Self::MissingSisPorts { operation } => {
-                write!(f, "{operation} is blocked by unported SIS dependencies")
-            }
+            Self::CycleDetected(node) => write!(f, "cycle detected while visiting {:?}", node),
         }
     }
 }
@@ -415,7 +412,7 @@ pub fn delay_arrival_time(
 }
 
 pub fn set_arrival_time(node: &mut SpeedDelayNode, time: DelayTime) {
-    node.arrival = Some(time.clamp_negative_to_zero());
+    node.arrival = Some(time);
 }
 
 pub fn single_level_update(
@@ -447,16 +444,59 @@ pub fn reset_arrival_time(node: &mut SpeedDelayNode) {
     node.arrival = None;
 }
 
-pub fn update_fanout_from_sis_network() -> Result<(), SpeedDelayError> {
-    Err(SpeedDelayError::MissingSisPorts {
-        operation: "speed_update_fanout",
-    })
-}
+pub fn update_fanout(
+    network: &mut SpeedDelayNetwork,
+    nodevec: &[NodeId],
+    fanout_list: &[NodeId],
+    params: &SpeedDelayParams,
+) -> Result<Vec<NodeId>, SpeedDelayError> {
+    if fanout_list.is_empty() {
+        return Ok(Vec::new());
+    }
 
-pub fn delay_data_from_sis_library() -> Result<SpeedDelayParams, SpeedDelayError> {
-    Err(SpeedDelayError::MissingSisPorts {
-        operation: "speed_set_delay_data",
-    })
+    for node in nodevec.iter().chain(fanout_list) {
+        network.node(*node)?;
+    }
+
+    let mut candidate_nodes = HashSet::new();
+    for fanout in fanout_list {
+        candidate_nodes.insert(*fanout);
+        collect_transitive_fanins(network, *fanout, &mut candidate_nodes)?;
+    }
+
+    let fanouts = build_fanouts(network)?;
+    let mut affected_nodes = HashSet::new();
+    let mut work = Vec::new();
+    let mut cursor = 0;
+
+    for node in nodevec {
+        work.push(*node);
+    }
+
+    while cursor < work.len() {
+        let node = work[cursor];
+        cursor += 1;
+
+        if !candidate_nodes.contains(&node) {
+            continue;
+        }
+
+        affected_nodes.insert(node);
+        for fanout in &fanouts[node.0] {
+            if candidate_nodes.contains(fanout) && affected_nodes.insert(*fanout) {
+                work.push(*fanout);
+            }
+        }
+    }
+
+    let mut updated = Vec::new();
+    for node in network_dfs(network)? {
+        if affected_nodes.contains(&node) && single_level_update(network, node, params)?.is_some() {
+            updated.push(node);
+        }
+    }
+
+    Ok(updated)
 }
 
 pub fn delay_node_pin(
@@ -531,6 +571,73 @@ fn update_arrival_time_recur(
             Ok(delay)
         }
     }
+}
+
+fn build_fanouts(network: &SpeedDelayNetwork) -> Result<Vec<Vec<NodeId>>, SpeedDelayError> {
+    let mut fanouts = vec![Vec::new(); network.nodes.len()];
+    for (node_index, node) in network.nodes.iter().enumerate() {
+        let node_id = NodeId(node_index);
+        for fanin in &node.fanins {
+            network.node(fanin.node)?;
+            fanouts[fanin.node.0].push(node_id);
+        }
+    }
+    Ok(fanouts)
+}
+
+fn collect_transitive_fanins(
+    network: &SpeedDelayNetwork,
+    node: NodeId,
+    visited: &mut HashSet<NodeId>,
+) -> Result<(), SpeedDelayError> {
+    for fanin in &network.node(node)?.fanins {
+        if visited.insert(fanin.node) {
+            collect_transitive_fanins(network, fanin.node, visited)?;
+        }
+    }
+    Ok(())
+}
+
+fn network_dfs(network: &SpeedDelayNetwork) -> Result<Vec<NodeId>, SpeedDelayError> {
+    let mut order = Vec::with_capacity(network.nodes.len());
+    let mut temporary = HashSet::new();
+    let mut permanent = HashSet::new();
+
+    for index in 0..network.nodes.len() {
+        visit_network_dfs(
+            network,
+            NodeId(index),
+            &mut temporary,
+            &mut permanent,
+            &mut order,
+        )?;
+    }
+
+    Ok(order)
+}
+
+fn visit_network_dfs(
+    network: &SpeedDelayNetwork,
+    node: NodeId,
+    temporary: &mut HashSet<NodeId>,
+    permanent: &mut HashSet<NodeId>,
+    order: &mut Vec<NodeId>,
+) -> Result<(), SpeedDelayError> {
+    if permanent.contains(&node) {
+        return Ok(());
+    }
+    if !temporary.insert(node) {
+        return Err(SpeedDelayError::CycleDetected(node));
+    }
+
+    for fanin in &network.node(node)?.fanins {
+        visit_network_dfs(network, fanin.node, temporary, permanent, order)?;
+    }
+
+    temporary.remove(&node);
+    permanent.insert(node);
+    order.push(node);
+    Ok(())
 }
 
 fn merge_phase_arrival(
@@ -727,6 +834,86 @@ mod tests {
     }
 
     #[test]
+    fn set_arrival_time_keeps_negative_edges_like_original_routine() {
+        let mut node = SpeedDelayNode::new("n", NodeKind::Internal);
+
+        set_arrival_time(&mut node, DelayTime::new(-1.0, 3.0));
+
+        assert_eq!(node.arrival, Some(DelayTime::new(-1.0, 3.0)));
+    }
+
+    #[test]
+    fn update_fanout_recomputes_reachable_nodes_in_requested_cone() {
+        let mut network = SpeedDelayNetwork::new();
+        let a = network.add_node(pi("a", 1.0, 2.0));
+        let b = network.add_node(pi("b", 10.0, 20.0));
+        let n1 = network.add_node(internal(
+            "n1",
+            vec![FaninEdge {
+                node: a,
+                phase: InputPhase::PositiveUnate,
+            }],
+            vec![DelayTime::new(1.0, 1.0)],
+        ));
+        let n2 = network.add_node(internal(
+            "n2",
+            vec![FaninEdge {
+                node: n1,
+                phase: InputPhase::PositiveUnate,
+            }],
+            vec![DelayTime::new(2.0, 3.0)],
+        ));
+        let sibling = network.add_node(internal(
+            "sibling",
+            vec![FaninEdge {
+                node: b,
+                phase: InputPhase::PositiveUnate,
+            }],
+            vec![DelayTime::new(7.0, 8.0)],
+        ));
+        let mut out = SpeedDelayNode::new("out", NodeKind::PrimaryOutput);
+        out.fanins.push(FaninEdge {
+            node: n2,
+            phase: InputPhase::PositiveUnate,
+        });
+        let out = network.add_node(out);
+
+        set_arrival_time(network.node_mut(n1).unwrap(), DelayTime::new(50.0, 50.0));
+        set_arrival_time(network.node_mut(n2).unwrap(), DelayTime::new(60.0, 60.0));
+        set_arrival_time(
+            network.node_mut(sibling).unwrap(),
+            DelayTime::new(70.0, 70.0),
+        );
+
+        let updated = update_fanout(&mut network, &[n1, sibling], &[out], &params()).unwrap();
+
+        assert_eq!(updated, vec![n1, n2]);
+        assert_eq!(
+            network.node(n1).unwrap().arrival,
+            Some(DelayTime::new(2.0, 3.0))
+        );
+        assert_eq!(
+            network.node(n2).unwrap().arrival,
+            Some(DelayTime::new(4.0, 6.0))
+        );
+        assert_eq!(
+            network.node(sibling).unwrap().arrival,
+            Some(DelayTime::new(70.0, 70.0))
+        );
+    }
+
+    #[test]
+    fn update_fanout_returns_empty_when_no_fanouts_are_requested() {
+        let mut network = SpeedDelayNetwork::new();
+        let node = network.add_node(SpeedDelayNode::new("n", NodeKind::Internal));
+
+        assert_eq!(
+            update_fanout(&mut network, &[node], &[], &params()).unwrap(),
+            Vec::new()
+        );
+    }
+
+    #[test]
     fn set_delay_data_selects_lowest_area_primitives_and_pin_cap() {
         let mut params = SpeedDelayParams::new(DelayModel::Mapped);
         let library = SpeedPrimitiveLibrary::new(vec![
@@ -783,7 +970,7 @@ mod tests {
     }
 
     #[test]
-    fn missing_native_pin_delay_reports_dependency_beads() {
+    fn missing_native_pin_delay_reports_pin_location() {
         let mut network = SpeedDelayNetwork::new();
         let node = network.add_node(SpeedDelayNode::new("n", NodeKind::Internal));
 
@@ -794,18 +981,14 @@ mod tests {
     }
 
     #[test]
-    fn sis_bound_entry_points_report_blocking_ports() {
-        assert_eq!(
-            update_fanout_from_sis_network(),
-            Err(SpeedDelayError::MissingSisPorts {
-                operation: "speed_update_fanout",
-            })
-        );
-        assert_eq!(
-            delay_data_from_sis_library(),
-            Err(SpeedDelayError::MissingSisPorts {
-                operation: "speed_set_delay_data",
-            })
-        );
+    fn no_legacy_c_abi_or_tracking_tokens_are_present() {
+        let source = include_str!("speed_delay.rs");
+
+        assert!(!source.contains(&["no", "_mangle"].concat()));
+        assert!(!source.contains(&["extern", " \"", "C", "\""].concat()));
+        assert!(!source.contains(&["REQUIRED", "_"].concat()));
+        assert!(!source.contains(&["Port", "Dependency"].concat()));
+        assert!(!source.contains(&["source", "_file"].concat()));
+        assert!(!source.contains(&["be", "ad"].concat()));
     }
 }
