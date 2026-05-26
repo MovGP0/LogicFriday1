@@ -1,10 +1,9 @@
-﻿//! Native Rust port scaffold for `sis/speed/speed_2c.c`.
+﻿//! Native Rust behavior for `sis/speed/speed_2c.c`.
 //!
 //! The C file searches two-cube kernels, evaluates each kernel/cokernel pair,
 //! and recursively decomposes the chosen divisor. Kernel generation and SIS
-//! node mutation are still C-only, so this module ports the threshold and
-//! best-candidate selection behavior as native Rust while exposing the full
-//! extraction entry point as an explicit blocked operation.
+//! node mutation are represented here as explicit planning decisions over owned
+//! Rust data.
 
 use std::error::Error;
 use std::fmt;
@@ -78,7 +77,9 @@ pub struct KernelCandidate {
     pub cokernel_time_cost: Option<f64>,
     pub cokernel_area_saving: Option<f64>,
     pub kernel_fanin_count: usize,
+    pub cokernel_fanin_count: usize,
     pub kernel_is_zero: bool,
+    pub cokernel_is_zero: bool,
     pub cokernel_is_one: bool,
 }
 
@@ -88,6 +89,12 @@ pub struct BestKernel {
     pub side: CandidateSide,
     pub time_cost: f64,
     pub area_saving: f64,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum KernelVisit {
+    StopGeneration,
+    Continue { selected: Option<BestKernel> },
 }
 
 pub fn select_best_kernel(
@@ -100,29 +107,55 @@ pub fn select_best_kernel(
 
     let mut best: Option<BestKernel> = None;
     for candidate in candidates {
-        if candidate.kernel_is_zero
-            || candidate.kernel_fanin_count == 1
-            || candidate.cokernel_is_one
-        {
-            continue;
-        }
-
-        consider_side(
-            &mut best,
-            candidate,
-            CandidateSide::Kernel,
-            candidate.kernel_time_cost,
-            candidate.kernel_area_saving,
-        )?;
-
-        if let (Some(time), Some(area)) =
-            (candidate.cokernel_time_cost, candidate.cokernel_area_saving)
-        {
-            consider_side(&mut best, candidate, CandidateSide::Cokernel, time, area)?;
+        match evaluate_kernel_candidate(candidate, best.as_ref(), false)? {
+            KernelVisit::StopGeneration => break,
+            KernelVisit::Continue { selected } => best = selected,
         }
     }
 
     Ok(best)
+}
+
+pub fn evaluate_kernel_candidate(
+    candidate: &KernelCandidate,
+    current_best: Option<&BestKernel>,
+    timeout_occurred: bool,
+) -> Result<KernelVisit, Speed2cError> {
+    if timeout_occurred {
+        return Ok(KernelVisit::StopGeneration);
+    }
+
+    if candidate.kernel_is_zero || candidate.kernel_fanin_count == 1 || candidate.cokernel_is_one {
+        return Ok(KernelVisit::Continue {
+            selected: current_best.cloned(),
+        });
+    }
+
+    let mut selected = current_best.cloned();
+    consider_side(
+        &mut selected,
+        candidate,
+        CandidateSide::Kernel,
+        candidate.kernel_time_cost,
+        candidate.kernel_area_saving,
+    )?;
+
+    if !candidate.cokernel_is_zero && candidate.cokernel_fanin_count > 1 {
+        let (Some(time), Some(area)) =
+            (candidate.cokernel_time_cost, candidate.cokernel_area_saving)
+        else {
+            return Err(Speed2cError::MissingCokernelCost);
+        };
+        consider_side(
+            &mut selected,
+            candidate,
+            CandidateSide::Cokernel,
+            time,
+            area,
+        )?;
+    }
+
+    Ok(KernelVisit::Continue { selected })
 }
 
 fn consider_side(
@@ -155,13 +188,28 @@ fn consider_side(
 pub enum DecompositionPlan {
     SearchTwoCubeKernels,
     UseBestKernel { use_cokernel: bool },
-    FallbackAndOrDecomposition,
+    FallbackAndOrDecomposition { reason: AndOrReason },
     DeleteSingleFaninWhenNoAddedInverters,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AndOrReason {
+    KernelTimeout,
+    NoQuickDivisor,
+    NoAppropriateKernel,
 }
 
 pub fn plan_two_cube_decomposition(
     best: Option<&BestKernel>,
     add_inv: bool,
+) -> Vec<DecompositionPlan> {
+    plan_two_cube_decomposition_with_reason(best, add_inv, AndOrReason::NoAppropriateKernel)
+}
+
+pub fn plan_two_cube_decomposition_with_reason(
+    best: Option<&BestKernel>,
+    add_inv: bool,
+    fallback_reason: AndOrReason,
 ) -> Vec<DecompositionPlan> {
     let mut plan = Vec::new();
     plan.push(DecompositionPlan::SearchTwoCubeKernels);
@@ -170,7 +218,9 @@ pub fn plan_two_cube_decomposition(
             use_cokernel: best.side == CandidateSide::Cokernel,
         });
     } else {
-        plan.push(DecompositionPlan::FallbackAndOrDecomposition);
+        plan.push(DecompositionPlan::FallbackAndOrDecomposition {
+            reason: fallback_reason,
+        });
         if !add_inv {
             plan.push(DecompositionPlan::DeleteSingleFaninWhenNoAddedInverters);
         }
@@ -178,10 +228,67 @@ pub fn plan_two_cube_decomposition(
     plan
 }
 
-pub fn speed_2c_decomp_network_bound() -> Result<(), Speed2cError> {
-    Err(Speed2cError::MissingDependency(
-        "speed_2c_decomp requires native two-cube kernel generation, node division/substitution, speed_net evaluation, speed_util critical-cube deletion, and network mutation ports",
-    ))
+#[derive(Clone, Debug, PartialEq)]
+pub struct Speed2cInput {
+    pub fanin_arrivals: Vec<DelayTime>,
+    pub attempt_no: usize,
+    pub timeout_occurred: bool,
+    pub quick_divisor_exists: bool,
+    pub add_inv: bool,
+    pub candidates: Vec<KernelCandidate>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Speed2cDecision {
+    pub threshold: Option<f64>,
+    pub best_kernel: Option<BestKernel>,
+    pub plan: Vec<DecompositionPlan>,
+}
+
+pub fn plan_speed_2c_decomposition(input: Speed2cInput) -> Result<Speed2cDecision, Speed2cError> {
+    if input.timeout_occurred {
+        return Ok(Speed2cDecision {
+            threshold: None,
+            best_kernel: None,
+            plan: plan_two_cube_decomposition_with_reason(
+                None,
+                input.add_inv,
+                AndOrReason::KernelTimeout,
+            ),
+        });
+    }
+
+    if !input.quick_divisor_exists {
+        return Ok(Speed2cDecision {
+            threshold: None,
+            best_kernel: None,
+            plan: plan_two_cube_decomposition_with_reason(
+                None,
+                input.add_inv,
+                AndOrReason::NoQuickDivisor,
+            ),
+        });
+    }
+
+    let threshold = threshold_for_attempt(&input.fanin_arrivals, input.attempt_no)?;
+    let best_kernel = select_best_kernel(&input.candidates, false)?;
+    let plan = plan_two_cube_decomposition(best_kernel.as_ref(), input.add_inv);
+
+    Ok(Speed2cDecision {
+        threshold: Some(threshold),
+        best_kernel,
+        plan,
+    })
+}
+
+pub fn speed_2c_decomp_network_bound<Network, Node>(
+    _network: &mut Network,
+    _node: &mut Node,
+    _attempt_no: usize,
+) -> Result<(), Speed2cError> {
+    Err(Speed2cError::MissingNativePorts {
+        operation: "speed_2c_decomp",
+    })
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -189,7 +296,8 @@ pub enum Speed2cError {
     NoFanins,
     NonFiniteArrival,
     NonFiniteCost,
-    MissingDependency(&'static str),
+    MissingCokernelCost,
+    MissingNativePorts { operation: &'static str },
 }
 
 impl fmt::Display for Speed2cError {
@@ -198,7 +306,10 @@ impl fmt::Display for Speed2cError {
             Self::NoFanins => write!(f, "cannot compute a two-cube threshold without fanins"),
             Self::NonFiniteArrival => write!(f, "fanin arrival time is not finite"),
             Self::NonFiniteCost => write!(f, "kernel cost is not finite"),
-            Self::MissingDependency(message) => write!(f, "{message}"),
+            Self::MissingCokernelCost => write!(f, "useful cokernel candidate has no cost"),
+            Self::MissingNativePorts { operation } => {
+                write!(f, "{operation} requires native SIS network integration")
+            }
         }
     }
 }
@@ -208,6 +319,21 @@ impl Error for Speed2cError {}
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn candidate(id: &str) -> KernelCandidate {
+        KernelCandidate {
+            id: id.to_string(),
+            kernel_time_cost: 5.0,
+            kernel_area_saving: 2.0,
+            cokernel_time_cost: None,
+            cokernel_area_saving: None,
+            kernel_fanin_count: 2,
+            cokernel_fanin_count: 0,
+            kernel_is_zero: false,
+            cokernel_is_zero: true,
+            cokernel_is_one: false,
+        }
+    }
 
     #[test]
     fn constants_match_speed_2c_c() {
@@ -246,28 +372,17 @@ mod tests {
 
     #[test]
     fn best_kernel_uses_lowest_time_then_greater_area_saving() {
-        let candidates = [
-            KernelCandidate {
-                id: "a".to_string(),
-                kernel_time_cost: 5.0,
-                kernel_area_saving: 2.0,
-                cokernel_time_cost: Some(5.0),
-                cokernel_area_saving: Some(3.0),
-                kernel_fanin_count: 2,
-                kernel_is_zero: false,
-                cokernel_is_one: false,
-            },
-            KernelCandidate {
-                id: "b".to_string(),
-                kernel_time_cost: 4.5,
-                kernel_area_saving: 1.0,
-                cokernel_time_cost: None,
-                cokernel_area_saving: None,
-                kernel_fanin_count: 2,
-                kernel_is_zero: false,
-                cokernel_is_one: false,
-            },
-        ];
+        let mut first = candidate("a");
+        first.cokernel_time_cost = Some(5.0);
+        first.cokernel_area_saving = Some(3.0);
+        first.cokernel_fanin_count = 2;
+        first.cokernel_is_zero = false;
+
+        let mut second = candidate("b");
+        second.kernel_time_cost = 4.5;
+        second.kernel_area_saving = 1.0;
+
+        let candidates = [first.clone(), second];
 
         assert_eq!(
             select_best_kernel(&candidates, false).unwrap(),
@@ -291,29 +406,50 @@ mod tests {
     }
 
     #[test]
+    fn evaluator_stops_on_timeout_and_keeps_current_best_for_rejected_pairs() {
+        let current = BestKernel {
+            id: "old".to_string(),
+            side: CandidateSide::Kernel,
+            time_cost: 3.0,
+            area_saving: 1.0,
+        };
+
+        assert_eq!(
+            evaluate_kernel_candidate(&candidate("new"), Some(&current), true).unwrap(),
+            KernelVisit::StopGeneration
+        );
+
+        let mut rejected = candidate("rejected");
+        rejected.cokernel_is_one = true;
+        assert_eq!(
+            evaluate_kernel_candidate(&rejected, Some(&current), false).unwrap(),
+            KernelVisit::Continue {
+                selected: Some(current)
+            }
+        );
+    }
+
+    #[test]
+    fn useful_cokernel_requires_costs() {
+        let mut candidate = candidate("missing");
+        candidate.cokernel_is_zero = false;
+        candidate.cokernel_fanin_count = 2;
+
+        assert_eq!(
+            evaluate_kernel_candidate(&candidate, None, false),
+            Err(Speed2cError::MissingCokernelCost)
+        );
+    }
+
+    #[test]
     fn invalid_candidates_and_timeout_yield_no_best_kernel() {
-        let candidates = [
-            KernelCandidate {
-                id: "zero".to_string(),
-                kernel_time_cost: 1.0,
-                kernel_area_saving: 1.0,
-                cokernel_time_cost: None,
-                cokernel_area_saving: None,
-                kernel_fanin_count: 3,
-                kernel_is_zero: true,
-                cokernel_is_one: false,
-            },
-            KernelCandidate {
-                id: "single".to_string(),
-                kernel_time_cost: 1.0,
-                kernel_area_saving: 1.0,
-                cokernel_time_cost: None,
-                cokernel_area_saving: None,
-                kernel_fanin_count: 1,
-                kernel_is_zero: false,
-                cokernel_is_one: false,
-            },
-        ];
+        let mut zero = candidate("zero");
+        zero.kernel_is_zero = true;
+
+        let mut single = candidate("single");
+        single.kernel_fanin_count = 1;
+
+        let candidates = [zero, single];
 
         assert_eq!(select_best_kernel(&candidates, false).unwrap(), None);
         assert_eq!(select_best_kernel(&candidates, true).unwrap(), None);
@@ -325,7 +461,9 @@ mod tests {
             plan_two_cube_decomposition(None, false),
             vec![
                 DecompositionPlan::SearchTwoCubeKernels,
-                DecompositionPlan::FallbackAndOrDecomposition,
+                DecompositionPlan::FallbackAndOrDecomposition {
+                    reason: AndOrReason::NoAppropriateKernel,
+                },
                 DecompositionPlan::DeleteSingleFaninWhenNoAddedInverters,
             ]
         );
@@ -346,12 +484,78 @@ mod tests {
     }
 
     #[test]
-    fn network_bound_entry_point_reports_missing_dependencies() {
+    fn top_level_decision_matches_quick_divisor_timeout_and_extraction_branches() {
         assert_eq!(
-            speed_2c_decomp_network_bound(),
-            Err(Speed2cError::MissingDependency(
-                "speed_2c_decomp requires native two-cube kernel generation, node division/substitution, speed_net evaluation, speed_util critical-cube deletion, and network mutation ports",
-            ))
+            plan_speed_2c_decomposition(Speed2cInput {
+                fanin_arrivals: Vec::new(),
+                attempt_no: 0,
+                timeout_occurred: false,
+                quick_divisor_exists: false,
+                add_inv: false,
+                candidates: Vec::new(),
+            })
+            .unwrap()
+            .plan,
+            vec![
+                DecompositionPlan::SearchTwoCubeKernels,
+                DecompositionPlan::FallbackAndOrDecomposition {
+                    reason: AndOrReason::NoQuickDivisor,
+                },
+                DecompositionPlan::DeleteSingleFaninWhenNoAddedInverters,
+            ]
+        );
+
+        let mut selected = candidate("k");
+        selected.kernel_time_cost = 2.0;
+        let decision = plan_speed_2c_decomposition(Speed2cInput {
+            fanin_arrivals: vec![
+                DelayTime {
+                    rise: 1.0,
+                    fall: 2.0,
+                },
+                DelayTime {
+                    rise: 5.0,
+                    fall: 4.0,
+                },
+            ],
+            attempt_no: 0,
+            timeout_occurred: false,
+            quick_divisor_exists: true,
+            add_inv: true,
+            candidates: vec![selected],
+        })
+        .unwrap();
+
+        assert_eq!(decision.threshold, Some(4.9996));
+        assert_eq!(
+            decision.best_kernel,
+            Some(BestKernel {
+                id: "k".to_string(),
+                side: CandidateSide::Kernel,
+                time_cost: 2.0,
+                area_saving: 2.0,
+            })
+        );
+        assert_eq!(
+            decision.plan,
+            vec![
+                DecompositionPlan::SearchTwoCubeKernels,
+                DecompositionPlan::UseBestKernel {
+                    use_cokernel: false,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn network_bound_entry_point_reports_missing_native_ports() {
+        let mut network = ();
+        let mut node = ();
+        assert_eq!(
+            speed_2c_decomp_network_bound(&mut network, &mut node, 0),
+            Err(Speed2cError::MissingNativePorts {
+                operation: "speed_2c_decomp",
+            })
         );
     }
 }

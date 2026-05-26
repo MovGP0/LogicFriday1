@@ -103,6 +103,7 @@ impl SequentialNode {
 pub struct Latch {
     pub input: NodeId,
     pub output: NodeId,
+    pub control: Option<NodeId>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -421,6 +422,10 @@ impl SequentialNetwork {
         &self.latch_order
     }
 
+    pub fn latch_control(&self, latch: LatchId) -> Result<Option<NodeId>, NetSeqError> {
+        Ok(self.latch(latch)?.control)
+    }
+
     pub fn stg(&self) -> Option<&StateTransitionGraph> {
         self.stg.as_ref()
     }
@@ -494,6 +499,36 @@ impl SequentialNetwork {
         Ok(latch)
     }
 
+    pub fn set_latch_control(
+        &mut self,
+        latch_id: LatchId,
+        control: Option<NodeId>,
+    ) -> Result<(), NetSeqError> {
+        if let Some(control) = control {
+            self.require_kind(control, NodeKind::PrimaryOutput)?;
+            if self.network_latch_end(control)?.is_some() {
+                return Err(NetSeqError::AlreadyLatched(control));
+            }
+        }
+
+        if let Some(old_control) = self.latch(latch_id)?.control {
+            self.control_outputs.remove(&old_control);
+        }
+
+        let latch = self
+            .latches
+            .get_mut(latch_id.0)
+            .and_then(Option::as_mut)
+            .ok_or(NetSeqError::MissingLatch(latch_id))?;
+        latch.control = control;
+
+        if let Some(control) = control {
+            self.control_outputs.insert(control);
+        }
+
+        Ok(())
+    }
+
     pub fn disconnect(
         &mut self,
         node1: NodeId,
@@ -556,8 +591,8 @@ impl SequentialNetwork {
             });
         }
 
-        let real_inputs = self.real_primary_inputs().collect::<Vec<_>>();
-        let real_outputs = self.real_primary_outputs().collect::<Vec<_>>();
+        let real_inputs = self.stg_primary_inputs().collect::<Vec<_>>();
+        let real_outputs = self.stg_primary_outputs().collect::<Vec<_>>();
 
         for transition in &stg.transitions {
             let from_encoding = stg.state_encoding(&transition.from_state)?;
@@ -709,7 +744,11 @@ impl SequentialNetwork {
         }
 
         let latch_id = LatchId(self.latches.len());
-        self.latches.push(Some(Latch { input, output }));
+        self.latches.push(Some(Latch {
+            input,
+            output,
+            control: None,
+        }));
         self.latch_order.push(latch_id);
         self.latch_by_node.insert(input, latch_id);
         self.latch_by_node.insert(output, latch_id);
@@ -829,14 +868,21 @@ impl SequentialNetwork {
         Ok(!self.latch_by_node.contains_key(&node) && !self.control_outputs.contains(&node))
     }
 
-    fn real_primary_inputs(&self) -> impl Iterator<Item = NodeId> + '_ {
-        self.primary_inputs()
-            .filter(|node| self.is_real_pi(*node).unwrap_or(false))
-    }
-
     fn real_primary_outputs(&self) -> impl Iterator<Item = NodeId> + '_ {
         self.primary_outputs()
             .filter(|node| self.is_real_po(*node).unwrap_or(false))
+    }
+
+    fn stg_primary_inputs(&self) -> impl Iterator<Item = NodeId> + '_ {
+        self.primary_inputs()
+            .filter(|node| self.network_latch_end(*node).unwrap_or(None).is_none())
+            .filter(|node| self.get_control(*node).unwrap_or(None).is_none())
+    }
+
+    fn stg_primary_outputs(&self) -> impl Iterator<Item = NodeId> + '_ {
+        self.primary_outputs()
+            .filter(|node| self.network_latch_end(*node).unwrap_or(None).is_none())
+            .filter(|node| self.get_control(*node).unwrap_or(None).is_none())
     }
 
     fn require_vector_width(
@@ -1082,6 +1128,29 @@ mod tests {
         assert!(!network.is_real_po(control).unwrap());
         assert!(network.is_control(control).unwrap());
         assert_eq!(network.get_control(clock).unwrap(), Some(control));
+        assert_eq!(network.get_control(control).unwrap(), Some(control));
+    }
+
+    #[test]
+    fn latch_control_registration_marks_control_primary_output() {
+        let mut network = SequentialNetwork::new();
+        let state = network.add_primary_input("state");
+        let next = network.add_primary_output("next", state).unwrap();
+        let clock = network.add_primary_input("clock");
+        let control = network.add_primary_output("clock_po", clock).unwrap();
+        let latch = network.create_latch(next, state).unwrap();
+
+        network.set_latch_control(latch, Some(control)).unwrap();
+
+        assert_eq!(network.latch_control(latch).unwrap(), Some(control));
+        assert!(network.is_control(control).unwrap());
+        assert!(!network.is_real_po(control).unwrap());
+        assert_eq!(network.get_control(clock).unwrap(), Some(control));
+
+        network.set_latch_control(latch, None).unwrap();
+
+        assert_eq!(network.latch_control(latch).unwrap(), None);
+        assert!(!network.is_control(control).unwrap());
     }
 
     #[test]
@@ -1103,6 +1172,27 @@ mod tests {
         assert!(tfi.contains(&latch_input));
         assert!(tfi.contains(&next));
         assert!(tfi.contains(&input));
+    }
+
+    #[test]
+    fn stg_check_ignores_latch_control_source_inputs() {
+        let mut network = SequentialNetwork::new();
+        let data = network.add_primary_input("data");
+        let clock = network.add_primary_input("clock");
+        let state = network.add_primary_input("state");
+        let latch_input = network.add_primary_output("next", data).unwrap();
+        let control = network.add_primary_output("clock_po", clock).unwrap();
+        network.add_primary_output("out", state).unwrap();
+        let latch = network.create_latch(latch_input, state).unwrap();
+        network.set_latch_control(latch, Some(control)).unwrap();
+
+        let mut stg = StateTransitionGraph::new("S0");
+        stg.add_state("S0", Some("0"));
+        stg.add_state("S1", Some("1"));
+        stg.add_transition("S0", "S1", "1", "0");
+        network.set_stg(stg);
+
+        assert_eq!(network.stg_check().unwrap(), true);
     }
 
     #[test]

@@ -6,9 +6,9 @@
 //! by level while keeping the packed cube literal bits aligned.
 //!
 //! This module ports the independent data and algorithmic behavior into a
-//! small Rust graph model. Binding directly to SIS `network_t`, `node_t`, and
-//! `latch_t` remains blocked until those native ports exist, so the legacy
-//! entry points are represented as explicit errors instead of C ABI exports.
+//! small Rust graph model. Binding directly to the native SIS graph model is
+//! intentionally left as an operation-level integration error instead of a C
+//! ABI export.
 
 use std::collections::{HashSet, VecDeque};
 use std::error::Error;
@@ -20,29 +20,26 @@ pub const BARRAY_LEN: usize = 16;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum LevelPortDisposition {
-    BlockedByUnportedNetworkNodeAndLatchApis,
+    BlockedByNativeSisGraphIntegration,
 }
 
 pub fn level_port_disposition() -> LevelPortDisposition {
-    LevelPortDisposition::BlockedByUnportedNetworkNodeAndLatchApis
+    LevelPortDisposition::BlockedByNativeSisGraphIntegration
 }
 
 pub fn level_port_is_blocked() -> bool {
-    level_port_disposition() == LevelPortDisposition::BlockedByUnportedNetworkNodeAndLatchApis
+    level_port_disposition() == LevelPortDisposition::BlockedByNativeSisGraphIntegration
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum LevelDependency {
-    NetworkPort,
-    NodePort,
-    LatchPort,
-    SenumMainPort,
-    EnumeratePort,
+pub enum LevelOperation {
+    LevelCircuit,
+    RearrangeGateInputs,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum LevelError {
-    MissingDependency(LevelDependency),
+    MissingNativeIntegration { operation: LevelOperation },
     UnknownNode { node: usize },
     UnknownFanin { node: usize, fanin: usize },
     NonInputLatchEndpoint { node: usize, latch_end: usize },
@@ -51,28 +48,19 @@ pub enum LevelError {
 }
 
 impl LevelError {
-    pub const fn missing(dependency: LevelDependency) -> Self {
-        Self::MissingDependency(dependency)
+    pub const fn missing_native_integration(operation: LevelOperation) -> Self {
+        Self::MissingNativeIntegration { operation }
     }
 }
 
 impl fmt::Display for LevelError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingDependency(LevelDependency::NetworkPort) => {
-                write!(f, "SIS network APIs are not ported to Rust yet")
-            }
-            Self::MissingDependency(LevelDependency::NodePort) => {
-                write!(f, "SIS node APIs are not ported to Rust yet")
-            }
-            Self::MissingDependency(LevelDependency::LatchPort) => {
-                write!(f, "SIS latch APIs are not ported to Rust yet")
-            }
-            Self::MissingDependency(LevelDependency::SenumMainPort) => {
-                write!(f, "SIS STG enumeration globals are not ported to Rust yet")
-            }
-            Self::MissingDependency(LevelDependency::EnumeratePort) => {
-                write!(f, "SIS STG enumerate helpers are not ported to Rust yet")
+            Self::MissingNativeIntegration { operation } => {
+                write!(
+                    f,
+                    "{operation:?} requires native SIS graph integration before it can run"
+                )
             }
             Self::UnknownNode { node } => write!(f, "unknown node id {node}"),
             Self::UnknownFanin { node, fanin } => {
@@ -97,11 +85,15 @@ impl fmt::Display for LevelError {
 impl Error for LevelError {}
 
 pub fn level_circuit() -> Result<(), LevelError> {
-    Err(LevelError::missing(LevelDependency::NetworkPort))
+    Err(LevelError::missing_native_integration(
+        LevelOperation::LevelCircuit,
+    ))
 }
 
 pub fn rearrange_gate_inputs() -> Result<(), LevelError> {
-    Err(LevelError::missing(LevelDependency::NodePort))
+    Err(LevelError::missing_native_integration(
+        LevelOperation::RearrangeGateInputs,
+    ))
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -650,15 +642,19 @@ mod tests {
     }
 
     #[test]
-    fn scaffold_reports_missing_native_prerequisites() {
+    fn scaffold_reports_missing_native_integration() {
         assert!(level_port_is_blocked());
         assert_eq!(
             level_circuit(),
-            Err(LevelError::MissingDependency(LevelDependency::NetworkPort))
+            Err(LevelError::MissingNativeIntegration {
+                operation: LevelOperation::LevelCircuit,
+            })
         );
         assert_eq!(
             rearrange_gate_inputs(),
-            Err(LevelError::MissingDependency(LevelDependency::NodePort))
+            Err(LevelError::MissingNativeIntegration {
+                operation: LevelOperation::RearrangeGateInputs,
+            })
         );
     }
 }

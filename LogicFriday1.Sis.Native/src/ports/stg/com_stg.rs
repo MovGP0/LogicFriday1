@@ -2,13 +2,23 @@
 //!
 //! The C file is mostly SIS command plumbing around STG extraction, external
 //! state assignment/minimization tools, Espresso-based STG-to-network
-//! conversion, and clock/network mutation. This module ports the command option
-//! models plus independent STG formatting/encoding behavior. Operations that
-//! still require SIS `network_t`, command registration, PLA/KISS readers, latch
-//! wiring, or Espresso integration report generic missing-dependency errors.
+//! conversion, and clock/network mutation. This module keeps command parsing in
+//! Rust and implements the native STG data transforms that do not require the
+//! legacy SIS command shell.
 
 use std::error::Error;
 use std::fmt;
+
+use crate::ports::io::read_kiss::{
+    KissReadError, KissStateGraph as ReadKissStateGraph, read_kiss_graph,
+};
+use crate::ports::io::write_kiss::{
+    KissStateGraph as WriteKissStateGraph, KissStateId as WriteKissStateId, WriteKissError,
+    write_kiss_to_string,
+};
+use crate::ports::network::net_seq::{
+    BoolExpr, NetSeqError, NodeId, SequentialNetwork, StateTransitionGraph,
+};
 
 use super::stg::{StateId, Stg, StgError};
 
@@ -26,20 +36,6 @@ pub const STG_EXTRACT_USAGE: &str = concat!(
 pub const STG_TO_NETWORK_USAGE: &str = "usage: stg_to_network [-e option]\n";
 pub const STATE_ASSIGN_USAGE: &str = "usage: state_assign program_name options\n";
 pub const STATE_MINIMIZE_USAGE: &str = "usage: state_mininimize program_name options\n";
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum ComStgPortDisposition {
-    BlockedByUnportedCommandNetworkIoAndEspressoApis,
-}
-
-pub fn com_stg_port_disposition() -> ComStgPortDisposition {
-    ComStgPortDisposition::BlockedByUnportedCommandNetworkIoAndEspressoApis
-}
-
-pub fn com_stg_port_is_blocked() -> bool {
-    com_stg_port_disposition()
-        == ComStgPortDisposition::BlockedByUnportedCommandNetworkIoAndEspressoApis
-}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum StgCommandKind {
@@ -157,6 +153,13 @@ pub enum EspressoMode {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NativeStgNetwork {
+    pub network: SequentialNetwork,
+    pub encoded_pla: String,
+    pub minimized: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ExternalStateToolInvocation {
     pub program: String,
     pub options: Vec<String>,
@@ -200,7 +203,12 @@ pub enum ComStgError {
     MissingStartState,
     MissingStartEncoding,
     MissingStateEncoding { state: StateId },
+    InvalidStateEncodingBit { state: StateId, bit: char },
+    InvalidTransitionOutputBit { bit: char },
     StgModel(StgError),
+    KissRead(KissReadError),
+    KissWrite(String),
+    SequentialNetwork(NetSeqError),
     Blocked { command: StgCommandKind },
 }
 
@@ -233,9 +241,18 @@ impl fmt::Display for ComStgError {
             Self::MissingStateEncoding { state } => {
                 write!(f, "STG state {:?} has no encoding", state)
             }
+            Self::InvalidStateEncodingBit { state, bit } => {
+                write!(f, "STG state {:?} has invalid encoding bit {bit:?}", state)
+            }
+            Self::InvalidTransitionOutputBit { bit } => {
+                write!(f, "STG transition has invalid output bit {bit:?}")
+            }
             Self::StgModel(error) => write!(f, "{error}"),
+            Self::KissRead(error) => write!(f, "{error}"),
+            Self::KissWrite(error) => write!(f, "{error}"),
+            Self::SequentialNetwork(error) => write!(f, "{error}"),
             Self::Blocked { command } => {
-                write!(f, "{command:?} is blocked by unported SIS dependencies")
+                write!(f, "{command:?} requires SIS command integration")
             }
         }
     }
@@ -246,6 +263,24 @@ impl Error for ComStgError {}
 impl From<StgError> for ComStgError {
     fn from(value: StgError) -> Self {
         Self::StgModel(value)
+    }
+}
+
+impl From<KissReadError> for ComStgError {
+    fn from(value: KissReadError) -> Self {
+        Self::KissRead(value)
+    }
+}
+
+impl From<WriteKissError> for ComStgError {
+    fn from(value: WriteKissError) -> Self {
+        Self::KissWrite(value.to_string())
+    }
+}
+
+impl From<NetSeqError> for ComStgError {
+    fn from(value: NetSeqError) -> Self {
+        Self::SequentialNetwork(value)
     }
 }
 
@@ -335,8 +370,18 @@ where
     Ok(options)
 }
 
-pub fn stg_to_network(_stg: &Stg, _options: StgToNetworkOptions) -> Result<(), ComStgError> {
-    Err(blocked(StgCommandKind::StgToNetwork))
+pub fn stg_to_network(
+    stg: &Stg,
+    options: StgToNetworkOptions,
+) -> Result<NativeStgNetwork, ComStgError> {
+    let encoded_pla = write_encoded_espresso_format(stg)?;
+    let network = synthesize_sequential_network_from_stg(stg)?;
+
+    Ok(NativeStgNetwork {
+        network,
+        encoded_pla,
+        minimized: options.encoding_option == 2,
+    })
 }
 
 pub fn parse_state_assign_args<I, S>(args: I) -> Result<ExternalStateToolInvocation, ComStgError>
@@ -367,8 +412,9 @@ pub fn stg_cover() -> Result<(), ComStgError> {
     Err(blocked(StgCommandKind::StgCover))
 }
 
-pub fn one_hot(_stg: &mut Stg) -> Result<(), ComStgError> {
-    Err(blocked(StgCommandKind::OneHot))
+pub fn one_hot(stg: &mut Stg) -> Result<NativeStgNetwork, ComStgError> {
+    assign_one_hot_encodings(stg)?;
+    stg_to_network(stg, StgToNetworkOptions { encoding_option: 0 })
 }
 
 pub fn stg_dump_graph() -> Result<(), ComStgError> {
@@ -388,6 +434,36 @@ pub fn assign_one_hot_encodings(stg: &mut Stg) -> Result<Vec<String>, ComStgErro
         encodings.push(code);
     }
     Ok(encodings)
+}
+
+pub fn stg_to_kiss_graph(stg: &Stg) -> Result<WriteKissStateGraph, ComStgError> {
+    let mut graph = WriteKissStateGraph::new(stg.num_inputs(), stg.num_outputs());
+    for state_index in 0..stg.num_states() {
+        graph.add_state(state_display_name(stg, StateId(state_index)));
+    }
+
+    let start = stg.start().ok_or(ComStgError::MissingStartState)?;
+    graph.set_start(WriteKissStateId(start.0))?;
+
+    for transition in stg.transitions() {
+        graph.add_transition(
+            WriteKissStateId(transition.from.0),
+            WriteKissStateId(transition.to.0),
+            transition.input.clone(),
+            transition.output.clone(),
+        )?;
+    }
+
+    Ok(graph)
+}
+
+pub fn write_stg_kiss(stg: &Stg) -> Result<String, ComStgError> {
+    let graph = stg_to_kiss_graph(stg)?;
+    Ok(write_kiss_to_string(&graph)?)
+}
+
+pub fn read_kiss_stg(input: &str) -> Result<Stg, ComStgError> {
+    kiss_graph_to_stg(&read_kiss_graph(input)?)
 }
 
 pub fn write_encoded_espresso_format(stg: &Stg) -> Result<String, ComStgError> {
@@ -422,6 +498,204 @@ pub fn write_encoded_espresso_format(stg: &Stg) -> Result<String, ComStgError> {
 
     output.push_str(".e\n");
     Ok(output)
+}
+
+fn synthesize_sequential_network_from_stg(stg: &Stg) -> Result<SequentialNetwork, ComStgError> {
+    let start = stg.start().ok_or(ComStgError::MissingStartState)?;
+    let state_bits = stg
+        .state_encoding(start)
+        .ok_or(ComStgError::MissingStartEncoding)?
+        .chars()
+        .count();
+    validate_state_encodings(stg, state_bits)?;
+
+    let mut network = SequentialNetwork::new();
+    let mut input_nodes = Vec::with_capacity(stg.num_inputs() + state_bits);
+
+    for name in signal_names(stg.input_names(), "i", stg.num_inputs()) {
+        input_nodes.push(network.add_primary_input(name));
+    }
+
+    let mut state_inputs = Vec::with_capacity(state_bits);
+    for bit in 0..state_bits {
+        let node = network.add_primary_input(format!("ps{bit}"));
+        input_nodes.push(node);
+        state_inputs.push(node);
+    }
+
+    let output_names = signal_names(stg.output_names(), "o", stg.num_outputs());
+    for output_index in 0..stg.num_outputs() {
+        let name = output_names
+            .get(output_index)
+            .cloned()
+            .unwrap_or_else(|| format!("o{output_index}"));
+        add_output_function(&mut network, stg, &input_nodes, output_index, name)?;
+    }
+
+    for state_bit in 0..state_bits {
+        let output_index = stg.num_outputs() + state_bit;
+        let driver = add_output_function(
+            &mut network,
+            stg,
+            &input_nodes,
+            output_index,
+            format!("ns{state_bit}"),
+        )?;
+        network.create_latch(driver, state_inputs[state_bit])?;
+    }
+
+    network.set_stg(stg_to_sequential_stg(stg)?);
+    Ok(network)
+}
+
+fn add_output_function(
+    network: &mut SequentialNetwork,
+    stg: &Stg,
+    input_nodes: &[NodeId],
+    output_index: usize,
+    output_name: String,
+) -> Result<NodeId, ComStgError> {
+    let mut terms = Vec::new();
+    for transition in stg.transitions() {
+        let to_encoding =
+            stg.state_encoding(transition.to)
+                .ok_or(ComStgError::MissingStateEncoding {
+                    state: transition.to,
+                })?;
+        let bit = transition_output_bit(transition.output.as_str(), to_encoding, output_index)?;
+        match bit {
+            '1' => {
+                let from_encoding = stg.state_encoding(transition.from).ok_or(
+                    ComStgError::MissingStateEncoding {
+                        state: transition.from,
+                    },
+                )?;
+                terms.push(cube_expression(
+                    input_nodes,
+                    &format!("{}{}", transition.input, from_encoding),
+                ));
+            }
+            '0' | '-' => {}
+            value => return Err(ComStgError::InvalidTransitionOutputBit { bit: value }),
+        }
+    }
+
+    let expression = or_expression(terms);
+    let fanins = input_nodes.to_vec();
+    let internal = network.add_internal(format!("{output_name}_logic"), fanins, expression)?;
+    Ok(network.add_primary_output(output_name, internal)?)
+}
+
+fn cube_expression(inputs: &[NodeId], pattern: &str) -> BoolExpr {
+    let mut terms = Vec::new();
+    for (node, bit) in inputs.iter().copied().zip(pattern.chars()) {
+        match bit {
+            '0' => terms.push(BoolExpr::Not(Box::new(BoolExpr::literal(node)))),
+            '1' => terms.push(BoolExpr::literal(node)),
+            '-' | '2' => {}
+            _ => {}
+        }
+    }
+
+    match terms.len() {
+        0 => BoolExpr::Constant(true),
+        1 => terms.remove(0),
+        _ => BoolExpr::And(terms),
+    }
+}
+
+fn or_expression(mut terms: Vec<BoolExpr>) -> BoolExpr {
+    match terms.len() {
+        0 => BoolExpr::Constant(false),
+        1 => terms.remove(0),
+        _ => BoolExpr::Or(terms),
+    }
+}
+
+fn transition_output_bit(
+    output: &str,
+    to_encoding: &str,
+    index: usize,
+) -> Result<char, ComStgError> {
+    output
+        .chars()
+        .chain(to_encoding.chars())
+        .nth(index)
+        .ok_or(ComStgError::InvalidTransitionOutputBit { bit: '\0' })
+}
+
+fn validate_state_encodings(stg: &Stg, state_bits: usize) -> Result<(), ComStgError> {
+    for state_index in 0..stg.num_states() {
+        let state = StateId(state_index);
+        let encoding = stg
+            .state_encoding(state)
+            .ok_or(ComStgError::MissingStateEncoding { state })?;
+        for bit in encoding.chars() {
+            if bit != '0' && bit != '1' {
+                return Err(ComStgError::InvalidStateEncodingBit { state, bit });
+            }
+        }
+        if encoding.chars().count() != state_bits {
+            return Err(ComStgError::MissingStateEncoding { state });
+        }
+    }
+
+    Ok(())
+}
+
+fn stg_to_sequential_stg(stg: &Stg) -> Result<StateTransitionGraph, ComStgError> {
+    let start = stg.start().ok_or(ComStgError::MissingStartState)?;
+    let mut graph = StateTransitionGraph::new(state_display_name(stg, start));
+
+    for state_index in 0..stg.num_states() {
+        let state = StateId(state_index);
+        graph.add_state(
+            state_display_name(stg, state),
+            stg.state_encoding(state).map(str::to_owned),
+        );
+    }
+
+    for transition in stg.transitions() {
+        graph.add_transition(
+            state_display_name(stg, transition.from),
+            state_display_name(stg, transition.to),
+            transition.input.clone(),
+            transition.output.clone(),
+        );
+    }
+
+    Ok(graph)
+}
+
+fn kiss_graph_to_stg(graph: &ReadKissStateGraph) -> Result<Stg, ComStgError> {
+    let mut stg = Stg::with_dimensions(graph.input_count(), graph.output_count());
+    for state in graph.states() {
+        stg.create_state(Some(state.name.clone()), None::<String>);
+    }
+    stg.set_start(StateId(graph.start().0))?;
+    stg.set_current(StateId(graph.current().0))?;
+    for transition in graph.transitions() {
+        stg.create_transition(
+            StateId(transition.from.0),
+            StateId(transition.to.0),
+            transition.input.clone(),
+            transition.output.clone(),
+        )?;
+    }
+    Ok(stg)
+}
+
+fn state_display_name(stg: &Stg, state: StateId) -> String {
+    stg.state_name(state)
+        .map(str::to_owned)
+        .unwrap_or_else(|| format!("s{}", state.0))
+}
+
+fn signal_names(names: Option<&[String]>, prefix: &str, count: usize) -> Vec<String> {
+    names
+        .filter(|names| names.len() == count)
+        .map(|names| names.to_vec())
+        .unwrap_or_else(|| (0..count).map(|index| format!("{prefix}{index}")).collect())
 }
 
 fn parse_external_state_tool_args<I, S>(
@@ -651,7 +925,62 @@ mod tests {
     }
 
     #[test]
-    fn reports_missing_encoding_and_generic_blocked_error() {
+    fn synthesizes_native_sequential_network_from_encoded_stg() {
+        let mut stg = Stg::with_dimensions(1, 1);
+        stg.set_input_names(Some(vec!["x".to_owned()]));
+        stg.set_output_names(Some(vec!["z".to_owned()]));
+        let s0 = stg.create_state(Some("s0"), Some("0"));
+        let s1 = stg.create_state(Some("s1"), Some("1"));
+        stg.set_start(s0).unwrap();
+        stg.create_transition(s0, s1, "1", "0").unwrap();
+        stg.create_transition(s1, s0, "0", "1").unwrap();
+
+        let result = stg_to_network(&stg, StgToNetworkOptions::default()).unwrap();
+
+        assert_eq!(
+            result.encoded_pla,
+            ".type fr\n.i 2\n.o 2\n1 0 1 0\n0 1 0 1\n.e\n"
+        );
+        assert_eq!(result.network.primary_inputs().count(), 2);
+        assert_eq!(result.network.primary_outputs().count(), 2);
+        assert_eq!(result.network.latch_order().len(), 1);
+        assert!(result.network.stg().is_some());
+    }
+
+    #[test]
+    fn one_hot_assigns_encodings_and_synthesizes_network() {
+        let mut stg = Stg::with_dimensions(1, 1);
+        let s0 = stg.create_state(Some("s0"), Some("old"));
+        let s1 = stg.create_state(Some("s1"), Some("old"));
+        stg.set_start(s0).unwrap();
+        stg.create_transition(s0, s1, "1", "0").unwrap();
+        stg.create_transition(s1, s0, "0", "1").unwrap();
+
+        let result = one_hot(&mut stg).unwrap();
+
+        assert_eq!(stg.state_encoding(s0), Some("10"));
+        assert_eq!(stg.state_encoding(s1), Some("01"));
+        assert_eq!(result.network.latch_order().len(), 2);
+    }
+
+    #[test]
+    fn converts_stg_to_and_from_kiss_text() {
+        let mut stg = Stg::with_dimensions(1, 1);
+        let s0 = stg.create_state(Some("s0"), Some("0"));
+        let s1 = stg.create_state(Some("s1"), Some("1"));
+        stg.set_start(s0).unwrap();
+        stg.create_transition(s0, s1, "1", "0").unwrap();
+
+        let kiss = write_stg_kiss(&stg).unwrap();
+        let round_trip = read_kiss_stg(&kiss).unwrap();
+
+        assert_eq!(kiss, ".i 1\n.o 1\n.p 1\n.s 2\n.r s0\n1 s0 s1 0\n");
+        assert_eq!(round_trip.num_states(), 2);
+        assert_eq!(round_trip.state_name(StateId(1)), Some("s1"));
+    }
+
+    #[test]
+    fn reports_missing_encoding_and_remaining_blocked_error() {
         let mut stg = Stg::with_dimensions(1, 1);
         let s0 = stg.create_state(Some("s0"), None::<String>);
         stg.set_start(s0).unwrap();
@@ -660,7 +989,6 @@ mod tests {
             Err(ComStgError::MissingStartEncoding)
         );
 
-        assert!(com_stg_port_is_blocked());
         assert_eq!(stg_command_registrations().len(), 7);
 
         let error = stg_extract(StgExtractPlan {

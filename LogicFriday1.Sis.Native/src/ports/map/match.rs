@@ -1,13 +1,12 @@
-//! Bounded native Rust matcher for `sis/map/match.c`.
+﻿//! Bounded native Rust matcher for `sis/map/match.c`.
 //!
 //! The original SIS implementation recursively binds `node_t` objects to
 //! primitive graph nodes and invokes a callback for every complete match. This
 //! port keeps the owned-data part available to the mapper ports: validate
 //! primitive match patterns, match them against `MapperTree` nodes with
 //! polarity and arity constraints, derive simple candidates from genlib gates,
-//! and return deterministic, cost-ordered results. Complete SIS `node_t` /
-//! `prim_t` graph matching is reported as an explicit dependency until the
-//! native network and primitive graph ports exist.
+//! return deterministic, cost-ordered tree results, and backtrack across owned
+//! primitive/network graph nodes without preserving C ABI entry points.
 
 use std::error::Error;
 use std::fmt;
@@ -232,12 +231,318 @@ pub struct TreeMatch {
     pub pattern_nodes: usize,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub struct NetMatchNodeId(usize);
+
+impl NetMatchNodeId {
+    pub fn index(self) -> usize {
+        self.0
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub struct PrimitiveMatchNodeId(usize);
+
+impl PrimitiveMatchNodeId {
+    pub fn index(self) -> usize {
+        self.0
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum MatchNodeKind {
+    PrimaryInput,
+    PrimaryOutput,
+    Internal,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum MatchDirection {
+    In,
+    Out,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum InternalFanoutPolicy {
+    Exact,
+    UpToLimit(usize),
+    ExactWhenNextPrimitiveInternal,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct GraphMatchOptions {
+    pub internal_fanout_policy: InternalFanoutPolicy,
+}
+
+impl Default for GraphMatchOptions {
+    fn default() -> Self {
+        Self {
+            internal_fanout_policy: InternalFanoutPolicy::Exact,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NetMatchNode {
+    pub name: String,
+    pub kind: MatchNodeKind,
+    pub fanins: Vec<NetMatchNodeId>,
+    pub fanouts: Vec<NetMatchNodeId>,
+}
+
+impl NetMatchNode {
+    pub fn new(name: impl Into<String>, kind: MatchNodeKind) -> Self {
+        Self {
+            name: name.into(),
+            kind,
+            fanins: Vec::new(),
+            fanouts: Vec::new(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct NetMatchGraph {
+    nodes: Vec<NetMatchNode>,
+}
+
+impl NetMatchGraph {
+    pub fn new(nodes: Vec<NetMatchNode>) -> Result<Self, MatchError> {
+        let graph = Self { nodes };
+        graph.validate()?;
+        Ok(graph)
+    }
+
+    pub fn empty() -> Self {
+        Self { nodes: Vec::new() }
+    }
+
+    pub fn add_node(&mut self, name: impl Into<String>, kind: MatchNodeKind) -> NetMatchNodeId {
+        let id = NetMatchNodeId(self.nodes.len());
+        self.nodes.push(NetMatchNode::new(name, kind));
+        id
+    }
+
+    pub fn add_edge(
+        &mut self,
+        fanin: NetMatchNodeId,
+        fanout: NetMatchNodeId,
+    ) -> Result<(), MatchError> {
+        self.require_node(fanin)?;
+        self.require_node(fanout)?;
+        if !self.nodes[fanout.index()].fanins.contains(&fanin) {
+            self.nodes[fanout.index()].fanins.push(fanin);
+        }
+        if !self.nodes[fanin.index()].fanouts.contains(&fanout) {
+            self.nodes[fanin.index()].fanouts.push(fanout);
+        }
+        Ok(())
+    }
+
+    pub fn node(&self, id: NetMatchNodeId) -> Option<&NetMatchNode> {
+        self.nodes.get(id.index())
+    }
+
+    pub fn nodes(&self) -> &[NetMatchNode] {
+        &self.nodes
+    }
+
+    pub fn validate(&self) -> Result<(), MatchError> {
+        for (index, node) in self.nodes.iter().enumerate() {
+            validate_name(
+                &node.name,
+                "network match node",
+                MatchLimits::default().max_name_length,
+            )?;
+            let id = NetMatchNodeId(index);
+            for fanin in &node.fanins {
+                self.require_node(*fanin)?;
+                if !self.nodes[fanin.index()].fanouts.contains(&id) {
+                    return Err(MatchError::InconsistentGraphEdge);
+                }
+            }
+            for fanout in &node.fanouts {
+                self.require_node(*fanout)?;
+                if !self.nodes[fanout.index()].fanins.contains(&id) {
+                    return Err(MatchError::InconsistentGraphEdge);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn require_node(&self, id: NetMatchNodeId) -> Result<&NetMatchNode, MatchError> {
+        self.node(id)
+            .ok_or(MatchError::MissingNetworkNode { node: id })
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PrimitiveMatchNode {
+    pub name: String,
+    pub kind: MatchNodeKind,
+    pub isomorphic_sons: bool,
+    pub fanin_count: usize,
+    pub fanout_count: usize,
+}
+
+impl PrimitiveMatchNode {
+    pub fn new(name: impl Into<String>, kind: MatchNodeKind) -> Self {
+        Self {
+            name: name.into(),
+            kind,
+            isomorphic_sons: false,
+            fanin_count: 0,
+            fanout_count: 0,
+        }
+    }
+
+    pub fn with_isomorphic_sons(mut self) -> Self {
+        self.isomorphic_sons = true;
+        self
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PrimitiveMatchEdge {
+    pub this_node: PrimitiveMatchNodeId,
+    pub connected_node: Option<PrimitiveMatchNodeId>,
+    pub direction: MatchDirection,
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct PrimitiveMatchGraph {
+    nodes: Vec<PrimitiveMatchNode>,
+    edges: Vec<PrimitiveMatchEdge>,
+}
+
+impl PrimitiveMatchGraph {
+    pub fn new(
+        nodes: Vec<PrimitiveMatchNode>,
+        edges: Vec<PrimitiveMatchEdge>,
+    ) -> Result<Self, MatchError> {
+        let graph = Self { nodes, edges };
+        graph.validate()?;
+        Ok(graph)
+    }
+
+    pub fn empty() -> Self {
+        Self {
+            nodes: Vec::new(),
+            edges: Vec::new(),
+        }
+    }
+
+    pub fn add_node(
+        &mut self,
+        name: impl Into<String>,
+        kind: MatchNodeKind,
+    ) -> PrimitiveMatchNodeId {
+        let id = PrimitiveMatchNodeId(self.nodes.len());
+        self.nodes.push(PrimitiveMatchNode::new(name, kind));
+        id
+    }
+
+    pub fn set_isomorphic_sons(
+        &mut self,
+        node: PrimitiveMatchNodeId,
+        value: bool,
+    ) -> Result<(), MatchError> {
+        self.require_node(node)?;
+        self.nodes[node.index()].isomorphic_sons = value;
+        Ok(())
+    }
+
+    pub fn add_edge(
+        &mut self,
+        this_node: PrimitiveMatchNodeId,
+        connected_node: Option<PrimitiveMatchNodeId>,
+        direction: MatchDirection,
+    ) -> Result<(), MatchError> {
+        self.require_node(this_node)?;
+        if let Some(connected_node) = connected_node {
+            self.require_node(connected_node)?;
+            match direction {
+                MatchDirection::In => {
+                    self.nodes[this_node.index()].fanout_count += 1;
+                    self.nodes[connected_node.index()].fanin_count += 1;
+                }
+                MatchDirection::Out => {
+                    self.nodes[this_node.index()].fanin_count += 1;
+                    self.nodes[connected_node.index()].fanout_count += 1;
+                }
+            }
+        }
+        self.edges.push(PrimitiveMatchEdge {
+            this_node,
+            connected_node,
+            direction,
+        });
+        Ok(())
+    }
+
+    pub fn node(&self, id: PrimitiveMatchNodeId) -> Option<&PrimitiveMatchNode> {
+        self.nodes.get(id.index())
+    }
+
+    pub fn nodes(&self) -> &[PrimitiveMatchNode] {
+        &self.nodes
+    }
+
+    pub fn edges(&self) -> &[PrimitiveMatchEdge] {
+        &self.edges
+    }
+
+    pub fn validate(&self) -> Result<(), MatchError> {
+        if self.edges.is_empty() {
+            return Err(MatchError::EmptyPrimitiveEdges);
+        }
+        for node in &self.nodes {
+            validate_name(
+                &node.name,
+                "primitive match node",
+                MatchLimits::default().max_name_length,
+            )?;
+        }
+        for (index, edge) in self.edges.iter().enumerate() {
+            self.require_node(edge.this_node)?;
+            if index == 0 && edge.connected_node.is_some() {
+                return Err(MatchError::InvalidPrimitiveEdge {
+                    reason: "first primitive edge cannot have a connected node",
+                });
+            }
+            if index > 0 && edge.connected_node.is_none() {
+                return Err(MatchError::InvalidPrimitiveEdge {
+                    reason: "non-root primitive edges must have a connected node",
+                });
+            }
+            if let Some(connected_node) = edge.connected_node {
+                self.require_node(connected_node)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn require_node(&self, id: PrimitiveMatchNodeId) -> Result<&PrimitiveMatchNode, MatchError> {
+        self.node(id)
+            .ok_or(MatchError::MissingPrimitiveNode { node: id })
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GraphMatchBinding {
+    pub primitive: PrimitiveMatchNodeId,
+    pub network: NetMatchNodeId,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GraphMatch {
+    pub bindings: Vec<GraphMatchBinding>,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum MatchError {
     Tree(MapperTreeError),
-    MissingSisPorts {
-        operation: &'static str,
-    },
     TooManyPatterns {
         max: usize,
     },
@@ -268,15 +573,23 @@ pub enum MatchError {
         gate: String,
         cost: f64,
     },
+    MissingNetworkNode {
+        node: NetMatchNodeId,
+    },
+    MissingPrimitiveNode {
+        node: PrimitiveMatchNodeId,
+    },
+    EmptyPrimitiveEdges,
+    InvalidPrimitiveEdge {
+        reason: &'static str,
+    },
+    InconsistentGraphEdge,
 }
 
 impl fmt::Display for MatchError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Tree(error) => write!(f, "{error}"),
-            Self::MissingSisPorts { operation } => {
-                write!(f, "{operation} requires unavailable native SIS integration")
-            }
             Self::TooManyPatterns { max } => write!(f, "too many match patterns; max is {max}"),
             Self::TooManyMatches { max } => write!(f, "too many tree matches; max is {max}"),
             Self::PatternTooLarge { gate, max } => {
@@ -300,6 +613,17 @@ impl fmt::Display for MatchError {
             Self::InvalidCost { gate, cost } => {
                 write!(f, "match gate '{gate}' has invalid cost {cost}")
             }
+            Self::MissingNetworkNode { node } => {
+                write!(f, "missing network match node {}", node.index())
+            }
+            Self::MissingPrimitiveNode { node } => {
+                write!(f, "missing primitive match node {}", node.index())
+            }
+            Self::EmptyPrimitiveEdges => write!(f, "primitive match graph has no edges"),
+            Self::InvalidPrimitiveEdge { reason } => {
+                write!(f, "invalid primitive match edge: {reason}")
+            }
+            Self::InconsistentGraphEdge => write!(f, "network graph edge lists are inconsistent"),
         }
     }
 }
@@ -310,12 +634,6 @@ impl From<MapperTreeError> for MatchError {
     fn from(value: MapperTreeError) -> Self {
         Self::Tree(value)
     }
-}
-
-pub fn full_sis_graph_matching_unavailable() -> Result<Vec<TreeMatch>, MatchError> {
-    Err(MatchError::MissingSisPorts {
-        operation: "match full SIS graph matching",
-    })
 }
 
 pub fn enumerate_tree_matches(
@@ -354,6 +672,29 @@ pub fn enumerate_tree_matches(
     Ok(matches)
 }
 
+pub fn enumerate_graph_matches(
+    network: &NetMatchGraph,
+    start: NetMatchNodeId,
+    primitive: &PrimitiveMatchGraph,
+    options: GraphMatchOptions,
+    limits: MatchLimits,
+) -> Result<Vec<GraphMatch>, MatchError> {
+    network.validate()?;
+    network.require_node(start)?;
+    primitive.validate()?;
+
+    let mut state = GraphMatchState {
+        network_bindings: vec![None; network.nodes().len()],
+        primitive_bindings: vec![None; primitive.nodes().len()],
+        matches: Vec::new(),
+        max_matches: limits.max_matches,
+    };
+
+    match_graph_edge(network, primitive, options, start, 0, &mut state)?;
+    state.matches.sort_by(compare_graph_matches);
+    Ok(state.matches)
+}
+
 pub fn matches_at_root(
     tree: &MapperTree,
     library: &MatchLibrary,
@@ -387,6 +728,178 @@ pub fn matches_at_root(
 
     matches.sort_by(compare_tree_matches);
     Ok(matches)
+}
+
+struct GraphMatchState {
+    network_bindings: Vec<Option<PrimitiveMatchNodeId>>,
+    primitive_bindings: Vec<Option<NetMatchNodeId>>,
+    matches: Vec<GraphMatch>,
+    max_matches: usize,
+}
+
+fn match_graph_edge(
+    network: &NetMatchGraph,
+    primitive: &PrimitiveMatchGraph,
+    options: GraphMatchOptions,
+    net_node: NetMatchNodeId,
+    edge_index: usize,
+    state: &mut GraphMatchState,
+) -> Result<bool, MatchError> {
+    let edge = primitive
+        .edges()
+        .get(edge_index)
+        .ok_or(MatchError::InvalidPrimitiveEdge {
+            reason: "primitive edge index is out of range",
+        })?;
+    let prim_node = edge.this_node;
+    let next_edge = primitive.edges().get(edge_index + 1);
+
+    let already_bound = match state.network_bindings[net_node.index()] {
+        Some(bound_primitive) if bound_primitive != prim_node => {
+            return Ok(true);
+        }
+        Some(_) => true,
+        None => {
+            if state.primitive_bindings[prim_node.index()].is_some() {
+                return Ok(true);
+            }
+            if !node_can_bind(network, primitive, options, net_node, prim_node, next_edge)? {
+                return Ok(true);
+            }
+            false
+        }
+    };
+
+    if !already_bound {
+        state.network_bindings[net_node.index()] = Some(prim_node);
+        state.primitive_bindings[prim_node.index()] = Some(net_node);
+    }
+
+    let should_continue = if edge_index + 1 == primitive.edges().len() {
+        push_graph_match(state)?;
+        true
+    } else {
+        match_next_graph_edge(network, primitive, options, edge_index + 1, state)?
+    };
+
+    if !already_bound {
+        state.network_bindings[net_node.index()] = None;
+        state.primitive_bindings[prim_node.index()] = None;
+    }
+
+    Ok(should_continue)
+}
+
+fn match_next_graph_edge(
+    network: &NetMatchGraph,
+    primitive: &PrimitiveMatchGraph,
+    options: GraphMatchOptions,
+    edge_index: usize,
+    state: &mut GraphMatchState,
+) -> Result<bool, MatchError> {
+    let edge = &primitive.edges()[edge_index];
+    let connected_node = edge
+        .connected_node
+        .ok_or(MatchError::InvalidPrimitiveEdge {
+            reason: "non-root primitive edge must have a connected node",
+        })?;
+    let matching_net_node = state.primitive_bindings[connected_node.index()].ok_or(
+        MatchError::InvalidPrimitiveEdge {
+            reason: "connected primitive node is not bound",
+        },
+    )?;
+    let connected_primitive = primitive.require_node(connected_node)?;
+
+    match edge.direction {
+        MatchDirection::In if connected_primitive.isomorphic_sons => {
+            let Some(candidate) = network
+                .require_node(matching_net_node)?
+                .fanins
+                .iter()
+                .copied()
+                .find(|fanin| state.network_bindings[fanin.index()].is_none())
+            else {
+                return Ok(true);
+            };
+            match_graph_edge(network, primitive, options, candidate, edge_index, state)
+        }
+        MatchDirection::In => {
+            let fanins = network.require_node(matching_net_node)?.fanins.clone();
+            for candidate in fanins {
+                if !match_graph_edge(network, primitive, options, candidate, edge_index, state)? {
+                    return Ok(false);
+                }
+            }
+            Ok(true)
+        }
+        MatchDirection::Out => {
+            let fanouts = network.require_node(matching_net_node)?.fanouts.clone();
+            for candidate in fanouts {
+                if !match_graph_edge(network, primitive, options, candidate, edge_index, state)? {
+                    return Ok(false);
+                }
+            }
+            Ok(true)
+        }
+    }
+}
+
+fn node_can_bind(
+    network: &NetMatchGraph,
+    primitive: &PrimitiveMatchGraph,
+    options: GraphMatchOptions,
+    net_node: NetMatchNodeId,
+    prim_node: PrimitiveMatchNodeId,
+    next_edge: Option<&PrimitiveMatchEdge>,
+) -> Result<bool, MatchError> {
+    let net_node = network.require_node(net_node)?;
+    let prim_node = primitive.require_node(prim_node)?;
+
+    if prim_node.kind != MatchNodeKind::PrimaryInput
+        && net_node.fanins.len() != prim_node.fanin_count
+    {
+        return Ok(false);
+    }
+
+    if prim_node.kind != MatchNodeKind::Internal {
+        return Ok(true);
+    }
+
+    let accepts_fanout = match options.internal_fanout_policy {
+        InternalFanoutPolicy::Exact => net_node.fanouts.len() == prim_node.fanout_count,
+        InternalFanoutPolicy::UpToLimit(limit) => net_node.fanouts.len() <= limit,
+        InternalFanoutPolicy::ExactWhenNextPrimitiveInternal => next_edge
+            .and_then(|edge| primitive.node(edge.this_node))
+            .is_none_or(|next_node| {
+                next_node.kind != MatchNodeKind::Internal
+                    || net_node.fanouts.len() == prim_node.fanout_count
+            }),
+    };
+
+    Ok(accepts_fanout)
+}
+
+fn push_graph_match(state: &mut GraphMatchState) -> Result<(), MatchError> {
+    if state.matches.len() >= state.max_matches {
+        return Err(MatchError::TooManyMatches {
+            max: state.max_matches,
+        });
+    }
+
+    let bindings = state
+        .primitive_bindings
+        .iter()
+        .enumerate()
+        .filter_map(|(index, network)| {
+            network.map(|network| GraphMatchBinding {
+                primitive: PrimitiveMatchNodeId(index),
+                network,
+            })
+        })
+        .collect::<Vec<_>>();
+
+    state.matches.push(GraphMatch { bindings });
+    Ok(())
 }
 
 fn match_at(
@@ -450,6 +963,18 @@ fn compare_tree_matches(left: &TreeMatch, right: &TreeMatch) -> std::cmp::Orderi
                 .map(|node| node.index())
                 .cmp(right.frontier.iter().map(|node| node.index()))
         })
+}
+
+fn compare_graph_matches(left: &GraphMatch, right: &GraphMatch) -> std::cmp::Ordering {
+    left.bindings
+        .iter()
+        .map(|binding| (binding.primitive.index(), binding.network.index()))
+        .cmp(
+            right
+                .bindings
+                .iter()
+                .map(|binding| (binding.primitive.index(), binding.network.index())),
+        )
 }
 
 fn validate_pattern(
@@ -692,6 +1217,36 @@ mod tests {
         tree
     }
 
+    fn sample_net_graph() -> (NetMatchGraph, NetMatchNodeId) {
+        let mut graph = NetMatchGraph::empty();
+        let a = graph.add_node("a", MatchNodeKind::PrimaryInput);
+        let b = graph.add_node("b", MatchNodeKind::PrimaryInput);
+        let and = graph.add_node("and", MatchNodeKind::Internal);
+        let out = graph.add_node("out", MatchNodeKind::PrimaryOutput);
+        graph.add_edge(a, and).unwrap();
+        graph.add_edge(b, and).unwrap();
+        graph.add_edge(and, out).unwrap();
+        graph.validate().unwrap();
+        (graph, and)
+    }
+
+    fn and2_primitive(isomorphic_sons: bool) -> PrimitiveMatchGraph {
+        let mut graph = PrimitiveMatchGraph::empty();
+        let root = graph.add_node("g", MatchNodeKind::Internal);
+        let a = graph.add_node("a", MatchNodeKind::PrimaryInput);
+        let b = graph.add_node("b", MatchNodeKind::PrimaryInput);
+        let out = graph.add_node("out", MatchNodeKind::PrimaryOutput);
+        graph.set_isomorphic_sons(root, isomorphic_sons).unwrap();
+        graph.add_edge(root, None, MatchDirection::In).unwrap();
+        graph.add_edge(a, Some(root), MatchDirection::In).unwrap();
+        graph.add_edge(b, Some(root), MatchDirection::In).unwrap();
+        graph
+            .add_edge(out, Some(root), MatchDirection::Out)
+            .unwrap();
+        graph.validate().unwrap();
+        graph
+    }
+
     #[test]
     fn matches_polarity_and_arity_against_mapper_tree() {
         let library = MatchLibrary::new(vec![
@@ -810,6 +1365,94 @@ mod tests {
         assert_eq!(matches.len(), 1);
         assert_eq!(matches[0].gate, "and_inv");
         assert_eq!(matches[0].root.index(), 3);
+    }
+
+    #[test]
+    fn enumerates_complete_primitive_graph_bindings() {
+        let (network, start) = sample_net_graph();
+        let primitive = and2_primitive(false);
+
+        let matches = enumerate_graph_matches(
+            &network,
+            start,
+            &primitive,
+            GraphMatchOptions::default(),
+            MatchLimits::default(),
+        )
+        .unwrap();
+
+        assert_eq!(matches.len(), 2);
+        assert_eq!(
+            matches[0]
+                .bindings
+                .iter()
+                .map(|binding| (binding.primitive.index(), binding.network.index()))
+                .collect::<Vec<_>>(),
+            vec![(0, 2), (1, 0), (2, 1), (3, 3)]
+        );
+        assert_eq!(
+            matches[1]
+                .bindings
+                .iter()
+                .map(|binding| (binding.primitive.index(), binding.network.index()))
+                .collect::<Vec<_>>(),
+            vec![(0, 2), (1, 1), (2, 0), (3, 3)]
+        );
+    }
+
+    #[test]
+    fn isomorphic_sons_choose_first_unbound_fanin() {
+        let (network, start) = sample_net_graph();
+        let primitive = and2_primitive(true);
+
+        let matches = enumerate_graph_matches(
+            &network,
+            start,
+            &primitive,
+            GraphMatchOptions::default(),
+            MatchLimits::default(),
+        )
+        .unwrap();
+
+        assert_eq!(matches.len(), 1);
+        assert_eq!(
+            matches[0]
+                .bindings
+                .iter()
+                .map(|binding| (binding.primitive.index(), binding.network.index()))
+                .collect::<Vec<_>>(),
+            vec![(0, 2), (1, 0), (2, 1), (3, 3)]
+        );
+    }
+
+    #[test]
+    fn applies_internal_fanout_policy() {
+        let (mut network, start) = sample_net_graph();
+        let extra = network.add_node("extra", MatchNodeKind::PrimaryOutput);
+        network.add_edge(start, extra).unwrap();
+        let primitive = and2_primitive(true);
+
+        let exact = enumerate_graph_matches(
+            &network,
+            start,
+            &primitive,
+            GraphMatchOptions::default(),
+            MatchLimits::default(),
+        )
+        .unwrap();
+        let limited = enumerate_graph_matches(
+            &network,
+            start,
+            &primitive,
+            GraphMatchOptions {
+                internal_fanout_policy: InternalFanoutPolicy::UpToLimit(2),
+            },
+            MatchLimits::default(),
+        )
+        .unwrap();
+
+        assert!(exact.is_empty());
+        assert_eq!(limited.len(), 2);
     }
 
     #[test]

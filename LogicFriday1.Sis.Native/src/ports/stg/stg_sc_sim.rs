@@ -1,10 +1,8 @@
-//! Native Rust port scaffold for `sis/stg/stg_sc_sim.c`.
+//! Native Rust port for `sis/stg/stg_sc_sim.c`.
 //!
 //! The C file has two layers: a small single-cube AND evaluator and a
-//! scheduler that walks SIS network fanin/fanout lists through `node_t`,
-//! `network_t`, and `ndata` globals prepared by the STG enumeration setup.
-//! This module ports the evaluator and the `ndata` value/flag behavior, while
-//! reporting the still-blocked network/node scheduler explicitly.
+//! scheduler that propagates changed primary-input values through the varying
+//! non-primary-output nodes.
 
 use std::error::Error;
 use std::fmt;
@@ -84,11 +82,160 @@ impl StgNodeData {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct StgNodeId(pub usize);
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum StgNodeKind {
+    PrimaryInput,
+    PrimaryOutput,
+    Internal,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct StgSimNode {
+    pub kind: StgNodeKind,
+    pub data: StgNodeData,
+    pub fanins: Vec<StgNodeId>,
+    pub fanouts: Vec<StgNodeId>,
+}
+
+impl StgSimNode {
+    pub fn primary_input() -> Self {
+        Self {
+            kind: StgNodeKind::PrimaryInput,
+            data: StgNodeData::with_cube(0),
+            fanins: Vec::new(),
+            fanouts: Vec::new(),
+        }
+    }
+
+    pub fn primary_output(fanin: StgNodeId) -> Self {
+        Self {
+            kind: StgNodeKind::PrimaryOutput,
+            data: StgNodeData::with_cube(0),
+            fanins: vec![fanin],
+            fanouts: Vec::new(),
+        }
+    }
+
+    pub fn internal(cube: u64, fanins: Vec<StgNodeId>) -> Self {
+        Self {
+            kind: StgNodeKind::Internal,
+            data: StgNodeData::with_cube(cube),
+            fanins,
+            fanouts: Vec::new(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct StgScSimNetwork {
+    nodes: Vec<StgSimNode>,
+    primary_inputs: Vec<StgNodeId>,
+    varying_nodes: Vec<StgNodeId>,
+}
+
+impl StgScSimNetwork {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn add_primary_input(&mut self) -> StgNodeId {
+        let node_id = self.insert_node(StgSimNode::primary_input());
+        self.primary_inputs.push(node_id);
+        node_id
+    }
+
+    pub fn add_primary_output(&mut self, fanin: StgNodeId) -> Result<StgNodeId, StgScSimError> {
+        self.add_node(StgSimNode::primary_output(fanin))
+    }
+
+    pub fn add_internal(
+        &mut self,
+        cube: u64,
+        fanins: Vec<StgNodeId>,
+    ) -> Result<StgNodeId, StgScSimError> {
+        self.add_node(StgSimNode::internal(cube, fanins))
+    }
+
+    pub fn node(&self, node: StgNodeId) -> Result<&StgSimNode, StgScSimError> {
+        self.nodes
+            .get(node.0)
+            .ok_or(StgScSimError::MissingNode(node))
+    }
+
+    pub fn node_mut(&mut self, node: StgNodeId) -> Result<&mut StgSimNode, StgScSimError> {
+        self.nodes
+            .get_mut(node.0)
+            .ok_or(StgScSimError::MissingNode(node))
+    }
+
+    pub fn set_primary_input_value(
+        &mut self,
+        node: StgNodeId,
+        cid: usize,
+        value: LogicValue,
+    ) -> Result<(), StgScSimError> {
+        check_cid(cid)?;
+
+        let node_data = self.node_mut(node)?;
+        if node_data.kind != StgNodeKind::PrimaryInput {
+            return Err(StgScSimError::WrongNodeKind {
+                node,
+                expected: StgNodeKind::PrimaryInput,
+                actual: node_data.kind,
+            });
+        }
+
+        if node_data.data.value[cid] != value {
+            node_data.data.value[cid] = value;
+            node_data.data.jflag[cid] |= CHANGED;
+        }
+
+        Ok(())
+    }
+
+    fn add_node(&mut self, node: StgSimNode) -> Result<StgNodeId, StgScSimError> {
+        for fanin in node.fanins.iter().copied() {
+            self.node(fanin)?;
+        }
+
+        let fanins = node.fanins.clone();
+        let kind = node.kind;
+        let node_id = self.insert_node(node);
+
+        for fanin in fanins {
+            self.node_mut(fanin)?.fanouts.push(node_id);
+        }
+
+        if kind != StgNodeKind::PrimaryInput {
+            self.varying_nodes.push(node_id);
+        }
+
+        Ok(node_id)
+    }
+
+    fn insert_node(&mut self, node: StgSimNode) -> StgNodeId {
+        let node_id = StgNodeId(self.nodes.len());
+        self.nodes.push(node);
+        node_id
+    }
+}
+
 #[derive(Debug, Eq, PartialEq)]
 pub enum StgScSimError {
-    InvalidCycleId { cid: usize, max_exclusive: usize },
+    InvalidCycleId {
+        cid: usize,
+        max_exclusive: usize,
+    },
     InvalidLogicValue(u8),
-    MissingNetworkNodePorts,
+    MissingNode(StgNodeId),
+    WrongNodeKind {
+        node: StgNodeId,
+        expected: StgNodeKind,
+        actual: StgNodeKind,
+    },
 }
 
 impl fmt::Display for StgScSimError {
@@ -103,10 +250,18 @@ impl fmt::Display for StgScSimError {
             Self::InvalidLogicValue(value) => {
                 write!(f, "invalid STG simulation logic value {value}")
             }
-            Self::MissingNetworkNodePorts => {
+            Self::MissingNode(node) => {
+                write!(f, "missing STG simulation node {:?}", node)
+            }
+            Self::WrongNodeKind {
+                node,
+                expected,
+                actual,
+            } => {
                 write!(
                     f,
-                    "SIS network/node scheduling for stg_sc_sim is blocked by unported dependencies"
+                    "STG simulation node {:?} has kind {:?}; expected {:?}",
+                    node, actual, expected
                 )
             }
         }
@@ -153,8 +308,68 @@ pub fn evaluate_node(
     Ok(covered)
 }
 
-pub fn stg_sc_sim(_cid: usize) -> Result<(), StgScSimError> {
-    Err(StgScSimError::MissingNetworkNodePorts)
+pub fn stg_sc_sim(network: &mut StgScSimNetwork, cid: usize) -> Result<(), StgScSimError> {
+    check_cid(cid)?;
+
+    let primary_inputs = network.primary_inputs.clone();
+    for node in primary_inputs {
+        if network.node(node)?.data.jflag[cid] & CHANGED != 0 {
+            network.node_mut(node)?.data.jflag[cid] &= !CHANGED;
+            schedule_fanouts(network, node, cid)?;
+        }
+    }
+
+    let varying_nodes = network.varying_nodes.clone();
+    for node in varying_nodes {
+        if network.node(node)?.data.jflag[cid] & SCHEDULED == 0 {
+            continue;
+        }
+
+        network.node_mut(node)?.data.jflag[cid] &= !SCHEDULED;
+
+        if network.node(node)?.kind == StgNodeKind::PrimaryOutput {
+            continue;
+        }
+
+        evaluate_network_node(network, node, cid)?;
+
+        if network.node(node)?.data.jflag[cid] & CHANGED != 0 {
+            network.node_mut(node)?.data.jflag[cid] &= !CHANGED;
+            schedule_fanouts(network, node, cid)?;
+        }
+    }
+
+    Ok(())
+}
+
+fn evaluate_network_node(
+    network: &mut StgScSimNetwork,
+    node: StgNodeId,
+    cid: usize,
+) -> Result<LogicValue, StgScSimError> {
+    let fanins = network.node(node)?.fanins.clone();
+    let fanin_values = fanins
+        .iter()
+        .map(|fanin| network.node(*fanin).map(|fanin| fanin.data.value[cid]))
+        .collect::<Result<Vec<_>, _>>()?;
+
+    evaluate_node(&mut network.node_mut(node)?.data, cid, &fanin_values)
+}
+
+fn schedule_fanouts(
+    network: &mut StgScSimNetwork,
+    node: StgNodeId,
+    cid: usize,
+) -> Result<(), StgScSimError> {
+    let fanouts = network.node(node)?.fanouts.clone();
+    for fanout in fanouts {
+        let fanout_node = network.node_mut(fanout)?;
+        if fanout_node.kind != StgNodeKind::PrimaryOutput {
+            fanout_node.data.jflag[cid] |= SCHEDULED;
+        }
+    }
+
+    Ok(())
 }
 
 fn check_cid(cid: usize) -> Result<(), StgScSimError> {
@@ -244,12 +459,72 @@ mod tests {
     }
 
     #[test]
-    fn top_level_scheduler_reports_blocked_native_dependencies() {
-        let error = stg_sc_sim(0).expect_err("network scheduler should be blocked");
-        assert_eq!(error, StgScSimError::MissingNetworkNodePorts);
-        assert!(
-            format!("{}", StgScSimError::MissingNetworkNodePorts)
-                .contains("SIS network/node scheduling")
+    fn scheduler_propagates_changed_primary_inputs_through_internal_nodes() {
+        let mut network = StgScSimNetwork::new();
+        let a = network.add_primary_input();
+        let b = network.add_primary_input();
+        let and = network.add_internal(0b11, vec![a, b]).unwrap();
+        let inverted = network.add_internal(0b0, vec![and]).unwrap();
+        let _output = network.add_primary_output(inverted).unwrap();
+
+        network
+            .set_primary_input_value(a, 0, LogicValue::One)
+            .unwrap();
+        network
+            .set_primary_input_value(b, 0, LogicValue::One)
+            .unwrap();
+        stg_sc_sim(&mut network, 0).unwrap();
+
+        assert_eq!(
+            network.node(and).unwrap().data.value_at(0),
+            Ok(LogicValue::One)
+        );
+        assert_eq!(
+            network.node(inverted).unwrap().data.value_at(0),
+            Ok(LogicValue::Zero)
+        );
+        assert_eq!(network.node(and).unwrap().data.flags_at(0), Ok(0));
+        assert_eq!(network.node(inverted).unwrap().data.flags_at(0), Ok(0));
+
+        network
+            .set_primary_input_value(a, 0, LogicValue::Zero)
+            .unwrap();
+        stg_sc_sim(&mut network, 0).unwrap();
+
+        assert_eq!(
+            network.node(and).unwrap().data.value_at(0),
+            Ok(LogicValue::Zero)
+        );
+        assert_eq!(
+            network.node(inverted).unwrap().data.value_at(0),
+            Ok(LogicValue::One)
+        );
+    }
+
+    #[test]
+    fn scheduler_ignores_primary_outputs_and_reports_invalid_inputs() {
+        let mut network = StgScSimNetwork::new();
+        let a = network.add_primary_input();
+        let output = network.add_primary_output(a).unwrap();
+
+        assert_eq!(
+            network.set_primary_input_value(output, 0, LogicValue::One),
+            Err(StgScSimError::WrongNodeKind {
+                node: output,
+                expected: StgNodeKind::PrimaryInput,
+                actual: StgNodeKind::PrimaryOutput,
+            })
+        );
+        assert_eq!(
+            network.add_internal(0, vec![StgNodeId(99)]),
+            Err(StgScSimError::MissingNode(StgNodeId(99)))
+        );
+        assert_eq!(
+            stg_sc_sim(&mut network, MAX_ELENGTH),
+            Err(StgScSimError::InvalidCycleId {
+                cid: MAX_ELENGTH,
+                max_exclusive: MAX_ELENGTH,
+            })
         );
     }
 }

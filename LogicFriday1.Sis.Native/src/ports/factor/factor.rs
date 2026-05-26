@@ -6,18 +6,41 @@
 //! factoring, and quick/good backend selection while exposing Rust-owned data.
 
 #[cfg(not(test))]
-use super::ft_util::{
-    FactorNetwork, FactorResult, FactorTree, NodeId, factor_free, factor_nt_to_ft, factor_set,
+use super::alg_ft;
+
+#[cfg(not(test))]
+use super::alg_ft::{
+    AlgebraicFactorNode, Atom, Cover, Cube, FactorId, Literal, LiteralPhase, VariableId,
+    factor_recur,
 };
+
+#[cfg(not(test))]
+use super::ft_util;
+
+#[cfg(not(test))]
+use super::ft_util::{
+    CubeLiteral, FactorKind, FactorNetwork, FactorResult, FactorTree, NodeFunction, NodeId,
+    factor_free, factor_nt_to_ft, factor_set,
+};
+
+#[cfg(test)]
+#[path = "alg_ft.rs"]
+mod alg_ft;
 
 #[cfg(test)]
 #[path = "ft_util.rs"]
 mod ft_util;
 
 #[cfg(test)]
+use alg_ft::{
+    AlgebraicFactorNode, Atom, Cover, Cube, FactorId, Literal, LiteralPhase, VariableId,
+    factor_recur,
+};
+
+#[cfg(test)]
 use ft_util::{
     CubeLiteral, FactorError, FactorKind, FactorNetwork, FactorNode, FactorResult, FactorTree,
-    NodeId, factor_free, factor_nt_to_ft, factor_set,
+    NodeFunction, NodeId, factor_free, factor_nt_to_ft, factor_set,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -43,7 +66,35 @@ pub trait FactorBackend {
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct NativeFactorBackend;
 
-impl FactorBackend for NativeFactorBackend {}
+impl FactorBackend for NativeFactorBackend {
+    fn quick_kernel(&mut self, network: &mut FactorNetwork, node: NodeId) -> FactorResult<NodeId> {
+        self.factor_native(network, node, FactorMode::Quick)
+    }
+
+    fn best_kernel(&mut self, network: &mut FactorNetwork, node: NodeId) -> FactorResult<NodeId> {
+        self.factor_native(network, node, FactorMode::Good)
+    }
+}
+
+impl NativeFactorBackend {
+    fn factor_native(
+        &mut self,
+        network: &mut FactorNetwork,
+        node: NodeId,
+        mode: FactorMode,
+    ) -> FactorResult<NodeId> {
+        if network.node(node)?.function != NodeFunction::SumOfProducts {
+            return Ok(node);
+        }
+
+        let mut algebraic = node_to_algebraic(network, node)?;
+        let mut generator = |cover: &Cover| select_kernel(cover, mode);
+        factor_recur(&mut algebraic, &mut generator).map_err(map_alg_error)?;
+        let tree = algebraic_to_tree(&algebraic).map_err(map_alg_error)?;
+        factor_set(network.node_mut(node)?, tree);
+        Ok(node)
+    }
+}
 
 pub fn factor(network: &mut FactorNetwork, node: NodeId) -> FactorResult<()> {
     let mut backend = NativeFactorBackend;
@@ -115,7 +166,11 @@ where
         FactorMode::Good => backend.best_kernel(&mut working, node)?,
     };
 
-    let tree = factor_nt_to_ft(&working, node, root)?;
+    let tree = if let Some(tree) = working.node(root)?.factored().cloned() {
+        tree
+    } else {
+        factor_nt_to_ft(&working, node, root)?
+    };
     factor_set(network.node_mut(node)?, tree);
     Ok(())
 }
@@ -126,6 +181,171 @@ pub fn factor_tree(network: &mut FactorNetwork, node: NodeId) -> FactorResult<&F
         .node(node)?
         .factored()
         .expect("factor() must install a factor tree on success"))
+}
+
+fn node_to_algebraic(network: &FactorNetwork, node: NodeId) -> FactorResult<AlgebraicFactorNode> {
+    let node_data = network.node(node)?;
+    let mut cubes = Vec::new();
+
+    for (cube_index, cube) in node_data.cubes().iter().enumerate() {
+        if cube.len() != node_data.fanins().len() {
+            return Err(ft_util::FactorError::InvalidCubeWidth {
+                node,
+                cube: cube_index,
+                expected: node_data.fanins().len(),
+                actual: cube.len(),
+            });
+        }
+
+        let mut literals = Vec::new();
+        for (index, literal) in cube.iter().enumerate() {
+            let Some(phase) = cube_literal_phase(*literal) else {
+                continue;
+            };
+            literals.push(Literal::variable(VariableId(index), phase));
+        }
+
+        cubes.push(Cube::new(literals).map_err(map_alg_error)?);
+    }
+
+    Ok(AlgebraicFactorNode::new(
+        FactorId(node.0),
+        Cover::new(cubes),
+    ))
+}
+
+fn cube_literal_phase(literal: CubeLiteral) -> Option<LiteralPhase> {
+    match literal {
+        CubeLiteral::Zero => Some(LiteralPhase::Negative),
+        CubeLiteral::One => Some(LiteralPhase::Positive),
+        CubeLiteral::DontCare => None,
+    }
+}
+
+fn select_kernel(cover: &Cover, mode: FactorMode) -> Option<Cover> {
+    let candidates = kernel_candidates(cover);
+    match mode {
+        FactorMode::Quick => candidates.into_iter().next(),
+        FactorMode::Good => candidates
+            .into_iter()
+            .max_by_key(|candidate| kernel_score(cover, candidate)),
+    }
+}
+
+fn kernel_candidates(cover: &Cover) -> Vec<Cover> {
+    let mut candidates = Vec::new();
+    for atom in cover.atoms() {
+        for phase in [LiteralPhase::Positive, LiteralPhase::Negative] {
+            let divisor = Cover::literal(Literal { atom, phase });
+            let quotient = cover.quotient(&divisor);
+            if is_useful_kernel(&quotient) && !candidates.contains(&quotient) {
+                candidates.push(quotient);
+            }
+        }
+    }
+
+    candidates
+}
+
+fn is_useful_kernel(cover: &Cover) -> bool {
+    cover.cube_count() >= 2 && !cover.is_one()
+}
+
+fn kernel_score(cover: &Cover, candidate: &Cover) -> usize {
+    let co_kernel = cover.quotient(candidate);
+    let candidate_literals = literal_count(candidate);
+    let co_kernel_literals = literal_count(&co_kernel);
+    let extracted_literals = candidate_literals.saturating_mul(co_kernel.cube_count());
+    extracted_literals + co_kernel_literals + candidate.cube_count()
+}
+
+fn literal_count(cover: &Cover) -> usize {
+    cover
+        .cubes()
+        .iter()
+        .map(|cube| cube.literal_count())
+        .sum::<usize>()
+}
+
+fn algebraic_to_tree(node: &AlgebraicFactorNode) -> Result<FactorTree, alg_ft::FactorError> {
+    cover_to_tree(&node.cover, node)
+}
+
+fn cover_to_tree(
+    cover: &Cover,
+    owner: &AlgebraicFactorNode,
+) -> Result<FactorTree, alg_ft::FactorError> {
+    if cover.is_zero() {
+        return Ok(FactorTree::constant(false));
+    }
+
+    let mut terms = Vec::new();
+    for cube in cover.cubes() {
+        terms.push(cube_to_tree(cube, owner)?);
+    }
+
+    Ok(nary_tree(FactorKind::Or, terms))
+}
+
+fn cube_to_tree(
+    cube: &Cube,
+    owner: &AlgebraicFactorNode,
+) -> Result<FactorTree, alg_ft::FactorError> {
+    if cube.literals().is_empty() {
+        return Ok(FactorTree::constant(true));
+    }
+
+    let mut children = Vec::new();
+    for literal in cube.literals() {
+        children.push(literal_to_tree(*literal, owner)?);
+    }
+
+    Ok(nary_tree(FactorKind::And, children))
+}
+
+fn literal_to_tree(
+    literal: Literal,
+    owner: &AlgebraicFactorNode,
+) -> Result<FactorTree, alg_ft::FactorError> {
+    let child = match literal.atom {
+        Atom::Variable(variable) => FactorTree::leaf(variable.0),
+        Atom::Factor(factor) => {
+            let child = owner
+                .child(factor)
+                .ok_or(alg_ft::FactorError::MissingAssignment(Atom::Factor(factor)))?;
+            cover_to_tree(&child.cover, child)?
+        }
+    };
+
+    Ok(match literal.phase {
+        LiteralPhase::Positive => child,
+        LiteralPhase::Negative => {
+            FactorTree::new(FactorKind::Inverter, -1, 0).with_next_level(child)
+        }
+    })
+}
+
+fn nary_tree(kind: FactorKind, mut children: Vec<FactorTree>) -> FactorTree {
+    if children.len() == 1 {
+        return children.remove(0);
+    }
+
+    let mut iter = children.into_iter().rev();
+    let mut tree = iter
+        .next()
+        .expect("nary_tree requires at least one child for non-constant factors");
+    for mut child in iter {
+        child.same_level = Some(Box::new(tree));
+        tree = child;
+    }
+
+    FactorTree::new(kind, -1, 0).with_next_level(tree)
+}
+
+fn map_alg_error(_error: alg_ft::FactorError) -> ft_util::FactorError {
+    ft_util::FactorError::MissingNativeIntegration {
+        operation: "algebraic factoring",
+    }
 }
 
 #[cfg(test)]
@@ -190,6 +410,14 @@ mod tests {
         (network, a, b, f)
     }
 
+    fn child(tree: &FactorTree) -> &FactorTree {
+        tree.next_level.as_deref().unwrap()
+    }
+
+    fn sibling(tree: &FactorTree) -> &FactorTree {
+        tree.same_level.as_deref().unwrap()
+    }
+
     #[test]
     fn factor_is_noop_when_cached_factor_exists() {
         let (mut network, _a, _b, f) = sample_network();
@@ -221,6 +449,74 @@ mod tests {
             network.node(f).unwrap().factored(),
             Some(&FactorTree::constant(true))
         );
+    }
+
+    #[test]
+    fn native_quick_factor_extracts_shared_literal_kernel() {
+        let mut network = FactorNetwork::new();
+        let a = network.add_node(FactorNode::input());
+        let b = network.add_node(FactorNode::input());
+        let c = network.add_node(FactorNode::input());
+        let f = network.add_node(FactorNode::sum_of_products(
+            vec![a, b, c],
+            vec![
+                vec![CubeLiteral::One, CubeLiteral::One, CubeLiteral::DontCare],
+                vec![CubeLiteral::One, CubeLiteral::DontCare, CubeLiteral::One],
+            ],
+        ));
+
+        factor_quick(&mut network, f).unwrap();
+
+        let tree = network.node(f).unwrap().factored().unwrap();
+        assert_eq!(tree.kind, FactorKind::And);
+        assert_eq!(child(tree).kind, FactorKind::Leaf);
+        assert_eq!(child(tree).index, 0);
+        assert_eq!(sibling(child(tree)).kind, FactorKind::Or);
+    }
+
+    #[test]
+    fn native_good_factor_extracts_product_of_two_sums() {
+        let mut network = FactorNetwork::new();
+        let a = network.add_node(FactorNode::input());
+        let b = network.add_node(FactorNode::input());
+        let c = network.add_node(FactorNode::input());
+        let d = network.add_node(FactorNode::input());
+        let f = network.add_node(FactorNode::sum_of_products(
+            vec![a, b, c, d],
+            vec![
+                vec![
+                    CubeLiteral::One,
+                    CubeLiteral::DontCare,
+                    CubeLiteral::One,
+                    CubeLiteral::DontCare,
+                ],
+                vec![
+                    CubeLiteral::One,
+                    CubeLiteral::DontCare,
+                    CubeLiteral::DontCare,
+                    CubeLiteral::One,
+                ],
+                vec![
+                    CubeLiteral::DontCare,
+                    CubeLiteral::One,
+                    CubeLiteral::One,
+                    CubeLiteral::DontCare,
+                ],
+                vec![
+                    CubeLiteral::DontCare,
+                    CubeLiteral::One,
+                    CubeLiteral::DontCare,
+                    CubeLiteral::One,
+                ],
+            ],
+        ));
+
+        factor_good(&mut network, f).unwrap();
+
+        let tree = network.node(f).unwrap().factored().unwrap();
+        assert_eq!(tree.kind, FactorKind::And);
+        assert_eq!(child(tree).kind, FactorKind::Or);
+        assert_eq!(sibling(child(tree)).kind, FactorKind::Or);
     }
 
     #[test]

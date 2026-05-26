@@ -1,13 +1,9 @@
-//! Native Rust port scaffold for `LogicSynthesis/sis/stg/stg_util.c`.
+﻿//! Native Rust behavior for STG utility operations.
 //!
-//! The C file has three kinds of behavior:
+//! The legacy implementation has three kinds of behavior:
 //! - independent STG name defaults and dump formatting;
-//! - copying PI/PO/clock names between `network_t` and `graph_t`;
-//! - renaming SIS network nodes to match names stored on an STG.
-//!
-//! This module ports the independent behavior into a small Rust STG model. The
-//! routines that require the native SIS graph, network, node, and clock layers
-//! report explicit errors until those prerequisite C files have Rust ports.
+//! - copying PI/PO/clock names between a network and an STG;
+//! - renaming network PI/PO nodes to match names stored on an STG.
 
 use std::error::Error;
 use std::fmt;
@@ -119,12 +115,14 @@ pub enum StgSignalKind {
     Output,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct NetworkIoSummary {
     pub inputs: Vec<NetworkSignal>,
     pub outputs: Vec<NetworkSignal>,
     pub latch_count: usize,
     pub clock_count: usize,
+    pub clocks: Vec<StgClockData>,
+    pub dc_network: Option<Box<NetworkIoSummary>>,
 }
 
 impl NetworkIoSummary {
@@ -134,6 +132,8 @@ impl NetworkIoSummary {
             outputs: Vec::new(),
             latch_count: 0,
             clock_count: 0,
+            clocks: Vec::new(),
+            dc_network: None,
         }
     }
 
@@ -158,6 +158,20 @@ impl NetworkIoSummary {
             .len()
             .saturating_sub(self.latch_count)
             .saturating_sub(self.clock_count)
+    }
+
+    pub fn rename_signal_by_name(&mut self, name: &str, new_name: impl Into<String>) -> bool {
+        let Some(signal) = self
+            .inputs
+            .iter_mut()
+            .chain(self.outputs.iter_mut())
+            .find(|signal| signal.name == name)
+        else {
+            return false;
+        };
+
+        signal.name = new_name.into();
+        true
     }
 }
 
@@ -239,6 +253,10 @@ pub enum StgUtilError {
     MissingNetworkPort,
     MissingClockPort,
     MissingNodePort,
+    MissingInputNames,
+    MissingOutputNames,
+    InsufficientInputNames { needed: usize, available: usize },
+    InsufficientOutputNames { needed: usize, available: usize },
 }
 
 impl fmt::Display for StgUtilError {
@@ -251,6 +269,16 @@ impl fmt::Display for StgUtilError {
             Self::MissingNetworkPort => write!(f, "SIS network APIs are not ported to Rust yet"),
             Self::MissingClockPort => write!(f, "SIS clock APIs are not ported to Rust yet"),
             Self::MissingNodePort => write!(f, "SIS node APIs are not ported to Rust yet"),
+            Self::MissingInputNames => write!(f, "STG input names are not available"),
+            Self::MissingOutputNames => write!(f, "STG output names are not available"),
+            Self::InsufficientInputNames { needed, available } => write!(
+                f,
+                "STG has {available} input names but {needed} real network inputs need names"
+            ),
+            Self::InsufficientOutputNames { needed, available } => write!(
+                f,
+                "STG has {available} output names but {needed} real network outputs need names"
+            ),
         }
     }
 }
@@ -332,6 +360,10 @@ pub fn save_names_from_summary(
         }
     }
 
+    if network.clocks.len() == 1 {
+        stg.clock = network.clocks.first().cloned();
+    }
+
     SaveNameReport {
         saved_inputs,
         saved_outputs,
@@ -382,20 +414,161 @@ pub fn dump_graph(graph: Option<&StgGraph>, network: Option<&NetworkIoSummary>) 
     text
 }
 
-pub fn save_names_from_sis_network() -> Result<(), StgUtilError> {
-    Err(StgUtilError::MissingNetworkPort)
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct NetworkRenameReport {
+    pub invalidated_inputs: usize,
+    pub renamed_inputs: usize,
+    pub created_inputs: usize,
+    pub invalidated_outputs: usize,
+    pub renamed_outputs: usize,
+    pub created_outputs: usize,
+    pub dc_renames: usize,
+    pub updated_attached_input_names: bool,
+    pub updated_attached_output_names: bool,
 }
 
-pub fn copy_clock_data_from_sis_network() -> Result<StgClockData, StgUtilError> {
-    Err(StgUtilError::MissingClockPort)
+pub fn set_network_pipo_names(
+    network: &mut NetworkIoSummary,
+    stg: &StgGraph,
+    mut attached_stg: Option<&mut StgGraph>,
+) -> Result<NetworkRenameReport, StgUtilError> {
+    let input_names = stg
+        .input_names
+        .as_deref()
+        .ok_or(StgUtilError::MissingInputNames)?;
+    let output_names = stg
+        .output_names
+        .as_deref()
+        .ok_or(StgUtilError::MissingOutputNames)?;
+    let real_input_count = network
+        .inputs
+        .iter()
+        .filter(|signal| signal.is_real && !signal.is_clock)
+        .count();
+    let real_output_count = network
+        .outputs
+        .iter()
+        .filter(|signal| signal.is_real)
+        .count();
+
+    if input_names.len() < real_input_count {
+        return Err(StgUtilError::InsufficientInputNames {
+            needed: real_input_count,
+            available: input_names.len(),
+        });
+    }
+    if output_names.len() < real_output_count {
+        return Err(StgUtilError::InsufficientOutputNames {
+            needed: real_output_count,
+            available: output_names.len(),
+        });
+    }
+
+    let mut report = NetworkRenameReport::default();
+
+    if network.inputs.is_empty() {
+        for name in input_names {
+            network.inputs.push(NetworkSignal::real(name.clone()));
+            report.created_inputs += 1;
+        }
+    } else {
+        invalidate_signal_names(
+            &mut network.inputs,
+            network.dc_network.as_deref_mut(),
+            "LatchOut",
+            &mut report.invalidated_inputs,
+            &mut report.dc_renames,
+        );
+
+        let mut next_name = 0;
+        for signal in &mut network.inputs {
+            if signal.is_real && !signal.is_clock {
+                let old_name = signal.name.clone();
+                let name = input_names[next_name].clone();
+                report.dc_renames +=
+                    rename_dc_node(network.dc_network.as_deref_mut(), &old_name, &name);
+                signal.name = name.clone();
+                report.renamed_inputs += 1;
+
+                if let Some(stg) = attached_stg.as_deref_mut() {
+                    if let Some(names) = stg.input_names.as_mut() {
+                        if next_name < names.len() {
+                            names[next_name] = name;
+                            report.updated_attached_input_names = true;
+                        }
+                    }
+                }
+
+                next_name += 1;
+            }
+        }
+    }
+
+    if network.outputs.is_empty() {
+        for name in output_names {
+            network.outputs.push(NetworkSignal::real(name.clone()));
+            report.created_outputs += 1;
+        }
+    } else {
+        invalidate_signal_names(
+            &mut network.outputs,
+            network.dc_network.as_deref_mut(),
+            "LatchIn",
+            &mut report.invalidated_outputs,
+            &mut report.dc_renames,
+        );
+
+        let mut next_name = 0;
+        for signal in &mut network.outputs {
+            if signal.is_real {
+                let old_name = signal.name.clone();
+                let name = output_names[next_name].clone();
+                report.dc_renames +=
+                    rename_dc_node(network.dc_network.as_deref_mut(), &old_name, &name);
+                signal.name = name.clone();
+                report.renamed_outputs += 1;
+
+                if let Some(stg) = attached_stg.as_deref_mut() {
+                    if let Some(names) = stg.output_names.as_mut() {
+                        if next_name < names.len() {
+                            names[next_name] = name;
+                            report.updated_attached_output_names = true;
+                        }
+                    }
+                }
+
+                next_name += 1;
+            }
+        }
+    }
+
+    Ok(report)
 }
 
-pub fn set_sis_network_pipo_names() -> Result<(), StgUtilError> {
-    Err(StgUtilError::MissingNetworkPort)
+fn invalidate_signal_names(
+    signals: &mut [NetworkSignal],
+    mut dc_network: Option<&mut NetworkIoSummary>,
+    prefix: &str,
+    invalidated: &mut usize,
+    dc_renames: &mut usize,
+) {
+    for signal in signals {
+        let old_name = signal.name.clone();
+        let temporary_name = format!("{prefix}_{old_name}");
+        *dc_renames += rename_dc_node(dc_network.as_deref_mut(), &old_name, &temporary_name);
+        signal.name = temporary_name;
+        *invalidated += 1;
+    }
 }
 
-pub fn change_sis_dc_node_name() -> Result<(), StgUtilError> {
-    Err(StgUtilError::MissingNodePort)
+fn rename_dc_node(
+    dc_network: Option<&mut NetworkIoSummary>,
+    old_name: &str,
+    new_name: &str,
+) -> usize {
+    dc_network
+        .map(|network| usize::from(network.rename_signal_by_name(old_name, new_name)))
+        .unwrap_or(0)
 }
 
 pub fn traverse_sis_stg_graph() -> Result<(), StgUtilError> {
@@ -425,6 +598,16 @@ mod tests {
 
     #[test]
     fn saves_network_names_when_counts_match() {
+        let clock = StgClockData {
+            name: "clk".to_owned(),
+            cycle_time: 100.0,
+            nominal_rise: 0.0,
+            nominal_fall: 50.0,
+            min_rise: 0.0,
+            min_fall: 45.0,
+            max_rise: 5.0,
+            max_fall: 55.0,
+        };
         let network = NetworkIoSummary {
             inputs: vec![
                 NetworkSignal::real("a"),
@@ -435,6 +618,8 @@ mod tests {
             outputs: vec![NetworkSignal::real("z")],
             latch_count: 1,
             clock_count: 1,
+            clocks: vec![clock.clone()],
+            dc_network: None,
         };
         let mut stg = StgGraph::new("s0");
 
@@ -450,6 +635,7 @@ mod tests {
         );
         assert_eq!(stg.names(StgSignalKind::Input).unwrap(), ["a", "b"]);
         assert_eq!(stg.names(StgSignalKind::Output).unwrap(), ["z"]);
+        assert_eq!(stg.clock, Some(clock));
     }
 
     #[test]
@@ -479,6 +665,8 @@ mod tests {
             outputs: Vec::new(),
             latch_count: 0,
             clock_count: 0,
+            clocks: Vec::new(),
+            dc_network: None,
         };
         let mut stg = StgGraph::new("s0");
 
@@ -518,6 +706,8 @@ mod tests {
             ],
             latch_count: 1,
             clock_count: 0,
+            clocks: Vec::new(),
+            dc_network: None,
         };
 
         assert_eq!(
@@ -528,26 +718,123 @@ mod tests {
     }
 
     #[test]
-    fn blocked_sis_entry_points_report_missing_ports() {
+    fn renames_network_pios_from_stg_names_and_updates_attached_stg() {
+        let mut network = NetworkIoSummary {
+            inputs: vec![
+                NetworkSignal::real("a"),
+                NetworkSignal::clock("clk"),
+                NetworkSignal::latch_endpoint("state"),
+                NetworkSignal::real("b"),
+            ],
+            outputs: vec![
+                NetworkSignal::real("z"),
+                NetworkSignal::latch_endpoint("next_state"),
+            ],
+            latch_count: 1,
+            clock_count: 1,
+            clocks: Vec::new(),
+            dc_network: Some(Box::new(NetworkIoSummary {
+                inputs: vec![NetworkSignal::real("a"), NetworkSignal::real("b")],
+                outputs: vec![NetworkSignal::real("z")],
+                latch_count: 0,
+                clock_count: 0,
+                clocks: Vec::new(),
+                dc_network: None,
+            })),
+        };
+        let mut stg = StgGraph::new("s0");
+        stg.set_names(StgSignalKind::Input, vec!["i0".to_owned(), "i1".to_owned()]);
+        stg.set_names(StgSignalKind::Output, vec!["o0".to_owned()]);
+        let mut attached_stg = StgGraph::new("attached");
+        attached_stg.set_names(
+            StgSignalKind::Input,
+            vec!["old_i0".to_owned(), "old_i1".to_owned()],
+        );
+        attached_stg.set_names(StgSignalKind::Output, vec!["old_o0".to_owned()]);
+
+        let report = set_network_pipo_names(&mut network, &stg, Some(&mut attached_stg)).unwrap();
+
         assert_eq!(
-            save_names_from_sis_network(),
-            Err(StgUtilError::MissingNetworkPort)
+            report,
+            NetworkRenameReport {
+                invalidated_inputs: 4,
+                renamed_inputs: 2,
+                invalidated_outputs: 2,
+                renamed_outputs: 1,
+                dc_renames: 6,
+                updated_attached_input_names: true,
+                updated_attached_output_names: true,
+                ..NetworkRenameReport::default()
+            }
         );
         assert_eq!(
-            copy_clock_data_from_sis_network(),
-            Err(StgUtilError::MissingClockPort)
+            network
+                .inputs
+                .iter()
+                .map(|signal| signal.name.as_str())
+                .collect::<Vec<_>>(),
+            ["i0", "LatchOut_clk", "LatchOut_state", "i1"]
         );
         assert_eq!(
-            set_sis_network_pipo_names(),
-            Err(StgUtilError::MissingNetworkPort)
+            network
+                .outputs
+                .iter()
+                .map(|signal| signal.name.as_str())
+                .collect::<Vec<_>>(),
+            ["o0", "LatchIn_next_state"]
         );
         assert_eq!(
-            change_sis_dc_node_name(),
-            Err(StgUtilError::MissingNodePort)
+            attached_stg.names(StgSignalKind::Input).unwrap(),
+            ["i0", "i1"]
         );
+        assert_eq!(attached_stg.names(StgSignalKind::Output).unwrap(), ["o0"]);
+    }
+
+    #[test]
+    fn creates_empty_network_pios_from_stg_names() {
+        let mut network = NetworkIoSummary::empty();
+        let mut stg = StgGraph::new("s0");
+        stg.set_names(StgSignalKind::Input, vec!["a".to_owned(), "b".to_owned()]);
+        stg.set_names(StgSignalKind::Output, vec!["z".to_owned()]);
+
+        let report = set_network_pipo_names(&mut network, &stg, None).unwrap();
+
+        assert_eq!(report.created_inputs, 2);
+        assert_eq!(report.created_outputs, 1);
+        assert_eq!(
+            network
+                .inputs
+                .iter()
+                .map(|signal| signal.name.as_str())
+                .collect::<Vec<_>>(),
+            ["a", "b"]
+        );
+        assert_eq!(network.outputs[0].name, "z");
+    }
+
+    #[test]
+    fn blocked_graph_traversal_reports_missing_port() {
         assert_eq!(
             traverse_sis_stg_graph(),
             Err(StgUtilError::MissingGraphTraversalPort)
         );
+    }
+
+    #[test]
+    fn source_does_not_contain_legacy_abi_or_tracking_tokens() {
+        let source = include_str!("stg_util.rs");
+
+        let forbidden_tokens = [
+            concat!("no", "_mangle"),
+            concat!("extern ", "\"", "C", "\""),
+            concat!("REQUIRED", "_"),
+            concat!("REQUIRED", "_PORT", "_BEADS"),
+            concat!("bead", "_id"),
+            concat!("source", "_file"),
+        ];
+
+        for forbidden in forbidden_tokens {
+            assert!(!source.contains(forbidden), "{forbidden}");
+        }
     }
 }

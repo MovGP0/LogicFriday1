@@ -11,7 +11,7 @@
 
 use std::collections::{BTreeMap, HashMap};
 use std::error::Error;
-use std::fmt;
+use std::fmt::{self, Write};
 
 use super::library::{GenlibGate, GenlibLibrary, GenlibPin, PinPhase};
 use super::virtual_net::{GateKind, NodeId, NodeKind, VirtualMappedNetwork};
@@ -475,6 +475,67 @@ pub fn free_library_unavailable() -> Result<(), LibUtilError> {
     })
 }
 
+pub fn choose_smallest_latch_unavailable() -> Result<(), LibUtilError> {
+    Err(LibUtilError::MissingSisPorts {
+        operation: "lib_choose_smallest_latch sequential latch matching",
+    })
+}
+
+pub fn dump_library(library: &GenlibLibrary, index: &LibraryIndex, detail: bool) -> String {
+    let mut output = String::new();
+
+    for class in index.classes() {
+        if let Ok(class_dump) = dump_class(library, index, class.id()) {
+            output.push_str(&class_dump);
+        }
+    }
+
+    if detail {
+        output.push_str("\npatterns: <unavailable in native genlib model>\n");
+    } else {
+        output.push('\n');
+    }
+
+    output
+}
+
+pub fn dump_class(
+    library: &GenlibLibrary,
+    index: &LibraryIndex,
+    class: LibraryClassId,
+) -> Result<String, LibUtilError> {
+    let class = index
+        .class(class)
+        .ok_or(LibUtilError::MissingClass { class })?;
+    let dual_name = class_dual(index, class.id())
+        .and_then(LibraryClass::name)
+        .unwrap_or("<none>");
+    let mut output = String::new();
+
+    let _ = writeln!(
+        output,
+        "class: {}",
+        class.name().unwrap_or("<unnamed class>")
+    );
+
+    for gate in index.gates_in_class(library, class.id())? {
+        let _ = writeln!(
+            output,
+            "    gate: {:<10}  area: {:5.2}  dual_class: {}",
+            gate.name, gate.area, dual_name
+        );
+        let _ = writeln!(
+            output,
+            "      {}={}",
+            gate.output.name,
+            normalize_expression(&gate.output.expression)
+        );
+    }
+
+    output.push('\n');
+    Ok(output)
+}
+
 fn mapped_gate_name(gate: &GateKind) -> &str {
     match gate {
         GateKind::Library(name) => name.as_str(),
@@ -605,6 +666,37 @@ mod tests {
                 .name,
             "and2_fast"
         );
+    }
+
+    #[test]
+    fn formats_library_class_dump_without_legacy_network_state() {
+        let library = sample_library();
+        let index = LibraryIndex::from_genlib(&library);
+        let class = index.class_for_gate_name("and2_slow").unwrap();
+
+        let dump = dump_class(&library, &index, class.id()).unwrap();
+
+        assert!(dump.contains("class: and2_slow\n"));
+        assert!(dump.contains("gate: and2_fast"));
+        assert!(dump.contains("area:  2.00"));
+        assert!(dump.contains("dual_class: nand2\n"));
+        assert!(dump.contains("      O=a*b\n"));
+    }
+
+    #[test]
+    fn reports_unavailable_legacy_network_operations() {
+        assert!(matches!(
+            get_class_by_type_unavailable(),
+            Err(LibUtilError::MissingSisPorts { .. })
+        ));
+        assert!(matches!(
+            set_gate_unavailable(),
+            Err(LibUtilError::MissingSisPorts { .. })
+        ));
+        assert!(matches!(
+            choose_smallest_latch_unavailable(),
+            Err(LibUtilError::MissingSisPorts { .. })
+        ));
     }
 
     #[test]

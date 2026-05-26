@@ -320,11 +320,15 @@ where
     N: Clone + Eq + Hash + ToString,
 {
     let levels = compute_levels(nodes)?;
+    let selected_with_tfi =
+        selected_nodes.map(|selected| selected_nodes_and_transitive_fanin(nodes, selected));
     let mut sorted_nodes = nodes
         .iter()
         .filter(|node| {
             node.kind != NodeKind::PrimaryOutput
-                && selected_nodes.is_none_or(|selected| selected.contains(&node.id))
+                && selected_with_tfi
+                    .as_ref()
+                    .is_none_or(|selected| selected.contains(&node.id))
                 && (!critical_only || node.slack.rise <= threshold || node.slack.fall <= threshold)
         })
         .collect::<Vec<_>>();
@@ -353,6 +357,42 @@ where
 
     let max_level = buckets.last().map_or(0, |bucket| bucket.level);
     Ok(PrintedLevelSummary { buckets, max_level })
+}
+
+fn selected_nodes_and_transitive_fanin<N>(
+    nodes: &[LevelNode<N>],
+    selected_nodes: &HashSet<N>,
+) -> HashSet<N>
+where
+    N: Clone + Eq + Hash,
+{
+    let by_id: HashMap<N, &LevelNode<N>> =
+        nodes.iter().map(|node| (node.id.clone(), node)).collect();
+    let mut included = HashSet::new();
+
+    for node in selected_nodes {
+        include_transitive_fanin(node, &by_id, &mut included);
+    }
+
+    included
+}
+
+fn include_transitive_fanin<N>(
+    node_id: &N,
+    nodes: &HashMap<N, &LevelNode<N>>,
+    included: &mut HashSet<N>,
+) where
+    N: Clone + Eq + Hash,
+{
+    if !included.insert(node_id.clone()) {
+        return;
+    }
+
+    if let Some(node) = nodes.get(node_id) {
+        for fanin in &node.fanins {
+            include_transitive_fanin(fanin, nodes, included);
+        }
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -473,6 +513,61 @@ pub fn single_fanin_cleanup_actions<N: Clone>(
     actions
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FaninUse<N> {
+    pub node: N,
+    pub fanout_count: usize,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum NetworkDeleteAction<N> {
+    DeleteNode { node: N },
+}
+
+pub fn network_delete_actions<N, F>(
+    node: N,
+    mut fanins: F,
+) -> Result<Vec<NetworkDeleteAction<N>>, SpeedUtilError>
+where
+    N: Clone + Eq + Hash + ToString,
+    F: FnMut(&N) -> Option<Vec<FaninUse<N>>>,
+{
+    let mut actions = Vec::new();
+    let mut visiting = HashSet::new();
+    append_network_delete_actions(&node, &mut fanins, &mut visiting, &mut actions)?;
+    Ok(actions)
+}
+
+fn append_network_delete_actions<N, F>(
+    node: &N,
+    fanins: &mut F,
+    visiting: &mut HashSet<N>,
+    actions: &mut Vec<NetworkDeleteAction<N>>,
+) -> Result<(), SpeedUtilError>
+where
+    N: Clone + Eq + Hash + ToString,
+    F: FnMut(&N) -> Option<Vec<FaninUse<N>>>,
+{
+    if !visiting.insert(node.clone()) {
+        return Err(SpeedUtilError::Cycle(node.to_string()));
+    }
+
+    let fanins_to_delete = fanins(node)
+        .ok_or_else(|| SpeedUtilError::MissingNode(node.to_string()))?
+        .into_iter()
+        .filter(|fanin| fanin.fanout_count == 1)
+        .collect::<Vec<_>>();
+
+    actions.push(NetworkDeleteAction::DeleteNode { node: node.clone() });
+
+    for fanin in fanins_to_delete {
+        append_network_delete_actions(&fanin.node, fanins, visiting, actions)?;
+    }
+
+    visiting.remove(node);
+    Ok(())
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum GateChoice {
     Smallest,
@@ -501,6 +596,20 @@ pub fn select_gate<N: Clone>(
     }
 
     Ok(selected.clone())
+}
+
+pub fn select_library_unary_gate<N: Clone>(
+    patterns_generated: bool,
+    pattern_class_gates: Option<&[LibraryGate<N>]>,
+    named_min_area_gate: Option<LibraryGate<N>>,
+) -> Result<Option<LibraryGate<N>>, SpeedUtilError> {
+    if patterns_generated {
+        return pattern_class_gates
+            .map(|gates| select_gate(gates, GateChoice::Smallest).map(Some))
+            .unwrap_or(Ok(None));
+    }
+
+    Ok(named_min_area_gate)
 }
 
 pub fn speed_get_stats_from_sis_network() -> Result<(), SpeedUtilError> {
@@ -795,6 +904,78 @@ mod tests {
     }
 
     #[test]
+    fn printable_levels_selected_nodes_include_transitive_fanin() {
+        let nodes = [
+            node(
+                "a",
+                NodeKind::PrimaryInput,
+                vec![],
+                DelayTime::new(1.0, 1.0),
+                false,
+            ),
+            node(
+                "b",
+                NodeKind::PrimaryInput,
+                vec![],
+                DelayTime::new(1.0, 1.0),
+                false,
+            ),
+            node(
+                "n1",
+                NodeKind::Internal,
+                vec!["a"],
+                DelayTime::new(1.0, 1.0),
+                false,
+            ),
+            node(
+                "n2",
+                NodeKind::Internal,
+                vec!["n1"],
+                DelayTime::new(1.0, 1.0),
+                false,
+            ),
+            node(
+                "other",
+                NodeKind::Internal,
+                vec!["b"],
+                DelayTime::new(1.0, 1.0),
+                false,
+            ),
+            node(
+                "po",
+                NodeKind::PrimaryOutput,
+                vec!["n2", "other"],
+                DelayTime::new(1.0, 1.0),
+                false,
+            ),
+        ];
+        let selected = HashSet::from(["n2"]);
+
+        let printed = printable_levels(&nodes, Some(&selected), false, 0.0).unwrap();
+
+        assert_eq!(
+            printed,
+            PrintedLevelSummary {
+                buckets: vec![
+                    LevelBucket {
+                        level: 0,
+                        nodes: vec!["a"],
+                    },
+                    LevelBucket {
+                        level: 1,
+                        nodes: vec!["n1"],
+                    },
+                    LevelBucket {
+                        level: 2,
+                        nodes: vec!["n2"],
+                    },
+                ],
+                max_level: 2,
+            }
+        );
+    }
+
+    #[test]
     fn area_gate_and_single_fanin_helpers_match_c_decisions() {
         let area_nodes = [
             AreaNode {
@@ -851,6 +1032,86 @@ mod tests {
             ]
         );
         assert!(single_fanin_cleanup_actions("n", 2, &["fo"]).is_empty());
+    }
+
+    #[test]
+    fn network_delete_plan_recurses_to_fanins_with_no_other_fanouts() {
+        let fanins_by_node = HashMap::from([
+            (
+                "n",
+                vec![
+                    FaninUse {
+                        node: "a",
+                        fanout_count: 1,
+                    },
+                    FaninUse {
+                        node: "b",
+                        fanout_count: 2,
+                    },
+                ],
+            ),
+            (
+                "a",
+                vec![FaninUse {
+                    node: "pi",
+                    fanout_count: 1,
+                }],
+            ),
+            ("pi", vec![]),
+        ]);
+
+        let actions =
+            network_delete_actions("n", |node| fanins_by_node.get(node).cloned()).unwrap();
+
+        assert_eq!(
+            actions,
+            vec![
+                NetworkDeleteAction::DeleteNode { node: "n" },
+                NetworkDeleteAction::DeleteNode { node: "a" },
+                NetworkDeleteAction::DeleteNode { node: "pi" },
+            ]
+        );
+    }
+
+    #[test]
+    fn library_unary_gate_selection_matches_pattern_and_fallback_paths() {
+        let gates = [
+            LibraryGate {
+                id: "large",
+                area: 5.0,
+            },
+            LibraryGate {
+                id: "small",
+                area: 1.0,
+            },
+        ];
+
+        assert_eq!(
+            select_library_unary_gate(true, Some(&gates), None).unwrap(),
+            Some(LibraryGate {
+                id: "small",
+                area: 1.0,
+            })
+        );
+        assert_eq!(
+            select_library_unary_gate::<&str>(true, None, None).unwrap(),
+            None
+        );
+        assert_eq!(
+            select_library_unary_gate(
+                false,
+                Some(&gates),
+                Some(LibraryGate {
+                    id: MIN_AREA_BUF_NAME,
+                    area: 2.0,
+                }),
+            )
+            .unwrap(),
+            Some(LibraryGate {
+                id: MIN_AREA_BUF_NAME,
+                area: 2.0,
+            })
+        );
     }
 
     #[test]

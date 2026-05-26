@@ -6,11 +6,253 @@
 //! gates, and keep explicit fanin arity validation. It intentionally exposes no
 //! legacy C ABI entry points.
 
+use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
 use std::fmt;
 
 use super::library::GenlibGate;
-use super::virtual_net::{GateKind, SourceRef, VirtualMappedNetwork};
+use super::virtual_net::{GateKind, NodeId, NodeKind, SourceRef, VirtualMappedNetwork};
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub struct PrimitiveNodeId(usize);
+
+impl PrimitiveNodeId {
+    pub fn index(self) -> usize {
+        self.0
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PrimitiveNodeKind {
+    PrimaryInput,
+    PrimaryOutput,
+    Internal,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PrimitiveEdgeDirection {
+    In,
+    Out,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PrimitiveNode {
+    pub name: String,
+    pub kind: PrimitiveNodeKind,
+    pub nfanin: usize,
+    pub nfanout: usize,
+    pub isomorphic_sons: bool,
+    pub latch_output: bool,
+    pub binding: Option<NodeId>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PrimitiveEdge {
+    pub this_node: PrimitiveNodeId,
+    pub connected_node: Option<PrimitiveNodeId>,
+    pub direction: PrimitiveEdgeDirection,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PrimitiveNetwork {
+    nodes: Vec<PrimitiveNode>,
+    inputs: Vec<PrimitiveNodeId>,
+    outputs: Vec<PrimitiveNodeId>,
+    edges: Vec<PrimitiveEdge>,
+    matched_gates: Vec<String>,
+}
+
+impl PrimitiveNetwork {
+    pub fn from_virtual_network(network: &VirtualMappedNetwork) -> Result<Self, PrimitiveError> {
+        if network.outputs().is_empty() {
+            return Err(PrimitiveError::NoOutputs);
+        }
+        if network.outputs().len() != 1 {
+            return Err(PrimitiveError::NotSingleOutput {
+                outputs: network.outputs().len(),
+            });
+        }
+
+        let fanouts = virtual_fanouts(network)?;
+        let output_drivers = output_drivers(network)?;
+        let isomorphic_sons = find_isomorphic_sons(network);
+        let mut primitive = Self {
+            nodes: Vec::new(),
+            inputs: Vec::new(),
+            outputs: Vec::new(),
+            edges: Vec::new(),
+            matched_gates: Vec::new(),
+        };
+        let mut mapping = vec![None; network.nodes().len()];
+
+        for (index, node) in network.nodes().iter().enumerate() {
+            if node.kind == NodeKind::PrimaryOutput || !is_active_primitive_node(node) {
+                continue;
+            }
+
+            let mut kind = match node.kind {
+                NodeKind::PrimaryInput => PrimitiveNodeKind::PrimaryInput,
+                NodeKind::PrimaryOutput => unreachable!(),
+                NodeKind::Internal => PrimitiveNodeKind::Internal,
+            };
+            let mut name = node.name.clone();
+            if let Some(output_name) = output_drivers.get(&index) {
+                kind = PrimitiveNodeKind::PrimaryOutput;
+                name = output_name.clone();
+            }
+
+            let primitive_id = PrimitiveNodeId(primitive.nodes.len());
+            primitive.nodes.push(PrimitiveNode {
+                name,
+                kind,
+                nfanin: primitive_fanin_count(node),
+                nfanout: fanouts.get(&index).map_or(0, Vec::len),
+                isomorphic_sons: isomorphic_sons.contains(&index),
+                latch_output: false,
+                binding: None,
+            });
+            mapping[index] = Some(primitive_id);
+        }
+
+        for input in network.inputs() {
+            let Some(primitive_input) = mapping.get(input.index()).and_then(|id| *id) else {
+                return Err(PrimitiveError::MissingPrimitiveNode {
+                    node: input.index(),
+                });
+            };
+            primitive.inputs.push(primitive_input);
+        }
+
+        let output = network.outputs()[0];
+        let output_node = network
+            .node(output)
+            .ok_or(PrimitiveError::MissingPrimitiveNode {
+                node: output.index(),
+            })?;
+        let SourceRef::Node(output_driver) = only_fanin(output.index(), output_node)? else {
+            return Err(PrimitiveError::ConstantOutput);
+        };
+        let Some(primitive_output) = mapping.get(output_driver.index()).and_then(|id| *id) else {
+            return Err(PrimitiveError::MissingPrimitiveNode {
+                node: output_driver.index(),
+            });
+        };
+        primitive.outputs.push(primitive_output);
+
+        let mut visited = BTreeSet::new();
+        let mut visited_arcs = BTreeSet::new();
+        reorder_virtual(
+            network,
+            output.index(),
+            None,
+            PrimitiveEdgeDirection::In,
+            &mapping,
+            &mut visited,
+            &mut visited_arcs,
+            &mut primitive.edges,
+        )?;
+
+        for (index, node) in network.nodes().iter().enumerate() {
+            if is_reachable_required_node(node) && !visited.contains(&index) {
+                return Err(PrimitiveError::DisconnectedNetwork);
+            }
+        }
+
+        Ok(primitive)
+    }
+
+    pub fn nodes(&self) -> &[PrimitiveNode] {
+        &self.nodes
+    }
+
+    pub fn inputs(&self) -> &[PrimitiveNodeId] {
+        &self.inputs
+    }
+
+    pub fn outputs(&self) -> &[PrimitiveNodeId] {
+        &self.outputs
+    }
+
+    pub fn edges(&self) -> &[PrimitiveEdge] {
+        &self.edges
+    }
+
+    pub fn matched_gates(&self) -> &[String] {
+        &self.matched_gates
+    }
+
+    pub fn add_matched_gate(&mut self, gate: impl Into<String>) {
+        self.matched_gates.push(gate.into());
+    }
+
+    pub fn root(&self) -> Option<PrimitiveNodeId> {
+        self.edges.first().map(|edge| edge.this_node)
+    }
+
+    pub fn clear_bindings(&mut self) {
+        for node in &mut self.nodes {
+            node.binding = None;
+        }
+    }
+
+    pub fn format_dump(&self, detail: bool) -> String {
+        let mut output = String::new();
+        output.push_str("matches:");
+        for gate in &self.matched_gates {
+            output.push(' ');
+            output.push_str(gate);
+        }
+        output.push_str(" [type=COMBINATIONAL]\n");
+
+        if detail {
+            output.push_str(&format!("ninputs={}\n", self.inputs.len()));
+            for input in &self.inputs {
+                self.write_dump_node(&mut output, *input);
+            }
+            output.push_str(&format!("noutputs={}\n", self.outputs.len()));
+            for output_node in &self.outputs {
+                self.write_dump_node(&mut output, *output_node);
+            }
+            output.push_str("nodes ...\n");
+            for index in 0..self.nodes.len() {
+                self.write_dump_node(&mut output, PrimitiveNodeId(index));
+            }
+            output.push_str("edges ...\n");
+            for edge in &self.edges {
+                output.push_str(&format!(
+                    "    this_node={} connected={} dir={}\n",
+                    edge.this_node.index(),
+                    edge.connected_node
+                        .map(|node| node.index().to_string())
+                        .unwrap_or_else(|| "none".to_string()),
+                    match edge.direction {
+                        PrimitiveEdgeDirection::In => "IN",
+                        PrimitiveEdgeDirection::Out => "OUT",
+                    }
+                ));
+            }
+        }
+
+        output
+    }
+
+    fn write_dump_node(&self, output: &mut String, node: PrimitiveNodeId) {
+        let item = &self.nodes[node.index()];
+        output.push_str(&format!(
+            "\tname={:<10} iso={} nfanin={:2} nfanout={:2} type={}\n\tlatch_output={}\n",
+            item.name,
+            usize::from(item.isomorphic_sons),
+            item.nfanin,
+            item.nfanout,
+            match item.kind {
+                PrimitiveNodeKind::PrimaryInput => "PI",
+                PrimitiveNodeKind::PrimaryOutput => "PO",
+                PrimitiveNodeKind::Internal => "INT",
+            },
+            usize::from(item.latch_output)
+        ));
+    }
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum PrimitiveKind {
@@ -157,6 +399,12 @@ impl PrimitiveGate {
 pub enum PrimitiveError {
     EmptyName,
     EmptyInputName,
+    NoOutputs,
+    NotSingleOutput { outputs: usize },
+    ConstantOutput,
+    DisconnectedNetwork,
+    MissingPrimitiveNode { node: usize },
+    InvalidPrimaryOutputFanin { node: usize, fanins: usize },
     InvalidArea { area: f64 },
     InvalidArity { kind: PrimitiveKind, arity: usize },
     ParseExpression { expression: String, message: String },
@@ -168,6 +416,20 @@ impl fmt::Display for PrimitiveError {
         match self {
             Self::EmptyName => write!(f, "primitive gate name must not be empty"),
             Self::EmptyInputName => write!(f, "primitive gate input name must not be empty"),
+            Self::NoOutputs => write!(f, "primitive network must have at least one output"),
+            Self::NotSingleOutput { outputs } => {
+                write!(f, "primitive network supports one output, got {outputs}")
+            }
+            Self::ConstantOutput => {
+                write!(f, "primitive network output must be driven by a node")
+            }
+            Self::DisconnectedNetwork => write!(f, "primitive network is not connected"),
+            Self::MissingPrimitiveNode { node } => {
+                write!(f, "missing primitive node for virtual node {node}")
+            }
+            Self::InvalidPrimaryOutputFanin { node, fanins } => {
+                write!(f, "primary output {node} must have one fanin, got {fanins}")
+            }
             Self::InvalidArea { area } => write!(f, "primitive gate area {area} is invalid"),
             Self::InvalidArity { kind, arity } => {
                 write!(f, "primitive gate {kind:?} does not accept {arity} inputs")
@@ -262,6 +524,233 @@ fn infer_expression_kind(expression: &Expression, input_names: &[String]) -> Opt
         Expression::Or(terms) if is_mux(terms, input_names) => Some(PrimitiveKind::Mux),
         _ => None,
     }
+}
+
+fn virtual_fanouts(
+    network: &VirtualMappedNetwork,
+) -> Result<BTreeMap<usize, Vec<usize>>, PrimitiveError> {
+    let mut fanouts = BTreeMap::<usize, Vec<usize>>::new();
+    for (index, node) in network.nodes().iter().enumerate() {
+        for source in primitive_fanins(index, node)? {
+            if let SourceRef::Node(source) = source {
+                fanouts.entry(source.index()).or_default().push(index);
+            }
+        }
+    }
+
+    Ok(fanouts)
+}
+
+fn output_drivers(
+    network: &VirtualMappedNetwork,
+) -> Result<BTreeMap<usize, String>, PrimitiveError> {
+    let mut drivers = BTreeMap::new();
+    for output in network.outputs() {
+        let node = network
+            .node(*output)
+            .ok_or(PrimitiveError::MissingPrimitiveNode {
+                node: output.index(),
+            })?;
+        let SourceRef::Node(driver) = only_fanin(output.index(), node)? else {
+            continue;
+        };
+        drivers.insert(driver.index(), node.name.clone());
+    }
+
+    Ok(drivers)
+}
+
+fn reorder_virtual(
+    network: &VirtualMappedNetwork,
+    node: usize,
+    previous: Option<usize>,
+    direction: PrimitiveEdgeDirection,
+    mapping: &[Option<PrimitiveNodeId>],
+    visited: &mut BTreeSet<usize>,
+    visited_arcs: &mut BTreeSet<(usize, usize)>,
+    edges: &mut Vec<PrimitiveEdge>,
+) -> Result<(), PrimitiveError> {
+    let virtual_node = network
+        .nodes()
+        .get(node)
+        .ok_or(PrimitiveError::DisconnectedNetwork)?;
+
+    if virtual_node.kind != NodeKind::PrimaryOutput {
+        let this_node = mapping
+            .get(node)
+            .and_then(|primitive_node| *primitive_node)
+            .ok_or(PrimitiveError::DisconnectedNetwork)?;
+        let connected_node = previous.and_then(|previous| {
+            mapping
+                .get(previous)
+                .and_then(|primitive_node| *primitive_node)
+        });
+        edges.push(PrimitiveEdge {
+            this_node,
+            connected_node,
+            direction,
+        });
+    }
+
+    if !visited.insert(node) {
+        return Ok(());
+    }
+
+    for source in primitive_fanins(node, virtual_node)? {
+        if let SourceRef::Node(fanin) = source {
+            if visited_arcs.insert((fanin.index(), node)) {
+                reorder_virtual(
+                    network,
+                    fanin.index(),
+                    Some(node),
+                    PrimitiveEdgeDirection::In,
+                    mapping,
+                    visited,
+                    visited_arcs,
+                    edges,
+                )?;
+            }
+        }
+    }
+
+    for fanout in virtual_fanout_nodes(network, node)? {
+        if visited_arcs.insert((node, fanout)) {
+            reorder_virtual(
+                network,
+                fanout,
+                Some(node),
+                PrimitiveEdgeDirection::Out,
+                mapping,
+                visited,
+                visited_arcs,
+                edges,
+            )?;
+        }
+    }
+
+    Ok(())
+}
+
+fn virtual_fanout_nodes(
+    network: &VirtualMappedNetwork,
+    source: usize,
+) -> Result<Vec<usize>, PrimitiveError> {
+    let mut fanouts = Vec::new();
+    for (index, node) in network.nodes().iter().enumerate() {
+        if primitive_fanins(index, node)?
+            .iter()
+            .any(|fanin| matches!(fanin, SourceRef::Node(fanin) if fanin.index() == source))
+        {
+            fanouts.push(index);
+        }
+    }
+
+    Ok(fanouts)
+}
+
+fn primitive_fanins(
+    node_id: usize,
+    node: &super::virtual_net::VirtualMappedNode,
+) -> Result<&[SourceRef], PrimitiveError> {
+    match node.kind {
+        NodeKind::PrimaryInput => Ok(&[]),
+        NodeKind::PrimaryOutput => {
+            if node.save_binding.len() != 1 {
+                return Err(PrimitiveError::InvalidPrimaryOutputFanin {
+                    node: node_id,
+                    fanins: node.save_binding.len(),
+                });
+            }
+            Ok(&node.save_binding)
+        }
+        NodeKind::Internal => Ok(&node.save_binding),
+    }
+}
+
+fn only_fanin(
+    node_id: usize,
+    node: &super::virtual_net::VirtualMappedNode,
+) -> Result<SourceRef, PrimitiveError> {
+    if node.save_binding.len() != 1 {
+        return Err(PrimitiveError::InvalidPrimaryOutputFanin {
+            node: node_id,
+            fanins: node.save_binding.len(),
+        });
+    }
+
+    Ok(node.save_binding[0])
+}
+
+fn primitive_fanin_count(node: &super::virtual_net::VirtualMappedNode) -> usize {
+    match node.kind {
+        NodeKind::PrimaryInput => 0,
+        NodeKind::PrimaryOutput | NodeKind::Internal => node.save_binding.len(),
+    }
+}
+
+fn is_active_primitive_node(node: &super::virtual_net::VirtualMappedNode) -> bool {
+    node.kind != NodeKind::Internal || node.gate.is_some()
+}
+
+fn is_reachable_required_node(node: &super::virtual_net::VirtualMappedNode) -> bool {
+    node.kind != NodeKind::Internal || node.gate.is_some()
+}
+
+fn find_isomorphic_sons(network: &VirtualMappedNetwork) -> BTreeSet<usize> {
+    let mut result = BTreeSet::new();
+    for (index, node) in network.nodes().iter().enumerate() {
+        let mut signatures = BTreeSet::new();
+        let mut has_duplicate = false;
+        for fanin in &node.save_binding {
+            let SourceRef::Node(fanin) = fanin else {
+                continue;
+            };
+            let signature = structural_signature(network, *fanin, &mut BTreeMap::new());
+            if !signatures.insert(signature) {
+                has_duplicate = true;
+                break;
+            }
+        }
+        if has_duplicate {
+            result.insert(index);
+        }
+    }
+
+    result
+}
+
+fn structural_signature(
+    network: &VirtualMappedNetwork,
+    node: NodeId,
+    cache: &mut BTreeMap<NodeId, String>,
+) -> String {
+    if let Some(signature) = cache.get(&node) {
+        return signature.clone();
+    }
+
+    let signature = match network.node(node) {
+        Some(item) if item.kind == NodeKind::PrimaryInput => format!("pi:{}", item.name),
+        Some(item) => {
+            let gate = item
+                .gate
+                .as_ref()
+                .map_or_else(|| "none".to_string(), |gate| format!("{gate:?}"));
+            let fanins = item
+                .save_binding
+                .iter()
+                .map(|source| match source {
+                    SourceRef::ConstantZero => "0".to_string(),
+                    SourceRef::ConstantOne => "1".to_string(),
+                    SourceRef::Node(source) => structural_signature(network, *source, cache),
+                })
+                .collect::<Vec<_>>()
+                .join(",");
+            format!("{gate}({fanins})")
+        }
+        None => "missing".to_string(),
+    };
+    cache.insert(node, signature.clone());
+    signature
 }
 
 fn terms_cover_inputs(terms: &[Expression], input_names: &[String]) -> bool {
@@ -564,5 +1053,94 @@ mod tests {
             .unwrap();
 
         assert_eq!(network.node(node).unwrap().gate, Some(GateKind::Inverter));
+    }
+
+    #[test]
+    fn builds_primitive_network_from_virtual_network() {
+        let mut network = VirtualMappedNetwork::new();
+        let a = network.add_primary_input("a");
+        let b = network.add_primary_input("b");
+        let gate = network.add_gate(
+            "n1",
+            GateKind::Nand,
+            vec![SourceRef::Node(a), SourceRef::Node(b)],
+        );
+        network
+            .add_primary_output("f", SourceRef::Node(gate))
+            .unwrap();
+
+        let primitive = PrimitiveNetwork::from_virtual_network(&network).unwrap();
+
+        assert_eq!(primitive.inputs().len(), 2);
+        assert_eq!(primitive.outputs().len(), 1);
+        assert_eq!(primitive.nodes().len(), 3);
+        assert_eq!(primitive.edges().len(), 3);
+        assert_eq!(
+            primitive.nodes()[primitive.root().unwrap().index()].kind,
+            PrimitiveNodeKind::PrimaryOutput
+        );
+        assert_eq!(
+            primitive.nodes()[primitive.outputs()[0].index()].name,
+            "f".to_string()
+        );
+    }
+
+    #[test]
+    fn rejects_disconnected_primitive_network() {
+        let mut network = VirtualMappedNetwork::new();
+        let a = network.add_primary_input("a");
+        network.add_primary_input("unused");
+        let gate = network.add_gate("n1", GateKind::Inverter, vec![SourceRef::Node(a)]);
+        network
+            .add_primary_output("f", SourceRef::Node(gate))
+            .unwrap();
+
+        assert!(matches!(
+            PrimitiveNetwork::from_virtual_network(&network),
+            Err(PrimitiveError::DisconnectedNetwork)
+        ));
+    }
+
+    #[test]
+    fn marks_nodes_with_isomorphic_sons() {
+        let mut network = VirtualMappedNetwork::new();
+        let a = network.add_primary_input("a");
+        let left = network.add_gate("left", GateKind::Inverter, vec![SourceRef::Node(a)]);
+        let right = network.add_gate("right", GateKind::Inverter, vec![SourceRef::Node(a)]);
+        let root = network.add_gate(
+            "root",
+            GateKind::And,
+            vec![SourceRef::Node(left), SourceRef::Node(right)],
+        );
+        network
+            .add_primary_output("f", SourceRef::Node(root))
+            .unwrap();
+
+        let primitive = PrimitiveNetwork::from_virtual_network(&network).unwrap();
+
+        assert!(
+            primitive
+                .nodes()
+                .iter()
+                .any(|node| node.name == "f" && node.isomorphic_sons)
+        );
+    }
+
+    #[test]
+    fn rejects_multi_output_primitive_network() {
+        let mut network = VirtualMappedNetwork::new();
+        let a = network.add_primary_input("a");
+        let gate = network.add_gate("n1", GateKind::Inverter, vec![SourceRef::Node(a)]);
+        network
+            .add_primary_output("f", SourceRef::Node(gate))
+            .unwrap();
+        network
+            .add_primary_output("g", SourceRef::Node(gate))
+            .unwrap();
+
+        assert!(matches!(
+            PrimitiveNetwork::from_virtual_network(&network),
+            Err(PrimitiveError::NotSingleOutput { outputs: 2 })
+        ));
     }
 }
