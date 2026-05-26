@@ -16,3 +16,6 @@
 .idea/
 .temp/
 *.user
+
+# Understand Anything generated cache
+.understand-anything/fingerprints.json
