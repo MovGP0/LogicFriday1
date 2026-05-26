@@ -9,6 +9,8 @@
 /obj/
 **/bin/
 **/obj/
+**/target/
+*.g.cs
 
 # Local workspace files
 .idea/

@@ -3,5 +3,66 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <SisNativeManifest>$(MSBuildThisFileDirectory)..\LogicFriday1.Sis.Native\Cargo.toml</SisNativeManifest>
+    <SisNativeLibraryName>logicfriday1_sis</SisNativeLibraryName>
+    <SisCargoProfile Condition="'$(Configuration)' == 'Release'">release</SisCargoProfile>
+    <SisCargoProfile Condition="'$(SisCargoProfile)' == ''">debug</SisCargoProfile>
+    <SisCargoProfileArg Condition="'$(Configuration)' == 'Release'">--release</SisCargoProfileArg>
+    <SisNativeRid Condition="'$(RuntimeIdentifier)' != ''">$(RuntimeIdentifier)</SisNativeRid>
+    <SisNativeRid Condition="'$(SisNativeRid)' == '' and '$(OS)' == 'Windows_NT' and '$(PROCESSOR_ARCHITECTURE)' == 'ARM64'">win-arm64</SisNativeRid>
+    <SisNativeRid Condition="'$(SisNativeRid)' == '' and '$(OS)' == 'Windows_NT'">win-x64</SisNativeRid>
+    <SisNativeRid Condition="'$(SisNativeRid)' == '' and $([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform($([System.Runtime.InteropServices.OSPlatform]::Linux))) and $([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture) == 'Arm64'">linux-arm64</SisNativeRid>
+    <SisNativeRid Condition="'$(SisNativeRid)' == '' and $([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform($([System.Runtime.InteropServices.OSPlatform]::Linux)))">linux-x64</SisNativeRid>
+    <SisNativeRid Condition="'$(SisNativeRid)' == '' and $([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform($([System.Runtime.InteropServices.OSPlatform]::OSX))) and $([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture) == 'Arm64'">osx-arm64</SisNativeRid>
+    <SisNativeRid Condition="'$(SisNativeRid)' == '' and $([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform($([System.Runtime.InteropServices.OSPlatform]::OSX)))">osx-x64</SisNativeRid>
+    <SisNativeFileName>$(SisNativeLibraryName).dll</SisNativeFileName>
   </PropertyGroup>
+
+  <PropertyGroup Condition="'$(SisNativeRid)' == 'win-x64'">
+    <SisRustTarget>x86_64-pc-windows-msvc</SisRustTarget>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(SisNativeRid)' == 'win-arm64'">
+    <SisRustTarget>aarch64-pc-windows-msvc</SisRustTarget>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(SisNativeRid)' == 'linux-x64'">
+    <SisRustTarget>x86_64-unknown-linux-gnu</SisRustTarget>
+    <SisNativeFileName>lib$(SisNativeLibraryName).so</SisNativeFileName>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(SisNativeRid)' == 'linux-arm64'">
+    <SisRustTarget>aarch64-unknown-linux-gnu</SisRustTarget>
+    <SisNativeFileName>lib$(SisNativeLibraryName).so</SisNativeFileName>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(SisNativeRid)' == 'osx-x64'">
+    <SisRustTarget>x86_64-apple-darwin</SisRustTarget>
+    <SisNativeFileName>lib$(SisNativeLibraryName).dylib</SisNativeFileName>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(SisNativeRid)' == 'osx-arm64'">
+    <SisRustTarget>aarch64-apple-darwin</SisRustTarget>
+    <SisNativeFileName>lib$(SisNativeLibraryName).dylib</SisNativeFileName>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <SisNativeTargetDir>$(MSBuildThisFileDirectory)..\LogicFriday1.Sis.Native\target\$(SisRustTarget)\$(SisCargoProfile)\</SisNativeTargetDir>
+    <SisNativeOutputPath>$(SisNativeTargetDir)$(SisNativeFileName)</SisNativeOutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="NativeMethods.g.cs" />
+  </ItemGroup>
+
+  <Target Name="BuildSisNative" BeforeTargets="CoreCompile">
+    <Error Condition="'$(SisRustTarget)' == ''" Text="Unsupported RuntimeIdentifier '$(SisNativeRid)' for LogicFriday1.Sis native Rust build. Supported RIDs: win-x64, win-arm64, linux-x64, linux-arm64, osx-x64, osx-arm64." />
+    <Exec Command="cargo build --manifest-path &quot;$(SisNativeManifest)&quot; --target $(SisRustTarget) $(SisCargoProfileArg)" EnvironmentVariables="CARGO_INCREMENTAL=0;LOGICFRIDAY1_SIS_BINDGEN_FORCE=$([System.DateTime]::UtcNow.Ticks)" />
+    <Copy SourceFiles="$(SisNativeOutputPath)" DestinationFolder="$(OutputPath)runtimes\$(SisNativeRid)\native\" SkipUnchangedFiles="true" />
+    <ItemGroup>
+      <Compile Include="NativeMethods.g.cs" />
+      <ContentWithTargetPath Include="$(SisNativeOutputPath)" CopyToOutputDirectory="PreserveNewest" TargetPath="runtimes\$(SisNativeRid)\native\$(SisNativeFileName)" />
+    </ItemGroup>
+  </Target>
 </Project>
