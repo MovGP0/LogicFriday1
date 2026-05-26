@@ -1,3 +1,4 @@
+pub mod array;
 pub mod astg;
 pub mod atpg;
 pub mod avl;
