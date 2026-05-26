@@ -1,14 +1,18 @@
 //! Native PLA writer for SIS networks.
 //!
-//! The legacy `write_pla.c` converts the current network to an Espresso PLA
-//! and delegates the text formatting to `fprint_pla`.  This Rust port keeps the
-//! same split: `network_to_pla` owns network conversion, while this module owns
-//! deterministic Espresso PLA text output.
+//! The SIS writer converts the current network to an Espresso PLA and delegates
+//! text formatting to Espresso's PLA output routine. This module keeps that
+//! same boundary in Rust: network conversion comes from `network_to_pla`, and
+//! final text generation is handled by the native `cvrout` port.
 
 use std::error::Error;
 use std::fmt;
 use std::io::{self, Write};
 
+use crate::ports::espresso::cvrout::{
+    self, CubeStructure, CvroutError, EspressoCover, EspressoCube, EspressoPla, OutputFormat,
+    OutputSelection, Variable,
+};
 use crate::ports::network::net2pla::{Pla, PlaCube, network_to_pla};
 use crate::ports::network::network_util::{CoverValue, Network, NetworkUtilError};
 
@@ -21,6 +25,7 @@ pub enum PlaOutputType {
 #[derive(Debug)]
 pub enum WritePlaError {
     Network(NetworkUtilError),
+    Espresso(CvroutError),
     Io(io::Error),
 }
 
@@ -28,6 +33,7 @@ impl fmt::Display for WritePlaError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Network(error) => error.fmt(formatter),
+            Self::Espresso(error) => error.fmt(formatter),
             Self::Io(error) => error.fmt(formatter),
         }
     }
@@ -37,6 +43,7 @@ impl Error for WritePlaError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             Self::Network(error) => Some(error),
+            Self::Espresso(error) => Some(error),
             Self::Io(error) => Some(error),
         }
     }
@@ -45,6 +52,12 @@ impl Error for WritePlaError {
 impl From<NetworkUtilError> for WritePlaError {
     fn from(value: NetworkUtilError) -> Self {
         Self::Network(value)
+    }
+}
+
+impl From<CvroutError> for WritePlaError {
+    fn from(value: CvroutError) -> Self {
+        Self::Espresso(value)
     }
 }
 
@@ -68,38 +81,32 @@ where
     Ok(true)
 }
 
-pub fn write_pla_from_pla<W>(writer: &mut W, pla: &Pla) -> io::Result<()>
+pub fn write_pla_from_pla<W>(writer: &mut W, pla: &Pla) -> WritePlaResult<()>
 where
     W: Write,
 {
-    let output_type = output_type_for_pla(pla);
-    write_header(writer, pla, output_type)?;
-
-    let product_count = match output_type {
-        PlaOutputType::OnSet => pla.on_set.len(),
-        PlaOutputType::OnSetAndDontCare => pla.on_set.len() + pla.dc_set.len(),
-    };
-    writeln!(writer, ".p {product_count}")?;
-
-    match output_type {
-        PlaOutputType::OnSet => {
-            write_cubes(writer, &pla.on_set, pla.output_labels.len(), '0', '1')?;
-            writeln!(writer, ".e")?;
-        }
-        PlaOutputType::OnSetAndDontCare => {
-            write_cubes(writer, &pla.on_set, pla.output_labels.len(), '~', '1')?;
-            write_cubes(writer, &pla.dc_set, pla.output_labels.len(), '~', '2')?;
-            writeln!(writer, ".end")?;
-        }
-    }
+    let output = format_pla(pla)?;
+    writer.write_all(output.as_bytes())?;
 
     Ok(())
 }
 
-pub fn format_pla(pla: &Pla) -> String {
-    let mut output = Vec::new();
-    write_pla_from_pla(&mut output, pla).expect("writing to an in-memory buffer cannot fail");
-    String::from_utf8(output).expect("PLA output is ASCII")
+pub fn format_pla(pla: &Pla) -> WritePlaResult<String> {
+    let espresso_pla = to_espresso_pla(pla)?;
+    let selection = match output_type_for_pla(pla) {
+        PlaOutputType::OnSet => OutputSelection::on(),
+        PlaOutputType::OnSetAndDontCare => OutputSelection {
+            on_set: true,
+            dont_care_set: true,
+            off_set: false,
+        },
+    };
+
+    Ok(cvrout::format_pla(
+        &espresso_pla,
+        OutputFormat::Pla(selection),
+        [],
+    )?)
 }
 
 pub fn output_type_for_pla(pla: &Pla) -> PlaOutputType {
@@ -110,72 +117,87 @@ pub fn output_type_for_pla(pla: &Pla) -> PlaOutputType {
     }
 }
 
-fn write_header<W>(writer: &mut W, pla: &Pla, output_type: PlaOutputType) -> io::Result<()>
-where
-    W: Write,
-{
-    if output_type == PlaOutputType::OnSetAndDontCare {
-        writeln!(writer, ".type fd")?;
+fn to_espresso_pla(pla: &Pla) -> Result<EspressoPla, CvroutError> {
+    let input_count = pla.input_labels.len();
+    let output_count = pla.output_labels.len();
+    let output_first_part = input_count * 2;
+    let mut variables = Vec::with_capacity(input_count + usize::from(output_count > 0));
+
+    for input_index in 0..input_count {
+        let first_part = input_index * 2;
+        variables.push(Variable::new(first_part, first_part + 1));
     }
 
-    writeln!(writer, ".i {}", pla.input_labels.len())?;
-    writeln!(writer, ".o {}", pla.output_labels.len())?;
+    let output_variable = if output_count > 0 {
+        variables.push(Variable::new(
+            output_first_part,
+            output_first_part + output_count - 1,
+        ));
+        Some(input_count)
+    } else {
+        None
+    };
 
-    if !pla.input_labels.is_empty() {
-        writeln!(writer, ".ilb {}", pla.input_labels.join(" "))?;
-    }
+    let structure = CubeStructure::new(variables, input_count, output_variable)?;
+    let labels = espresso_labels(pla);
 
-    if !pla.output_labels.is_empty() {
-        writeln!(writer, ".ob {}", pla.output_labels.join(" "))?;
-    }
-
-    Ok(())
+    EspressoPla::new(
+        structure,
+        espresso_cover(&pla.on_set, input_count, output_first_part),
+        espresso_cover(&pla.dc_set, input_count, output_first_part),
+        EspressoCover::empty(),
+        labels,
+        None,
+    )
 }
 
-fn write_cubes<W>(
-    writer: &mut W,
+fn espresso_labels(pla: &Pla) -> Vec<Option<String>> {
+    let mut labels = vec![None; pla.input_labels.len() * 2 + pla.output_labels.len()];
+
+    for (input_index, label) in pla.input_labels.iter().enumerate() {
+        labels[input_index * 2 + 1] = Some(label.clone());
+    }
+
+    let output_first_part = pla.input_labels.len() * 2;
+    for (output_index, label) in pla.output_labels.iter().enumerate() {
+        labels[output_first_part + output_index] = Some(label.clone());
+    }
+
+    labels
+}
+
+fn espresso_cover(
     cubes: &[PlaCube],
-    output_count: usize,
-    output_absent: char,
-    output_present: char,
-) -> io::Result<()>
-where
-    W: Write,
-{
-    for cube in cubes {
-        write_inputs(writer, &cube.inputs)?;
-        write!(writer, " ")?;
-        for output_index in 0..output_count {
-            let value = if output_index == cube.output {
-                output_present
-            } else {
-                output_absent
-            };
-            write!(writer, "{value}")?;
+    input_count: usize,
+    output_first_part: usize,
+) -> EspressoCover {
+    EspressoCover::new(
+        cubes
+            .iter()
+            .map(|cube| espresso_cube(cube, input_count, output_first_part)),
+    )
+}
+
+fn espresso_cube(cube: &PlaCube, input_count: usize, output_first_part: usize) -> EspressoCube {
+    let mut parts = Vec::with_capacity(input_count * 2 + 1);
+    for input_index in 0..input_count {
+        let first_part = input_index * 2;
+        match cube.inputs[input_index] {
+            CoverValue::Zero => {
+                parts.push(first_part);
+            }
+            CoverValue::One => {
+                parts.push(first_part + 1);
+            }
+            CoverValue::DontCare => {
+                parts.push(first_part);
+                parts.push(first_part + 1);
+            }
         }
-        writeln!(writer)?;
     }
 
-    Ok(())
-}
-
-fn write_inputs<W>(writer: &mut W, inputs: &[CoverValue]) -> io::Result<()>
-where
-    W: Write,
-{
-    for input in inputs {
-        write!(writer, "{}", cover_value_char(*input))?;
-    }
-
-    Ok(())
-}
-
-fn cover_value_char(value: CoverValue) -> char {
-    match value {
-        CoverValue::Zero => '0',
-        CoverValue::One => '1',
-        CoverValue::DontCare => '-',
-    }
+    parts.push(output_first_part + cube.output);
+    EspressoCube::from_parts(parts)
 }
 
 #[cfg(test)]
@@ -201,7 +223,7 @@ mod tests {
 
     #[test]
     fn formats_on_set_only_pla_like_f_type_output() {
-        let output = format_pla(&pla_without_dc());
+        let output = format_pla(&pla_without_dc()).unwrap();
 
         assert_eq!(
             output,
@@ -217,11 +239,23 @@ mod tests {
             1,
         ));
 
-        let output = format_pla(&pla);
+        let output = format_pla(&pla).unwrap();
 
         assert_eq!(
             output,
             ".type fd\n.i 2\n.o 2\n.ilb a b\n.ob y z\n.p 3\n10 1~\n-1 ~1\n0- ~2\n.end\n"
+        );
+    }
+
+    #[test]
+    fn write_pla_from_pla_streams_cvrout_output() {
+        let mut output = Vec::new();
+
+        write_pla_from_pla(&mut output, &pla_without_dc()).unwrap();
+
+        assert_eq!(
+            String::from_utf8(output).unwrap(),
+            ".i 2\n.o 2\n.ilb a b\n.ob y z\n.p 2\n10 10\n-1 01\n.e\n"
         );
     }
 

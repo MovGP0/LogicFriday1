@@ -1,5 +1,8 @@
 pub mod command;
 pub mod decomp;
+pub mod delay;
+pub mod enc;
+pub mod error;
 pub mod espresso;
 pub mod extract;
 pub mod factor;

@@ -1,3 +1,4 @@
+pub mod cofactor;
 pub mod compl;
 pub mod contain;
 pub mod cubestr;
