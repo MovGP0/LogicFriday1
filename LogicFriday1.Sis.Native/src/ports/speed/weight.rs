@@ -1,4 +1,4 @@
-//! Native Rust port of the independent math in `sis/speed/weight.c`.
+﻿//! Native Rust port of the independent math in `sis/speed/weight.c`.
 //!
 //! The C file combines two separable concerns: numeric weighting of timing
 //! samples and SIS graph traversal through `node_t`, `delay_*`, `lib_gate_t`,
@@ -6,6 +6,7 @@
 //! data. The graph-bound entry points intentionally return typed dependency
 //! errors until the prerequisite native ports exist.
 
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::error::Error;
 use std::fmt;
 
@@ -84,6 +85,332 @@ pub struct WeightPoint {
     pub critical: bool,
 }
 
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct WeightNodeId(pub usize);
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct FanoutPin {
+    pub node: WeightNodeId,
+    pub pin: usize,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PinTiming {
+    pub phase: InputPhase,
+    pub delay: DelayTime,
+}
+
+impl PinTiming {
+    pub const fn new(phase: InputPhase, delay: DelayTime) -> Self {
+        Self { phase, delay }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct SpeedWeightNode {
+    pub kind: NodeKind,
+    pub fanins: Vec<WeightNodeId>,
+    pub fanouts: Vec<FanoutPin>,
+    pub pins: Vec<PinTiming>,
+    pub arrival: DelayTime,
+    pub slack: DelayTime,
+    pub required: DelayTime,
+    pub critical: bool,
+    pub gate_area: Option<f64>,
+    pub literal_count: usize,
+}
+
+impl SpeedWeightNode {
+    pub fn new(kind: NodeKind) -> Self {
+        Self {
+            kind,
+            fanins: Vec::new(),
+            fanouts: Vec::new(),
+            pins: Vec::new(),
+            arrival: DelayTime::new(0.0, 0.0),
+            slack: DelayTime::new(0.0, 0.0),
+            required: DelayTime::new(POS_LARGE, POS_LARGE),
+            critical: false,
+            gate_area: None,
+            literal_count: 0,
+        }
+    }
+
+    pub fn with_fanins(mut self, fanins: Vec<WeightNodeId>, pins: Vec<PinTiming>) -> Self {
+        self.fanins = fanins;
+        self.pins = pins;
+        self
+    }
+
+    pub fn with_timing(
+        mut self,
+        arrival: DelayTime,
+        slack: DelayTime,
+        required: DelayTime,
+        critical: bool,
+    ) -> Self {
+        self.arrival = arrival;
+        self.slack = slack;
+        self.required = required;
+        self.critical = critical;
+        self
+    }
+
+    pub fn with_area(mut self, gate_area: Option<f64>, literal_count: usize) -> Self {
+        self.gate_area = gate_area;
+        self.literal_count = literal_count;
+        self
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct SpeedWeightGraph {
+    nodes: Vec<SpeedWeightNode>,
+}
+
+impl SpeedWeightGraph {
+    pub fn new() -> Self {
+        Self { nodes: Vec::new() }
+    }
+
+    pub fn add_node(&mut self, node: SpeedWeightNode) -> Result<WeightNodeId, SpeedWeightError> {
+        if node.fanins.len() != node.pins.len() {
+            return Err(SpeedWeightError::MismatchedPinCount {
+                fanins: node.fanins.len(),
+                pins: node.pins.len(),
+            });
+        }
+        for fanin in &node.fanins {
+            self.node(*fanin)?;
+        }
+        let id = WeightNodeId(self.nodes.len());
+        self.nodes.push(node);
+        for pin in 0..self.nodes[id.0].fanins.len() {
+            let fanin = self.nodes[id.0].fanins[pin];
+            self.nodes[fanin.0]
+                .fanouts
+                .push(FanoutPin { node: id, pin });
+        }
+        Ok(id)
+    }
+
+    pub fn node(&self, id: WeightNodeId) -> Result<&SpeedWeightNode, SpeedWeightError> {
+        self.nodes
+            .get(id.0)
+            .ok_or(SpeedWeightError::UnknownNode(id))
+    }
+    pub fn nodes(&self) -> &[SpeedWeightNode] {
+        &self.nodes
+    }
+    pub fn speed_weight(
+        &self,
+        node: WeightNodeId,
+        distance: i32,
+    ) -> Result<WeightComputation, SpeedWeightError> {
+        self.speed_weight_with_model(node, distance, DelayModel::Unknown)
+    }
+
+    pub fn speed_weight_with_model(
+        &self,
+        node: WeightNodeId,
+        distance: i32,
+        duplicated_area_model: DelayModel,
+    ) -> Result<WeightComputation, SpeedWeightError> {
+        if distance <= 0 {
+            return Err(SpeedWeightError::InvalidDistance(distance));
+        }
+        let output_arrival_time = self.node(node)?.arrival.max_edge();
+        let traversal = self.weight_bfs(node, distance, output_arrival_time)?;
+        let duplicated_area = self.compute_duplicated_area(
+            &traversal.collapse_nodes,
+            &traversal.table,
+            duplicated_area_model,
+        )?;
+        let mut stats = WeightStats::default();
+        for point in traversal.points {
+            stats.push(point);
+        }
+        finish_weight_computation(stats, distance, duplicated_area)
+    }
+
+    pub fn compute_duplicated_area(
+        &self,
+        collapse_nodes: &[WeightNodeId],
+        collapse_table: &HashSet<WeightNodeId>,
+        model: DelayModel,
+    ) -> Result<f64, SpeedWeightError> {
+        let mut area_table = HashMap::new();
+        for node in collapse_nodes.iter().skip(1).copied() {
+            if area_table.contains_key(&node) || self.node(node)?.fanouts.len() <= 1 {
+                continue;
+            }
+            if self
+                .node(node)?
+                .fanouts
+                .iter()
+                .any(|fanout| !collapse_table.contains(&fanout.node))
+            {
+                self.mark_input_cone(node, &mut area_table, collapse_table, model)?;
+            }
+        }
+        area_table
+            .keys()
+            .copied()
+            .map(|node| self.area_for_node(node))
+            .sum()
+    }
+
+    pub fn compute_side_required_time(
+        &self,
+        node: WeightNodeId,
+        collapse_table: &HashSet<WeightNodeId>,
+        duplicated_required: &HashMap<WeightNodeId, Option<DelayTime>>,
+    ) -> Result<DelayTime, SpeedWeightError> {
+        let mut required = DelayTime::new(POS_LARGE, POS_LARGE);
+        for fanout in &self.node(node)?.fanouts {
+            let fanout_node = self.node(fanout.node)?;
+            let current = if let Some(side_required) = duplicated_required.get(&fanout.node) {
+                self.compute_input_required_time(
+                    fanout.node,
+                    fanout.pin,
+                    side_required.unwrap_or(fanout_node.required),
+                )?
+            } else if !collapse_table.contains(&fanout.node) {
+                self.compute_input_required_time(fanout.node, fanout.pin, fanout_node.required)?
+            } else {
+                continue;
+            };
+            required.rise = required.rise.min(current.rise);
+            required.fall = required.fall.min(current.fall);
+        }
+        Ok(required)
+    }
+
+    pub fn compute_input_required_time(
+        &self,
+        fanout: WeightNodeId,
+        pin: usize,
+        fanout_required_time: DelayTime,
+    ) -> Result<DelayTime, SpeedWeightError> {
+        let node = self.node(fanout)?;
+        if node.kind == NodeKind::PrimaryOutput {
+            return Ok(fanout_required_time);
+        }
+        let pin_timing = node
+            .pins
+            .get(pin)
+            .ok_or(SpeedWeightError::BadPin { node: fanout, pin })?;
+        Ok(compute_input_required_time(
+            node.kind,
+            pin_timing.phase,
+            pin_timing.delay,
+            fanout_required_time,
+        ))
+    }
+
+    fn weight_bfs(
+        &self,
+        node: WeightNodeId,
+        distance: i32,
+        output_arrival_time: f64,
+    ) -> Result<WeightTraversal, SpeedWeightError> {
+        let mut table = HashSet::new();
+        let mut collapse_nodes = vec![node];
+        let mut first = 0;
+        let mut more_to_come = true;
+        let mut stats = WeightStats::default();
+        table.insert(node);
+        for layer in (1..=distance).rev() {
+            if !more_to_come {
+                break;
+            }
+            more_to_come = false;
+            let last = collapse_nodes.len();
+            for index in first..last {
+                for fanin in self.node(collapse_nodes[index])?.fanins.iter().copied() {
+                    let fanin_node = self.node(fanin)?;
+                    if fanin_node.kind == NodeKind::PrimaryInput {
+                        if table.insert(fanin) {
+                            stats.push(self.weight_point_for_node(fanin, output_arrival_time)?);
+                        }
+                    } else if !table.contains(&fanin) {
+                        if fanin_node.critical {
+                            table.insert(fanin);
+                            collapse_nodes.push(fanin);
+                            more_to_come = true;
+                        } else {
+                            table.insert(fanin);
+                            stats.push(self.weight_point_for_node(fanin, output_arrival_time)?);
+                        }
+                    }
+                }
+            }
+            first = last;
+            if layer == 1 {
+                break;
+            }
+        }
+        for current in collapse_nodes.iter().skip(first).copied() {
+            for fanin in self.node(current)?.fanins.iter().copied() {
+                if table.insert(fanin) {
+                    stats.push(self.weight_point_for_node(fanin, output_arrival_time)?);
+                }
+            }
+        }
+        Ok(WeightTraversal {
+            collapse_nodes,
+            table,
+            points: stats.points,
+        })
+    }
+
+    fn mark_input_cone(
+        &self,
+        node: WeightNodeId,
+        area_table: &mut HashMap<WeightNodeId, Option<DelayTime>>,
+        collapse_table: &HashSet<WeightNodeId>,
+        model: DelayModel,
+    ) -> Result<(), SpeedWeightError> {
+        let mut queue = VecDeque::new();
+        queue.push_back(node);
+        while let Some(current) = queue.pop_front() {
+            for fanin in self.node(current)?.fanins.iter().copied() {
+                if collapse_table.contains(&fanin) && !area_table.contains_key(&fanin) {
+                    area_table.insert(fanin, None);
+                    queue.push_back(fanin);
+                }
+            }
+        }
+        let required = if model == DelayModel::Unknown {
+            None
+        } else {
+            Some(self.compute_side_required_time(node, collapse_table, area_table)?)
+        };
+        area_table.insert(node, required);
+        Ok(())
+    }
+
+    fn weight_point_for_node(
+        &self,
+        node: WeightNodeId,
+        output_arrival_time: f64,
+    ) -> Result<WeightPoint, SpeedWeightError> {
+        let node = self.node(node)?;
+        Ok(weight_point(
+            TimingSample::new(node.arrival, node.slack, node.critical),
+            output_arrival_time,
+        ))
+    }
+
+    fn area_for_node(&self, node: WeightNodeId) -> Result<f64, SpeedWeightError> {
+        let node = self.node(node)?;
+        if node.kind == NodeKind::Internal {
+            Ok(node.gate_area.unwrap_or(node.literal_count as f64))
+        } else {
+            Ok(0.0)
+        }
+    }
+}
 #[derive(Clone, Debug, PartialEq)]
 pub struct WeightComputation {
     pub accepted: bool,
@@ -117,7 +444,10 @@ impl AreaNode {
 pub enum SpeedWeightError {
     MissingSisGraphPorts {},
     MismatchedPointCount { arrivals: usize, delays: usize },
+    MismatchedPinCount { fanins: usize, pins: usize },
     InvalidDistance(i32),
+    UnknownNode(WeightNodeId),
+    BadPin { node: WeightNodeId, pin: usize },
 }
 
 impl fmt::Display for SpeedWeightError {
@@ -131,8 +461,18 @@ impl fmt::Display for SpeedWeightError {
                 f,
                 "arrival and delay point arrays differ in length: {arrivals} != {delays}"
             ),
+            Self::MismatchedPinCount { fanins, pins } => {
+                write!(
+                    f,
+                    "fanin and pin timing arrays differ in length: {fanins} != {pins}"
+                )
+            }
             Self::InvalidDistance(distance) => {
                 write!(f, "speed weight distance must be positive, got {distance}")
+            }
+            Self::UnknownNode(node) => write!(f, "unknown speed weight node {:?}", node),
+            Self::BadPin { node, pin } => {
+                write!(f, "bad speed weight pin {pin} for node {:?}", node)
             }
         }
     }
@@ -162,13 +502,20 @@ pub fn compute_weight_from_samples(
         return Err(SpeedWeightError::InvalidDistance(distance));
     }
 
-    let o_time = output_arrival.max_edge();
     let mut stats = WeightStats::default();
 
     for sample in samples {
-        stats.push(weight_point(*sample, o_time));
+        stats.push(weight_point(*sample, output_arrival.max_edge()));
     }
 
+    finish_weight_computation(stats, distance, duplicated_area)
+}
+
+fn finish_weight_computation(
+    stats: WeightStats,
+    distance: i32,
+    duplicated_area: f64,
+) -> Result<WeightComputation, SpeedWeightError> {
     let (transfer_factor, standard_deviation, angle_radians) =
         timing_transfer_factor(&stats.points, distance)?;
     let critical_fraction = if stats.points.is_empty() {
@@ -412,6 +759,11 @@ impl WeightStats {
     }
 }
 
+struct WeightTraversal {
+    collapse_nodes: Vec<WeightNodeId>,
+    table: HashSet<WeightNodeId>,
+    points: Vec<WeightPoint>,
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -423,6 +775,109 @@ mod tests {
         );
     }
 
+    fn graph_node(kind: NodeKind, arrival: f64, slack: f64, critical: bool) -> SpeedWeightNode {
+        SpeedWeightNode::new(kind).with_timing(
+            DelayTime::new(arrival, arrival),
+            DelayTime::new(slack, slack),
+            DelayTime::new(20.0, 20.0),
+            critical,
+        )
+    }
+
+    fn pin() -> PinTiming {
+        PinTiming::new(InputPhase::PositiveUnate, DelayTime::new(0.0, 0.0))
+    }
+
+    #[test]
+    fn graph_speed_weight_traverses_critical_fanin_cone_and_side_area() {
+        let mut graph = SpeedWeightGraph::new();
+        let a = graph
+            .add_node(graph_node(NodeKind::PrimaryInput, 1.0, 1.0, true))
+            .unwrap();
+        let b = graph
+            .add_node(graph_node(NodeKind::PrimaryInput, 2.0, 1.0, false))
+            .unwrap();
+        let c = graph
+            .add_node(graph_node(NodeKind::PrimaryInput, 3.0, 2.0, true))
+            .unwrap();
+        let n1 = graph
+            .add_node(
+                graph_node(NodeKind::Internal, 4.0, 1.0, true)
+                    .with_fanins(vec![a, b], vec![pin(), pin()])
+                    .with_area(Some(2.5), 9),
+            )
+            .unwrap();
+        let _side = graph
+            .add_node(graph_node(NodeKind::Internal, 6.0, 1.0, false).with_fanins(
+                vec![n1],
+                vec![PinTiming::new(
+                    InputPhase::PositiveUnate,
+                    DelayTime::new(1.0, 1.0),
+                )],
+            ))
+            .unwrap();
+        let root = graph
+            .add_node(
+                graph_node(NodeKind::Internal, 10.0, 0.0, true)
+                    .with_fanins(vec![n1, c], vec![pin(), pin()])
+                    .with_area(None, 5),
+            )
+            .unwrap();
+
+        let result = graph.speed_weight(root, 2).unwrap();
+
+        assert!(result.accepted);
+        assert_eq!(result.area_cost, 3);
+        assert_eq!(result.points.len(), 3);
+        assert_close(result.critical_fraction, 2.0 / 3.0);
+        assert!(result.points.contains(&WeightPoint {
+            arrival_time: 1.0,
+            delay_time: 8.0,
+            critical: true,
+        }));
+    }
+
+    #[test]
+    fn graph_side_required_time_uses_fanout_pin_phase() {
+        let mut graph = SpeedWeightGraph::new();
+        let input = graph
+            .add_node(graph_node(NodeKind::PrimaryInput, 0.0, 0.0, false))
+            .unwrap();
+        let fanout = graph
+            .add_node(
+                graph_node(NodeKind::Internal, 0.0, 0.0, false)
+                    .with_fanins(
+                        vec![input],
+                        vec![PinTiming::new(
+                            InputPhase::NegativeUnate,
+                            DelayTime::new(1.0, 2.0),
+                        )],
+                    )
+                    .with_timing(
+                        DelayTime::new(0.0, 0.0),
+                        DelayTime::new(0.0, 0.0),
+                        DelayTime::new(10.0, 12.0),
+                        false,
+                    ),
+            )
+            .unwrap();
+        let collapse = HashSet::new();
+        let duplicated = HashMap::new();
+
+        assert_eq!(
+            graph
+                .compute_side_required_time(input, &collapse, &duplicated)
+                .unwrap(),
+            DelayTime::new(10.0, 9.0)
+        );
+        assert_eq!(
+            graph.compute_input_required_time(fanout, 9, DelayTime::new(1.0, 1.0)),
+            Err(SpeedWeightError::BadPin {
+                node: fanout,
+                pin: 9
+            })
+        );
+    }
     #[test]
     fn weight_point_uses_min_arrival_and_slack_edges() {
         let point = weight_point(

@@ -1,12 +1,10 @@
 ﻿//! Native Rust command/formatting port for `LogicSynthesis/sis/speed/speed_plot.c`.
 //!
-//! The legacy C command opens the SIS graphics backend, plots the current
-//! network as BLIF, traces delay, computes critical nodes or cutsets, and then
-//! writes graphics overlay commands. The SIS graphics, delay, network/node, and
-//! speed-weight APIs are still C-only, so this module ports the independent
-//! command option behavior and overlay formatting as native Rust APIs while the
-//! full network execution reports explicit missing prerequisites.
+//! The legacy C command opens the SIS graphics backend three times and writes a
+//! new BLIF plot, optional gate-name labels, and a highlight overlay. This port
+//! returns those graphics payloads as owned Rust values.
 
+use crate::ports::io::plot_blif::{io_plot_network, PlotBlifNetwork, PlotBlifNodeKind};
 use std::error::Error;
 use std::fmt;
 
@@ -141,79 +139,113 @@ impl fmt::Display for SpeedPlotCommandError {
 
 impl Error for SpeedPlotCommandError {}
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum SpeedPlotDependency {
-    GraphicsBackend,
-    BlifPlotNetwork,
-    DelayTrace,
-    DelayModelLookup,
-    NetworkAndNodeData,
-    MappedLibraryGateData,
-    SpeedOptionDefaults,
-    SpeedThreshold,
-    CriticalPathSelection,
-    NewWeightCutsetSelection,
-    LegacyWeightCutsetSelection,
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SpeedPlotNodeKind {
+    PrimaryInput,
+    PrimaryOutput,
+    Internal,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum SpeedPlotError {
-    MissingDependency(SpeedPlotDependency),
-}
-
-impl fmt::Display for SpeedPlotError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::MissingDependency(dependency) => match dependency {
-                SpeedPlotDependency::GraphicsBackend => {
-                    write!(f, "SIS graphics backend is not ported to Rust yet")
-                }
-                SpeedPlotDependency::BlifPlotNetwork => {
-                    write!(f, "SIS BLIF network plotting is not ported to Rust yet")
-                }
-                SpeedPlotDependency::DelayTrace => {
-                    write!(f, "SIS delay tracing is not ported to Rust yet")
-                }
-                SpeedPlotDependency::DelayModelLookup => {
-                    write!(f, "SIS delay model lookup is not ported to Rust yet")
-                }
-                SpeedPlotDependency::NetworkAndNodeData => {
-                    write!(f, "SIS network/node data access is not ported to Rust yet")
-                }
-                SpeedPlotDependency::MappedLibraryGateData => {
-                    write!(f, "SIS mapped library gate data is not ported to Rust yet")
-                }
-                SpeedPlotDependency::SpeedOptionDefaults => {
-                    write!(f, "SIS speed option defaults are not ported to Rust yet")
-                }
-                SpeedPlotDependency::SpeedThreshold => {
-                    write!(
-                        f,
-                        "SIS speed threshold calculation is not ported to Rust yet"
-                    )
-                }
-                SpeedPlotDependency::CriticalPathSelection => {
-                    write!(f, "SIS critical path selection is not ported to Rust yet")
-                }
-                SpeedPlotDependency::NewWeightCutsetSelection => {
-                    write!(
-                        f,
-                        "SIS new weight cutset selection is not ported to Rust yet"
-                    )
-                }
-                SpeedPlotDependency::LegacyWeightCutsetSelection => {
-                    write!(
-                        f,
-                        "SIS legacy weight cutset selection is not ported to Rust yet"
-                    )
-                }
-            },
+impl From<PlotBlifNodeKind> for SpeedPlotNodeKind {
+    fn from(value: PlotBlifNodeKind) -> Self {
+        match value {
+            PlotBlifNodeKind::PrimaryInput => Self::PrimaryInput,
+            PlotBlifNodeKind::PrimaryOutput => Self::PrimaryOutput,
+            PlotBlifNodeKind::Internal => Self::Internal,
         }
     }
 }
 
-impl Error for SpeedPlotError {}
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SpeedPlotNode {
+    pub name: String,
+    pub kind: SpeedPlotNodeKind,
+    pub gate_name: Option<String>,
+    pub critical: bool,
+}
 
+impl SpeedPlotNode {
+    pub fn new(name: impl Into<String>, kind: SpeedPlotNodeKind) -> Self {
+        Self {
+            name: name.into(),
+            kind,
+            gate_name: None,
+            critical: false,
+        }
+    }
+
+    pub fn internal(name: impl Into<String>) -> Self {
+        Self::new(name, SpeedPlotNodeKind::Internal)
+    }
+
+    pub fn with_gate_name(mut self, gate_name: impl Into<String>) -> Self {
+        self.gate_name = Some(gate_name.into());
+        self
+    }
+
+    pub fn with_critical(mut self, critical: bool) -> Self {
+        self.critical = critical;
+        self
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct SpeedPlotNetwork {
+    pub blif_network: PlotBlifNetwork,
+    pub nodes: Vec<SpeedPlotNode>,
+    pub latest_output_delay: f64,
+    pub cutset_nodes: Vec<String>,
+}
+
+impl SpeedPlotNetwork {
+    pub fn new(blif_network: PlotBlifNetwork, latest_output_delay: f64) -> Self {
+        let nodes = blif_network
+            .nodes
+            .iter()
+            .map(|node| SpeedPlotNode::new(node.long_name.clone(), node.kind.into()))
+            .collect();
+
+        Self {
+            blif_network,
+            nodes,
+            latest_output_delay,
+            cutset_nodes: Vec::new(),
+        }
+    }
+
+    pub fn with_nodes(mut self, nodes: Vec<SpeedPlotNode>) -> Self {
+        self.nodes = nodes;
+        self
+    }
+
+    pub fn with_cutset_nodes(
+        mut self,
+        cutset_nodes: impl IntoIterator<Item = impl Into<String>>,
+    ) -> Self {
+        self.cutset_nodes = cutset_nodes.into_iter().map(Into::into).collect();
+        self
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SpeedPlotGraphicMode {
+    New,
+    Label,
+    Highlight,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SpeedPlotGraphicAction {
+    pub mode: SpeedPlotGraphicMode,
+    pub plot_name: String,
+    pub payload: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SpeedPlotResult {
+    pub actions: Vec<SpeedPlotGraphicAction>,
+    pub trace: Option<String>,
+}
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GateLabel<'a> {
     pub node_name: &'a str,
@@ -417,15 +449,72 @@ pub fn format_cutset_trace(distance: i32, threshold: f64) -> String {
     format!("Distance = {distance} ; Threshold = {threshold:5.2}\n")
 }
 
-pub fn plot_sis_network(_options: &SpeedPlotOptions) -> Result<(), SpeedPlotError> {
-    Err(SpeedPlotError::MissingDependency(
-        SpeedPlotDependency::GraphicsBackend,
-    ))
-}
+pub fn plot_sis_network(network: &SpeedPlotNetwork, options: &SpeedPlotOptions) -> SpeedPlotResult {
+    let mut actions = vec![SpeedPlotGraphicAction {
+        mode: SpeedPlotGraphicMode::New,
+        plot_name: options.plot_name.clone(),
+        payload: io_plot_network(&network.blif_network, false),
+    }];
 
+    if options.print_gate_name {
+        let labels = network
+            .nodes
+            .iter()
+            .filter_map(|node| {
+                if node.kind == SpeedPlotNodeKind::Internal {
+                    node.gate_name.as_deref().map(|gate_name| GateLabel {
+                        node_name: node.name.as_str(),
+                        gate_name,
+                    })
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+
+        actions.push(SpeedPlotGraphicAction {
+            mode: SpeedPlotGraphicMode::Label,
+            plot_name: options.plot_name.clone(),
+            payload: render_gate_labels(&labels),
+        });
+    }
+
+    let critical_nodes = network
+        .nodes
+        .iter()
+        .filter_map(|node| node.critical.then_some(node.name.as_str()))
+        .collect::<Vec<_>>();
+    let cutset_nodes = network
+        .cutset_nodes
+        .iter()
+        .map(String::as_str)
+        .collect::<Vec<_>>();
+    let highlight = render_highlight_overlay(&HighlightOverlay {
+        network_name: &network.blif_network.name,
+        plot_name: &options.plot_name,
+        latest_output_delay: network.latest_output_delay,
+        highlight_critical_path: options.highlight_critical_path,
+        highlight_cutset: options.highlight_cutset,
+        critical_nodes,
+        cutset_nodes,
+    });
+
+    actions.push(SpeedPlotGraphicAction {
+        mode: SpeedPlotGraphicMode::Highlight,
+        plot_name: options.plot_name.clone(),
+        payload: highlight,
+    });
+
+    SpeedPlotResult {
+        actions,
+        trace: (options.highlight_critical_path || options.highlight_cutset)
+            .then(|| format_cutset_trace(options.distance, options.threshold)),
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ports::io::plot_blif::{PlotBlifNetwork, PlotBlifNode};
 
     #[test]
     fn usage_matches_c_text_for_command_name() {
@@ -545,7 +634,7 @@ mod tests {
     }
 
     #[test]
-    fn renders_labels_trace_and_dependency_scaffold() {
+    fn renders_labels_and_trace() {
         assert_eq!(
             render_gate_labels(&[
                 GateLabel {
@@ -563,11 +652,68 @@ mod tests {
             format_cutset_trace(3, 0.5),
             "Distance = 3 ; Threshold =  0.50\n"
         );
+    }
+
+    #[test]
+    fn plots_native_payloads_for_new_label_and_highlight_streams() {
+        let mut blif = PlotBlifNetwork::new("net");
+        blif.add_node(PlotBlifNode::primary_input("a"));
+        blif.add_node(PlotBlifNode::internal("n1", ["a"]));
+        blif.add_node(PlotBlifNode::internal("n2", ["n1"]));
+        blif.add_node(PlotBlifNode::primary_output("y", "n2"));
+
+        let network = SpeedPlotNetwork::new(blif, 9.876)
+            .with_nodes(vec![
+                SpeedPlotNode::new("a", SpeedPlotNodeKind::PrimaryInput),
+                SpeedPlotNode::internal("n1")
+                    .with_gate_name("NAND2")
+                    .with_critical(true),
+                SpeedPlotNode::internal("n2").with_gate_name("INV"),
+                SpeedPlotNode::new("y", SpeedPlotNodeKind::PrimaryOutput).with_critical(true),
+            ])
+            .with_cutset_nodes(["n1", "n2"]);
+        let options = SpeedPlotOptions {
+            print_gate_name: true,
+            highlight_critical_path: true,
+            highlight_cutset: true,
+            threshold: 0.75,
+            distance: 4,
+            ..SpeedPlotOptions::with_network_name("plot")
+        };
+
+        let result = plot_sis_network(&network, &options);
+
         assert_eq!(
-            plot_sis_network(&SpeedPlotOptions::with_network_name("net")),
-            Err(SpeedPlotError::MissingDependency(
-                SpeedPlotDependency::GraphicsBackend
-            ))
+            result.trace,
+            Some("Distance = 4 ; Threshold =  0.75\n".to_owned())
+        );
+        assert_eq!(
+            result.actions,
+            vec![
+                SpeedPlotGraphicAction {
+                    mode: SpeedPlotGraphicMode::New,
+                    plot_name: "plot".to_owned(),
+                    payload: concat!(
+                        ".model\tnet\n",
+                        ".inputs\ta\n",
+                        ".outputs\ty\n",
+                        ".node\tn1\ta\n",
+                        ".node\tn2\tn1\n",
+                        ".node\ty\tn2\n",
+                    )
+                    .to_owned(),
+                },
+                SpeedPlotGraphicAction {
+                    mode: SpeedPlotGraphicMode::Label,
+                    plot_name: "plot".to_owned(),
+                    payload: ".label\tn1\tNAND2\n.label\tn2\tINV\n".to_owned(),
+                },
+                SpeedPlotGraphicAction {
+                    mode: SpeedPlotGraphicMode::Highlight,
+                    plot_name: "plot".to_owned(),
+                    payload: ".clear\tDelay = 9.88 \n.nodes\tn1\ty\n.nodes\tn2\tn1\n".to_owned(),
+                },
+            ]
         );
     }
 }
