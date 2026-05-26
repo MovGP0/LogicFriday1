@@ -1,3 +1,6 @@
+pub mod astg;
+pub mod atpg;
+pub mod avl;
 pub mod bdd_cmu;
 pub mod bdd_ucb;
 pub mod clock;

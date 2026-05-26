@@ -1,3 +1,7 @@
+pub mod bdd;
+pub mod bddapply;
+pub mod bddassoc;
+pub mod bddblk;
 pub mod bddcache;
 pub mod bddcmp;
 pub mod bddcomp;
