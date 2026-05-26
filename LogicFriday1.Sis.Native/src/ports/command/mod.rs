@@ -1,5 +1,10 @@
 pub mod addcom;
+pub mod alias;
+pub mod cmd_set;
 pub mod command;
+pub mod commisc;
+pub mod filec;
+pub mod get_true_po;
 pub mod get_nodes;
 pub mod help;
 pub mod open_file;
