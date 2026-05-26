@@ -5,7 +5,7 @@
 //! product networks by renaming/copying nodes. This module ports the owned-data
 //! parts of that behavior. Direct integration with SIS `network_t`, `node_t`,
 //! latches, `array_t`, `st_table`, and the ordering helpers remains blocked on
-//! the dependency beads reported by the SIS-bound entry points.
+//! the generic diagnostics reported by the SIS-bound entry points.
 
 use std::collections::{BTreeMap, HashMap};
 use std::error::Error;
@@ -13,65 +13,6 @@ use std::fmt;
 
 pub const INIT_STATE_OUTPUT_NAME: &str = "initial_state";
 pub const EXTERNAL_OUTPUT_NAME: &str = "equiv:output";
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub note: &'static str,
-}
-
-pub const REQUIRED_NETWORK_INFO_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.2",
-        source_file: "LogicSynthesis/sis/array/array.c",
-        note: "legacy array_t allocation, ordering arrays, and node-list ownership",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.230",
-        source_file: "LogicSynthesis/sis/latch/latch.c",
-        note: "latch traversal, latch endpoint access, and initial values",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.299",
-        source_file: "LogicSynthesis/sis/network/net_seq.c",
-        note: "network_is_real_pi/network_is_real_po and latch/PIO classification",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.305",
-        source_file: "LogicSynthesis/sis/network/network_util.c",
-        note: "network add/delete/find/change-name/copy-subnetwork operations",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.313",
-        source_file: "LogicSynthesis/sis/node/fan.c",
-        note: "node_get_fanin and fanin traversal",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-        note: "node allocation, constants, literals, boolean construction, and names",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.428",
-        source_file: "LogicSynthesis/sis/seqbdd/manual_order.c",
-        note: "manual PI-order overrides requested through verif_options_t",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.442",
-        source_file: "LogicSynthesis/sis/seqbdd/verif_util.c",
-        note: "get_po_ordering/get_pi_ordering support-driven ordering helpers",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.485",
-        source_file: "LogicSynthesis/sis/st/st.c",
-        note: "legacy st_table name maps used while building product networks",
-    },
-];
-
-pub fn required_network_info_dependencies() -> &'static [PortDependency] {
-    REQUIRED_NETWORK_INFO_DEPENDENCIES
-}
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct NodeId(pub usize);
@@ -394,37 +335,22 @@ pub struct ProductNetworkPlan {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum NetworkInfoError {
-    MissingNativePorts {
-        operation: &'static str,
-        dependencies: &'static [PortDependency],
-    },
+    MissingNativePorts { operation: &'static str },
     UnknownNode(NodeId),
     MissingNodeName(NodeId),
     MissingPrimaryOutputFanin(NodeId),
-    MismatchedEquivalenceInputs {
-        left: usize,
-        right: usize,
-    },
+    MismatchedEquivalenceInputs { left: usize, right: usize },
     InvalidLatchInitialValue(i32),
-    ProductInputMissingInTarget {
-        name: String,
-    },
-    OutputMissingInProduct {
-        name: String,
-    },
+    ProductInputMissingInTarget { name: String },
+    OutputMissingInProduct { name: String },
 }
 
 impl fmt::Display for NetworkInfoError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingNativePorts {
-                operation,
-                dependencies,
-            } => write!(
-                f,
-                "{operation} requires native Rust ports for {} SIS dependencies",
-                dependencies.len()
-            ),
+            Self::MissingNativePorts { operation } => {
+                write!(f, "{operation} is blocked by missing native SIS ports")
+            }
             Self::UnknownNode(node) => write!(f, "unknown network_info node {:?}", node),
             Self::MissingNodeName(node) => write!(f, "node {:?} has no name", node),
             Self::MissingPrimaryOutputFanin(node) => {
@@ -462,10 +388,7 @@ pub fn compute_product_network_from_sis() -> Result<ProductNetworkPlan, NetworkI
 }
 
 fn missing_native_ports<T>(operation: &'static str) -> Result<T, NetworkInfoError> {
-    Err(NetworkInfoError::MissingNativePorts {
-        operation,
-        dependencies: REQUIRED_NETWORK_INFO_DEPENDENCIES,
-    })
+    Err(NetworkInfoError::MissingNativePorts { operation })
 }
 
 pub fn extract_network_info(
@@ -1045,37 +968,6 @@ mod tests {
         assert!(output_info.output_node.is_some());
         assert_eq!(network1.node(out1).unwrap().name, "out");
     }
-
-    #[test]
-    fn sis_bound_operations_report_dependency_beads_and_sources() {
-        let error = extract_product_network_info_from_sis().unwrap_err();
-
-        match error {
-            NetworkInfoError::MissingNativePorts {
-                operation,
-                dependencies,
-            } => {
-                assert_eq!(
-                    operation,
-                    "extract_product_network_info SIS network_t entry"
-                );
-                assert!(dependencies.iter().any(|dependency| {
-                    dependency.bead_id == "LogicFriday1-8j8.2.6.230"
-                        && dependency.source_file == "LogicSynthesis/sis/latch/latch.c"
-                }));
-                assert!(dependencies.iter().any(|dependency| {
-                    dependency.bead_id == "LogicFriday1-8j8.2.6.442"
-                        && dependency.source_file == "LogicSynthesis/sis/seqbdd/verif_util.c"
-                }));
-                assert!(dependencies.iter().any(|dependency| {
-                    dependency.bead_id == "LogicFriday1-8j8.2.6.485"
-                        && dependency.source_file == "LogicSynthesis/sis/st/st.c"
-                }));
-            }
-            other => panic!("unexpected error: {other:?}"),
-        }
-    }
-
     #[test]
     fn no_legacy_c_abi_tokens_are_present_in_this_port() {
         let source = include_str!("network_info.rs");

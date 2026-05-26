@@ -11,61 +11,6 @@ use std::collections::BTreeSet;
 use std::error::Error;
 use std::fmt;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_PORT_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.2",
-        source_file: "LogicSynthesis/sis/array/array.c",
-        reason: "xln_cube.c stores DFS nodes, cube nodes, AND nodes, and TLU nodes in array_t",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.297",
-        source_file: "LogicSynthesis/sis/network/dfs.c",
-        reason: "xln_network_ao_map visits nodes in network_dfs order",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.305",
-        source_file: "LogicSynthesis/sis/network/network_util.c",
-        reason: "network_add_node inserts extracted AND nodes and full TLU nodes",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.313",
-        source_file: "LogicSynthesis/sis/node/fan.c",
-        reason: "fanin traversal and node_num_fanin drive cube extraction and TLU packing",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-        reason: "node constructors and Boolean AND/OR/literal operations build extracted logic",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.321",
-        source_file: "LogicSynthesis/sis/node/nodemisc.c",
-        reason: "node_replace installs packed TLU functions in the original node",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.325",
-        source_file: "LogicSynthesis/sis/node/substitute.c",
-        reason: "node_substitute replaces extracted product terms with the generated AND node",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.376",
-        source_file: "LogicSynthesis/sis/pld/pld_util.c",
-        reason: "pld_num_fanin_cube and pld_make_node_from_cube convert SIS cubes to node functions",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.390",
-        source_file: "LogicSynthesis/sis/pld/xln_level.c",
-        reason: "xln_is_cube_absorbed uses xln_num_composite_fanin to test TLU capacity",
-    },
-];
-
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct NodeId(pub usize);
 
@@ -250,15 +195,9 @@ impl AoMapReport {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum XlnCubeError {
     UnknownNode(NodeId),
-    UnknownCube {
-        node: NodeId,
-        cube: usize,
-    },
+    UnknownCube { node: NodeId, cube: usize },
     InvalidLookupSize(usize),
-    MissingNativePorts {
-        operation: &'static str,
-        dependencies: &'static [PortDependency],
-    },
+    MissingNativePorts { operation: &'static str },
 }
 
 impl fmt::Display for XlnCubeError {
@@ -271,13 +210,9 @@ impl fmt::Display for XlnCubeError {
             Self::InvalidLookupSize(size) => {
                 write!(f, "lookup-table size must be positive, got {size}")
             }
-            Self::MissingNativePorts {
-                operation,
-                dependencies,
-            } => write!(
+            Self::MissingNativePorts { operation } => write!(
                 f,
-                "{operation} is blocked by {} unported SIS C-file dependencies",
-                dependencies.len()
+                "{operation} is blocked by unported SIS C-file dependencies"
             ),
         }
     }
@@ -287,24 +222,18 @@ impl Error for XlnCubeError {}
 
 pub type XlnCubeResult<T> = Result<T, XlnCubeError>;
 
-pub fn required_port_dependencies() -> &'static [PortDependency] {
-    REQUIRED_PORT_DEPENDENCIES
-}
-
 pub fn network_ao_map_blocked<Network>(
     _network: &mut Network,
     _size: usize,
 ) -> XlnCubeResult<AoMapReport> {
     Err(XlnCubeError::MissingNativePorts {
         operation: "xln_network_ao_map SIS integration",
-        dependencies: REQUIRED_PORT_DEPENDENCIES,
     })
 }
 
 pub fn node_ao_map_blocked<Node>(_node: &mut Node, _size: usize) -> XlnCubeResult<AoMapReport> {
     Err(XlnCubeError::MissingNativePorts {
         operation: "xln_node_ao_map SIS integration",
-        dependencies: REQUIRED_PORT_DEPENDENCIES,
     })
 }
 
@@ -671,34 +600,6 @@ mod tests {
             &[CubeLiteral::positive(NodeId(5))]
         );
         assert_eq!(tluvec.len(), 1);
-    }
-
-    #[test]
-    fn blocked_entries_report_dependency_beads_and_sources() {
-        let mut network = ();
-        let error = network_ao_map_blocked(&mut network, 5).unwrap_err();
-
-        let XlnCubeError::MissingNativePorts {
-            operation,
-            dependencies,
-        } = error
-        else {
-            panic!("expected missing dependency error");
-        };
-
-        assert_eq!(operation, "xln_network_ao_map SIS integration");
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.376"
-                && dependency.source_file == "LogicSynthesis/sis/pld/pld_util.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.390"
-                && dependency.source_file == "LogicSynthesis/sis/pld/xln_level.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.325"
-                && dependency.source_file == "LogicSynthesis/sis/node/substitute.c"
-        }));
     }
 
     #[test]

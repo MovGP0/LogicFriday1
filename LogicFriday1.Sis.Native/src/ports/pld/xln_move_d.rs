@@ -14,61 +14,6 @@ use std::fmt;
 pub const MAX_DIFF: usize = usize::MAX;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_PORT_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.2",
-        source_file: "LogicSynthesis/sis/array/array.c",
-        reason: "xln_move_d.c stores DFS and fanin snapshots in array_t",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.297",
-        source_file: "LogicSynthesis/sis/network/dfs.c",
-        reason: "xln_network_move_fanins_for_delay visits network_dfs order",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.305",
-        source_file: "LogicSynthesis/sis/network/network_util.c",
-        reason: "native SIS integration needs network traversal and ownership APIs",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.313",
-        source_file: "LogicSynthesis/sis/node/fan.c",
-        reason: "node_num_fanin and fanin traversal drive the move limits",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-        reason: "node type classification gates internal-node processing",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.376",
-        source_file: "LogicSynthesis/sis/pld/pld_util.c",
-        reason: "pld_get_array_of_fanins supplies the fanin snapshot",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.382",
-        source_file: "LogicSynthesis/sis/pld/xln_feasible.c",
-        reason: "xln_node_move_fanin performs the decomposition-backed move",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.390",
-        source_file: "LogicSynthesis/sis/pld/xln_level.c",
-        reason: "xln_is_node_critical uses delay trace data to filter nodes",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.74",
-        source_file: "LogicSynthesis/sis/delay/delay.c",
-        reason: "delay_trace refreshes DELAY_MODEL_UNIT after successful moves",
-    },
-];
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum NodeKind {
     PrimaryInput,
     PrimaryOutput,
@@ -229,23 +174,16 @@ impl MoveFaninBackend for RemovingMoveBackend {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum XlnMoveDError {
     UnknownNode(NodeId),
-    MissingNativePorts {
-        operation: &'static str,
-        dependencies: &'static [PortDependency],
-    },
+    MissingNativePorts { operation: &'static str },
 }
 
 impl fmt::Display for XlnMoveDError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::UnknownNode(node) => write!(f, "unknown xln_move_d node {:?}", node),
-            Self::MissingNativePorts {
-                operation,
-                dependencies,
-            } => write!(
+            Self::MissingNativePorts { operation } => write!(
                 f,
-                "{operation} is blocked by {} unported SIS C-file dependencies",
-                dependencies.len()
+                "{operation} is blocked by unported SIS C-file dependencies"
             ),
         }
     }
@@ -254,10 +192,6 @@ impl fmt::Display for XlnMoveDError {
 impl Error for XlnMoveDError {}
 
 pub type XlnMoveDResult<T> = Result<T, XlnMoveDError>;
-
-pub fn required_port_dependencies() -> &'static [PortDependency] {
-    REQUIRED_PORT_DEPENDENCIES
-}
 
 pub fn network_move_fanins_for_delay<B>(
     graph: &mut MoveGraph,
@@ -373,7 +307,6 @@ pub fn network_move_fanins_for_delay_blocked<Network>(
 ) -> XlnMoveDResult<MoveNetworkReport> {
     Err(XlnMoveDError::MissingNativePorts {
         operation: "xln_network_move_fanins_for_delay SIS integration",
-        dependencies: REQUIRED_PORT_DEPENDENCIES,
     })
 }
 
@@ -386,7 +319,6 @@ pub fn node_move_fanins_for_delay_blocked<Node>(
 ) -> XlnMoveDResult<usize> {
     Err(XlnMoveDError::MissingNativePorts {
         operation: "xln_node_move_fanins_for_delay SIS integration",
-        dependencies: REQUIRED_PORT_DEPENDENCIES,
     })
 }
 
@@ -502,47 +434,6 @@ mod tests {
 
         assert_eq!(moved, 1);
         assert_eq!(graph.node(n).unwrap().fanins, vec![b, c]);
-    }
-
-    #[test]
-    fn blocked_entries_report_dependency_beads_and_sources() {
-        let mut network = ();
-        let error = network_move_fanins_for_delay_blocked(
-            &mut network,
-            MoveOptions {
-                move_fanins: true,
-                support: 5,
-                max_fanins: 20,
-                bound_alphas: 1,
-            },
-            true,
-        )
-        .unwrap_err();
-
-        let XlnMoveDError::MissingNativePorts {
-            operation,
-            dependencies,
-        } = error
-        else {
-            panic!("expected missing dependency error");
-        };
-
-        assert_eq!(
-            operation,
-            "xln_network_move_fanins_for_delay SIS integration"
-        );
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.382"
-                && dependency.source_file == "LogicSynthesis/sis/pld/xln_feasible.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.390"
-                && dependency.source_file == "LogicSynthesis/sis/pld/xln_level.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.74"
-                && dependency.source_file == "LogicSynthesis/sis/delay/delay.c"
-        }));
     }
 
     #[test]

@@ -5,7 +5,7 @@
 //! resubstitution. The actual SIS graph mutations still depend on native ports
 //! for the command registry, node-list resolver, and algebraic/boolean resub
 //! engines, so this module exposes the command behavior through Rust data
-//! structures and reports those missing dependencies explicitly.
+//! structures and reports unavailable native support explicitly.
 
 use std::error::Error;
 use std::fmt;
@@ -16,36 +16,6 @@ pub const USAGE: &str = concat!(
     "    -b\t\tBoolean resubstitution.\n",
     "    -d\t\tDon't use complement (in algebraic resubstitution).\n",
 );
-
-pub const REQUIRED_PORTS: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.112",
-        source_file: "LogicSynthesis/sis/command/addcom.c",
-        reason: "registers the resub SIS command from init_resub",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.118",
-        source_file: "LogicSynthesis/sis/command/get_nodes.c",
-        reason: "resolves optional node-list arguments, including '*' expansion",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.408",
-        source_file: "LogicSynthesis/sis/resub/aresub.c",
-        reason: "implements resub_alge_node and resub_alge_network",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.409",
-        source_file: "LogicSynthesis/sis/resub/bresub.c",
-        reason: "implements boolean resub command behavior and its warning/fallback",
-    },
-];
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub reason: &'static str,
-}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct CommandRegistration {
@@ -60,10 +30,6 @@ pub const RESUB_COMMAND: CommandRegistration = CommandRegistration {
 
 pub fn resub_command_registration() -> CommandRegistration {
     RESUB_COMMAND
-}
-
-pub fn required_port_dependencies() -> &'static [PortDependency] {
-    REQUIRED_PORTS
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -104,10 +70,7 @@ impl Default for ResubCommand {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ResubError {
     UnsupportedOption(String),
-    MissingNativePorts {
-        operation: ResubOperation,
-        dependencies: &'static [PortDependency],
-    },
+    MissingNativePorts { operation: ResubOperation },
     Backend(String),
 }
 
@@ -117,22 +80,10 @@ impl fmt::Display for ResubError {
             Self::UnsupportedOption(option) => {
                 write!(f, "unsupported resub option {option}\n{USAGE}")
             }
-            Self::MissingNativePorts {
-                operation,
-                dependencies,
-            } => {
-                write!(
-                    f,
-                    "{operation:?} requires native Rust ports for SIS dependencies: "
-                )?;
-                for (index, dependency) in dependencies.iter().enumerate() {
-                    if index > 0 {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "{} ({})", dependency.bead_id, dependency.source_file)?;
-                }
-                Ok(())
-            }
+            Self::MissingNativePorts { operation } => write!(
+                f,
+                "{operation:?} requires unavailable native Rust SIS support"
+            ),
             Self::Backend(message) => f.write_str(message),
         }
     }
@@ -270,10 +221,7 @@ pub fn execute_with_missing_dependencies(command: &ResubCommand) -> Result<(), R
 }
 
 fn missing(operation: ResubOperation) -> ResubError {
-    ResubError::MissingNativePorts {
-        operation,
-        dependencies: REQUIRED_PORTS,
-    }
+    ResubError::MissingNativePorts { operation }
 }
 
 #[cfg(test)]
@@ -392,24 +340,20 @@ mod tests {
     }
 
     #[test]
-    fn missing_backend_reports_dependency_beads_and_sources() {
-        let Err(ResubError::MissingNativePorts {
-            operation,
-            dependencies,
-        }) = execute_with_missing_dependencies(&parse_resub_args(["-b"]).unwrap())
+    fn missing_backend_reports_failed_operation() {
+        let Err(ResubError::MissingNativePorts { operation }) =
+            execute_with_missing_dependencies(&parse_resub_args(["-b"]).unwrap())
         else {
             panic!("expected missing native port error");
         };
 
         assert_eq!(operation, ResubOperation::BooleanNetwork);
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.409"
-                && dependency.source_file == "LogicSynthesis/sis/resub/bresub.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.118"
-                && dependency.source_file == "LogicSynthesis/sis/command/get_nodes.c"
-        }));
+        assert_eq!(
+            execute_with_missing_dependencies(&parse_resub_args(["-b"]).unwrap())
+                .unwrap_err()
+                .to_string(),
+            "BooleanNetwork requires unavailable native Rust SIS support"
+        );
     }
 
     #[test]
@@ -425,7 +369,6 @@ mod tests {
             register_resub_command(),
             Err(ResubError::MissingNativePorts {
                 operation: ResubOperation::RegisterCommand,
-                ..
             })
         ));
     }

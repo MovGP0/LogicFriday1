@@ -13,18 +13,6 @@ pub const POS_LARGE: f64 = 10_000.0;
 pub const NEG_LARGE: f64 = -10_000.0;
 pub const V_SMALL: f64 = 0.000001;
 
-pub const REQUIRED_PORT_BEADS: &[&str] = &[
-    "LogicFriday1-8j8.2.6.461", // speed/buf_recur.c
-    "LogicFriday1-8j8.2.6.460", // speed/buf_delay.c
-    "LogicFriday1-8j8.2.6.464", // speed/buf_util.c
-    "LogicFriday1-8j8.2.6.474", // speed/speed_delay.c
-    "LogicFriday1-8j8.2.6.480", // speed/speed_util.c
-    "LogicFriday1-8j8.2.6.258", // map/libutil.c
-    "LogicFriday1-8j8.2.6.313", // node/fan.c
-    "LogicFriday1-8j8.2.6.318", // node/node.c
-    "LogicFriday1-8j8.2.6.297", // network/dfs.c
-];
-
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct DelayTime {
     pub rise: f64,

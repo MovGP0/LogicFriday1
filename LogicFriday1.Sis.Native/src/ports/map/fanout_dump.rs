@@ -13,8 +13,8 @@ use std::fmt;
 
 use super::tree::{MapperTree, MapperTreeError};
 use super::virtual_net::{
-    DelayTime, GateKind, NodeId, SourceRef, VirtualMappedNetwork, VirtualNetworkError,
-    MINUS_INFINITY,
+    DelayTime, GateKind, MINUS_INFINITY, NodeId, SourceRef, VirtualMappedNetwork,
+    VirtualNetworkError,
 };
 
 pub const DEFAULT_DUMP_THRESHOLD: usize = 40;
@@ -282,7 +282,9 @@ impl fmt::Display for FanoutDumpError {
             Self::MissingNode(node) => write!(f, "missing fanout dump node {}", node.index()),
             Self::VirtualNetwork(error) => write!(f, "{error}"),
             Self::MapperTree(error) => write!(f, "{error}"),
-            Self::MissingSisPorts { operation } => write!(f, "{operation} requires unavailable native SIS integration"),
+            Self::MissingSisPorts { operation } => {
+                write!(f, "{operation} requires unavailable native SIS integration")
+            }
         }
     }
 }
@@ -813,11 +815,13 @@ mod tests {
         assert_eq!(record.sink_count, 3);
         assert_eq!(record.network.inputs().len(), 1);
         assert_eq!(record.network.outputs().len(), 3);
-        assert!(record
-            .network
-            .nodes()
-            .iter()
-            .any(|node| node.name == ".inv." && node.gate == Some(GateKind::Inverter)));
+        assert!(
+            record
+                .network
+                .nodes()
+                .iter()
+                .any(|node| node.name == ".inv." && node.gate == Some(GateKind::Inverter))
+        );
     }
 
     #[test]

@@ -16,19 +16,6 @@ pub const SCALE: f64 = 100.0;
 pub const CRITICAL_FRACTION: f64 = 0.05;
 pub const FUDGE: f64 = 0.0001;
 
-pub const REQUIRED_PORT_BEADS: &[&str] = &[
-    "LogicFriday1-8j8.2.6.181", // extract/genkern.c: ex_kernel_gen, ex_subkernel_gen
-    "LogicFriday1-8j8.2.6.188", // extract/qdivisor.c: ex_find_divisor_quick
-    "LogicFriday1-8j8.2.6.305", // network/network_util.c: network_add_node
-    "LogicFriday1-8j8.2.6.312", // node/divide.c: node_div
-    "LogicFriday1-8j8.2.6.313", // node/fan.c: fanin traversal
-    "LogicFriday1-8j8.2.6.318", // node/node.c: node_dup/free/function/counts
-    "LogicFriday1-8j8.2.6.325", // node/substitute.c: node_substitute
-    "LogicFriday1-8j8.2.6.474", // speed/speed_delay.c: speed_delay_arrival_time
-    "LogicFriday1-8j8.2.6.478", // speed/speed_or.c: speed_and_or_decomp
-    "LogicFriday1-8j8.2.6.480", // speed/speed_util.c: critical-cube and single-fanin helpers
-];
-
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct DelayTime {
     pub rise: f64,
@@ -297,29 +284,20 @@ pub fn speed_decomp_network_bound<Network, Node>(
 ) -> Result<(), SpeedNetError> {
     Err(SpeedNetError::MissingNativePorts {
         operation: "speed_decomp_network",
-        dependencies: REQUIRED_PORT_BEADS,
     })
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum SpeedNetError {
-    MissingNativePorts {
-        operation: &'static str,
-        dependencies: &'static [&'static str],
-    },
+    MissingNativePorts { operation: &'static str },
 }
 
 impl fmt::Display for SpeedNetError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingNativePorts {
-                operation,
-                dependencies,
-            } => write!(
-                f,
-                "{operation} requires native Rust ports for SIS extract/node/network/speed APIs: {}",
-                dependencies.join(", ")
-            ),
+            Self::MissingNativePorts { operation } => {
+                write!(f, "{operation} is blocked by unported SIS dependencies")
+            }
         }
     }
 }
@@ -565,7 +543,6 @@ mod tests {
             result,
             Err(SpeedNetError::MissingNativePorts {
                 operation: "speed_decomp_network",
-                dependencies: REQUIRED_PORT_BEADS,
             })
         );
     }

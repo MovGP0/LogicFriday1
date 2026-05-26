@@ -4,46 +4,16 @@
 //! latch and user timing offsets to derive the current cycle delay, and reports
 //! a simple internal-gate lower bound. This module keeps that behavior in owned
 //! Rust graph data. Direct exchange with SIS `re_graph` storage remains blocked
-//! on the sibling graph/export ports listed in `REQUIRED_SIS_DEPENDENCIES`.
+//! on the sibling graph/export ports that are not available in this Rust port yet.
 
 use std::error::Error;
 use std::fmt;
 
 pub const RETIME_TEST_NOT_SET: f64 = -50_000.0;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_SIS_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.415",
-        source_file: "LogicSynthesis/sis/retime/re_graph.c",
-        reason: "native SIS re_graph allocation and graph-level retiming flows call re_cycle_delay",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.422",
-        source_file: "LogicSynthesis/sis/retime/re_util.c",
-        reason: "retime graph construction and single-node retiming maintain the edge weights consumed here",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.423",
-        source_file: "LogicSynthesis/sis/retime/retime_util.c",
-        reason: "native accessors and SIS graph exchange are required before this can operate on full SIS graphs",
-    },
-];
-
-pub fn required_sis_dependencies() -> &'static [PortDependency] {
-    REQUIRED_SIS_DEPENDENCIES
-}
-
 pub fn sis_re_delay_integration_blocked() -> Result<(), ReDelayError> {
     Err(ReDelayError::MissingSisDependencies {
         operation: "re_cycle_delay/re_evaluate_delay SIS graph integration",
-        dependencies: REQUIRED_SIS_DEPENDENCIES,
     })
 }
 
@@ -305,7 +275,6 @@ pub fn retime_cycle_lower_bound(graph: &RetimeGraph) -> f64 {
 pub enum ReDelayError {
     MissingSisDependencies {
         operation: &'static str,
-        dependencies: &'static [PortDependency],
     },
     MissingNode(NodeId),
     MissingEdge(EdgeId),
@@ -322,14 +291,9 @@ pub enum ReDelayError {
 impl fmt::Display for ReDelayError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingSisDependencies {
-                operation,
-                dependencies,
-            } => write!(
-                f,
-                "{operation} requires {} native SIS prerequisite ports",
-                dependencies.len()
-            ),
+            Self::MissingSisDependencies { operation } => {
+                write!(f, "{operation} requires native prerequisite ports")
+            }
             Self::MissingNode(node) => write!(f, "retime graph references missing node {}", node.0),
             Self::MissingEdge(edge) => write!(f, "retime graph references missing edge {}", edge.0),
             Self::DelayTableLengthMismatch {
@@ -439,25 +403,5 @@ mod tests {
             graph.delay_table(),
             Err(ReDelayError::ZeroWeightDelayCycle { node: NodeId(1) })
         );
-    }
-
-    #[test]
-    fn explicit_sis_dependency_error_includes_beads_and_sources() {
-        let error = sis_re_delay_integration_blocked().unwrap_err();
-        let ReDelayError::MissingSisDependencies { dependencies, .. } = error else {
-            panic!("expected missing dependency error");
-        };
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.415"
-                && dependency.source_file == "LogicSynthesis/sis/retime/re_graph.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.422"
-                && dependency.source_file == "LogicSynthesis/sis/retime/re_util.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.423"
-                && dependency.source_file == "LogicSynthesis/sis/retime/retime_util.c"
-        }));
     }
 }

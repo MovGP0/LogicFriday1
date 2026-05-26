@@ -11,67 +11,14 @@ use std::fmt;
 
 pub const MARK_COMPLEMENT_VALUE: i32 = 0;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_PORT_BEADS: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.344",
-        source_file: "LogicSynthesis/sis/pld/act_bool.c",
-        reason: "act_is_act_function() and ACT_MATCH construction used when replacing cost slots",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.349",
-        source_file: "LogicSynthesis/sis/pld/act_init.c",
-        reason: "my_free_act() recursive ACT cleanup",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.353",
-        source_file: "LogicSynthesis/sis/pld/act_map.c",
-        reason: "ACT mark globals and act_remap_put_node_names_in_act()",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.305",
-        source_file: "LogicSynthesis/sis/network/network_util.c",
-        reason: "network_free() and network_find_node()",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.317",
-        source_file: "LogicSynthesis/sis/node/names.c",
-        reason: "node_long_name() for ITE literal remapping",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-        reason: "node_literal() and node_free() for literal/multiple-fanout helpers",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.485",
-        source_file: "LogicSynthesis/sis/st/st.c",
-        reason: "st_table pointer set traversal used by ite_my_traverse_ite()",
-    },
-];
-
-pub fn required_port_beads() -> &'static [PortDependency] {
-    REQUIRED_PORT_BEADS
-}
-
 pub fn sis_bound_operation_unavailable(operation: &'static str) -> Result<(), IteUtilError> {
-    Err(IteUtilError::MissingNativePorts {
-        operation,
-        dependencies: REQUIRED_PORT_BEADS,
-    })
+    Err(IteUtilError::MissingNativePorts { operation })
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum IteUtilError {
     MissingNativePorts {
         operation: &'static str,
-        dependencies: &'static [PortDependency],
     },
     MissingMatch {
         node: NodeId,
@@ -94,14 +41,9 @@ pub enum IteUtilError {
 impl fmt::Display for IteUtilError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingNativePorts {
-                operation,
-                dependencies,
-            } => write!(
-                f,
-                "{operation} requires {} native SIS prerequisite ports",
-                dependencies.len()
-            ),
+            Self::MissingNativePorts { operation } => {
+                write!(f, "{operation} requires native SIS prerequisite ports")
+            }
             Self::MissingMatch { node, map_alg } => {
                 write!(
                     f,
@@ -929,34 +871,5 @@ mod tests {
         assert!(cost.ite.is_none());
         assert!(cost.match_info.is_none());
         assert!(cost.network.is_none());
-    }
-
-    #[test]
-    fn sis_bound_scaffold_reports_dependency_beads_and_sources() {
-        let Err(IteUtilError::MissingNativePorts {
-            operation,
-            dependencies,
-        }) = act_ite_cost_struct_replace_blocked(
-            &mut SisNode::new(1, "a"),
-            &mut SisNode::new(2, "b"),
-            0,
-        )
-        else {
-            panic!("expected missing dependency error");
-        };
-
-        assert_eq!(operation, "act_ite_cost_struct_replace");
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.344"
-                && dependency.source_file == "LogicSynthesis/sis/pld/act_bool.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.305"
-                && dependency.source_file == "LogicSynthesis/sis/network/network_util.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.485"
-                && dependency.source_file == "LogicSynthesis/sis/st/st.c"
-        }));
     }
 }

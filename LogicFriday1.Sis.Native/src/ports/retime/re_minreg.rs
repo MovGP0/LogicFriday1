@@ -208,30 +208,6 @@ pub struct MinRegisterSetup {
     pub tableau: LpTableau,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_SOLVER_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.412",
-        source_file: "LogicSynthesis/sis/retime/re_computeWD.c",
-        reason: "top-level register minimization needs W/D all-pairs path data",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.421",
-        source_file: "LogicSynthesis/sis/retime/re_simplx.c",
-        reason: "top-level register minimization needs the simplex basis solution",
-    },
-];
-
-pub fn required_solver_dependencies() -> &'static [PortDependency] {
-    REQUIRED_SOLVER_DEPENDENCIES
-}
-
 pub fn retime_min_register(
     _graph: &mut RetimeGraph,
     _cycle_time: f64,
@@ -239,7 +215,6 @@ pub fn retime_min_register(
 ) -> Result<bool, RetimeMinRegError> {
     Err(RetimeMinRegError::MissingNativePorts {
         operation: "retime_min_register",
-        dependencies: REQUIRED_SOLVER_DEPENDENCIES,
     })
 }
 
@@ -482,34 +457,20 @@ fn ceil_scaled(value: f64) -> i32 {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum RetimeMinRegError {
-    MissingNativePorts {
-        operation: &'static str,
-        dependencies: &'static [PortDependency],
-    },
+    MissingNativePorts { operation: &'static str },
     MissingNode(NodeId),
     MissingEdge(EdgeId),
     MissingLpIndex(NodeId),
-    InvalidWdDimensions {
-        expected: usize,
-        rows: usize,
-    },
-    RetimingVectorTooSmall {
-        expected: usize,
-        actual: usize,
-    },
+    InvalidWdDimensions { expected: usize, rows: usize },
+    RetimingVectorTooSmall { expected: usize, actual: usize },
 }
 
 impl fmt::Display for RetimeMinRegError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingNativePorts {
-                operation,
-                dependencies,
-            } => write!(
-                f,
-                "{operation} is blocked by {} unported SIS retime dependencies",
-                dependencies.len()
-            ),
+            Self::MissingNativePorts { operation } => {
+                write!(f, "{operation} requires native prerequisite ports")
+            }
             Self::MissingNode(node) => write!(f, "retime graph references missing node {}", node.0),
             Self::MissingEdge(edge) => write!(f, "retime graph references missing edge {}", edge.0),
             Self::MissingLpIndex(node) => write!(f, "retime node {} has no LP index", node.0),
@@ -658,33 +619,6 @@ mod tests {
         assert_eq!(graph.edges[1].weight, -1);
         assert_eq!(graph.edges[2].weight, -2);
     }
-
-    #[test]
-    fn top_level_optimizer_reports_solver_dependency_beads_and_sources() {
-        let mut graph = sample_graph();
-        let mut retiming = vec![0; graph.nodes.len()];
-
-        let error = retime_min_register(&mut graph, 2.0, &mut retiming)
-            .expect_err("solver dependencies are not ported yet");
-
-        let RetimeMinRegError::MissingNativePorts {
-            operation,
-            dependencies,
-        } = error
-        else {
-            panic!("expected dependency error");
-        };
-        assert_eq!(operation, "retime_min_register");
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.412"
-                && dependency.source_file == "LogicSynthesis/sis/retime/re_computeWD.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.421"
-                && dependency.source_file == "LogicSynthesis/sis/retime/re_simplx.c"
-        }));
-    }
-
     #[test]
     fn invalid_wd_dimensions_are_rejected() {
         let mut graph = sample_graph();

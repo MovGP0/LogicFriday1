@@ -11,49 +11,13 @@ use std::fmt;
 
 pub const SIS_BUFSIZE: usize = 500;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_PORT_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.2",
-        source_file: "LogicSynthesis/sis/array/array.c",
-        reason: "xln_array_to_indices receives its Y subset as array_t and returns ALLOC-managed storage",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.313",
-        source_file: "LogicSynthesis/sis/node/fan.c",
-        reason: "node_get_fanin_index defines pointer-identity fanin lookup and the -1 missing-fanin result",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-        reason: "native SIS integration needs node_t fanin storage and node ownership semantics",
-    },
-];
-
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum XlnAuxError {
     NonPositiveLogInput(i32),
-    BinaryLengthExceedsBuffer {
-        length: usize,
-        buffer: usize,
-    },
-    BinaryValueDoesNotFit {
-        value: u64,
-        length: usize,
-    },
-    MissingFanin {
-        subset_index: usize,
-    },
-    MissingNativePorts {
-        operation: &'static str,
-        dependencies: &'static [PortDependency],
-    },
+    BinaryLengthExceedsBuffer { length: usize, buffer: usize },
+    BinaryValueDoesNotFit { value: u64, length: usize },
+    MissingFanin { subset_index: usize },
+    MissingNativePorts { operation: &'static str },
 }
 
 impl fmt::Display for XlnAuxError {
@@ -76,13 +40,9 @@ impl fmt::Display for XlnAuxError {
                 f,
                 "subset entry #{subset_index} is not a fanin of the supplied node"
             ),
-            Self::MissingNativePorts {
-                operation,
-                dependencies,
-            } => write!(
+            Self::MissingNativePorts { operation } => write!(
                 f,
-                "{operation} is blocked by {} unported SIS C-file dependencies",
-                dependencies.len()
+                "{operation} is blocked by unported SIS C-file dependencies"
             ),
         }
     }
@@ -91,10 +51,6 @@ impl fmt::Display for XlnAuxError {
 impl Error for XlnAuxError {}
 
 pub type XlnAuxResult<T> = Result<T, XlnAuxError>;
-
-pub fn required_port_dependencies() -> &'static [PortDependency] {
-    REQUIRED_PORT_DEPENDENCIES
-}
 
 pub fn intlog2(value: i32) -> XlnAuxResult<usize> {
     if value <= 0 {
@@ -161,7 +117,6 @@ pub fn xln_array_to_indices_blocked<Array, Node>(
 ) -> XlnAuxResult<Vec<usize>> {
     Err(XlnAuxError::MissingNativePorts {
         operation: "xln_array_to_indices",
-        dependencies: REQUIRED_PORT_DEPENDENCIES,
     })
 }
 
@@ -250,30 +205,5 @@ mod tests {
             xln_array_to_indices_c_semantics(&subset, &node_fanins),
             vec![1, -1, 0]
         );
-    }
-
-    #[test]
-    fn sis_backed_entry_reports_dependency_beads_and_sources() {
-        let Err(XlnAuxError::MissingNativePorts {
-            operation,
-            dependencies,
-        }) = xln_array_to_indices_blocked(&(), &())
-        else {
-            panic!("expected missing native ports");
-        };
-
-        assert_eq!(operation, "xln_array_to_indices");
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.2"
-                && dependency.source_file == "LogicSynthesis/sis/array/array.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.313"
-                && dependency.source_file == "LogicSynthesis/sis/node/fan.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.318"
-                && dependency.source_file == "LogicSynthesis/sis/node/node.c"
-        }));
     }
 }

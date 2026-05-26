@@ -1,11 +1,11 @@
-//! Native Rust model and dependency scaffold for
+//! Native Rust model for
 //! `LogicSynthesis/sis/seqbdd/prl_extract.c`.
 //!
 //! The C file builds environment/FSM product networks, extracts sequential
 //! don't-cares, verifies two FSMs under an environment, and prints shortest
 //! counterexample traces. The real SIS implementation depends on unported
 //! `network_t`, `node_t`, latch, BDD, ntbdd, array, and seqbdd option layers, so
-//! SIS-bound entry points return explicit dependency errors. The product
+//! SIS-bound entry points return generic missing-port diagnostics. The product
 //! planning, output filtering, BDD-variable bookkeeping, breadth-first
 //! traversal, and shortest-trace logic are represented with owned Rust data and
 //! covered by tests.
@@ -15,105 +15,10 @@ use std::error::Error;
 use std::fmt;
 use std::hash::Hash;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_PORT_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.2",
-        source_file: "LogicSynthesis/sis/array/array.c",
-        reason: "array_t allocation, indexed mutation, ownership, and cleanup",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.71",
-        source_file: "LogicSynthesis/sis/bdd_cmu/bdd_port/bddport.c",
-        reason: "BDD constants, boolean operations, quantification, tautology, and cube extraction",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.230",
-        source_file: "LogicSynthesis/sis/latch/latch.c",
-        reason: "latch creation, current values, and initial values",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.297",
-        source_file: "LogicSynthesis/sis/network/dfs.c",
-        reason: "network_dfs ordering used for counterexample simulation",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.299",
-        source_file: "LogicSynthesis/sis/network/net_seq.c",
-        reason: "real PI/PO detection and latch endpoint traversal",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.305",
-        source_file: "LogicSynthesis/sis/network/network_util.c",
-        reason: "network duplication, lookup, node deletion, primary I/O mutation, and latch wiring",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.313",
-        source_file: "LogicSynthesis/sis/node/fan.c",
-        reason: "fanin/fanout traversal and fanin patching",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-        reason: "node allocation, literals, SCC recomputation, XNOR construction, and simulation values",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.326",
-        source_file: "LogicSynthesis/sis/ntbdd/bdd_at_node.c",
-        reason: "ntbdd_node_to_bdd and node BDD lookup",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.329",
-        source_file: "LogicSynthesis/sis/ntbdd/manager.c",
-        reason: "BDD manager ownership attached to seq_info_t",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.426",
-        source_file: "LogicSynthesis/sis/seqbdd/com_verify.c",
-        reason: "command option wiring for environment DC extraction and environment verification",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.429",
-        source_file: "LogicSynthesis/sis/seqbdd/network_info.c",
-        reason: "Prl_SeqInitNetwork, seq_info_t construction, and sequence variable arrays",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.440",
-        source_file: "LogicSynthesis/sis/seqbdd/product.c",
-        reason: "reachable-state image and reverse-image callbacks",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.442",
-        source_file: "LogicSynthesis/sis/seqbdd/verif_util.c",
-        reason: "shared copy-field setup, subnetwork copy, DC-network cleanup, minterm extraction, and BDD array helpers",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.485",
-        source_file: "LogicSynthesis/sis/st/st.c",
-        reason: "node-to-BDD variable tables used when printing traces",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.504",
-        source_file: "LogicSynthesis/sis/util/cpu_time.c",
-        reason: "elapsed-time reports around state traversal",
-    },
-];
-
-pub fn required_port_dependencies() -> &'static [PortDependency] {
-    REQUIRED_PORT_DEPENDENCIES
-}
-
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum PrlExtractError {
     MissingNativePorts {
         operation: &'static str,
-        dependencies: &'static [PortDependency],
     },
     DuplicateProductOutputName {
         network_name: String,
@@ -137,14 +42,9 @@ pub enum PrlExtractError {
 impl fmt::Display for PrlExtractError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingNativePorts {
-                operation,
-                dependencies,
-            } => write!(
-                f,
-                "{operation} requires native Rust ports for {} SIS dependencies",
-                dependencies.len()
-            ),
+            Self::MissingNativePorts { operation } => {
+                write!(f, "{operation} is blocked by missing native SIS ports")
+            }
             Self::DuplicateProductOutputName {
                 network_name,
                 output_name,
@@ -203,10 +103,7 @@ pub fn verify_env_fsm_with_sis_networks<Network, Options>(
 }
 
 fn missing_native_ports<T>(operation: &'static str) -> Result<T, PrlExtractError> {
-    Err(PrlExtractError::MissingNativePorts {
-        operation,
-        dependencies: REQUIRED_PORT_DEPENDENCIES,
-    })
+    Err(PrlExtractError::MissingNativePorts { operation })
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -1211,41 +1108,6 @@ mod tests {
             EnvDcDisposition::StoreSingleOutputDcNetwork
         );
     }
-
-    #[test]
-    fn sis_bound_entry_points_report_dependency_beads_and_sources() {
-        let error = extract_env_dc_from_sis_networks(&mut (), &(), &()).unwrap_err();
-
-        match error {
-            PrlExtractError::MissingNativePorts {
-                operation,
-                dependencies,
-            } => {
-                assert_eq!(operation, "Prl_ExtractEnvDc");
-                assert!(dependencies.iter().any(|dependency| {
-                    dependency.bead_id == "LogicFriday1-8j8.2.6.429"
-                        && dependency.source_file == "LogicSynthesis/sis/seqbdd/network_info.c"
-                }));
-                assert!(dependencies.iter().any(|dependency| {
-                    dependency.bead_id == "LogicFriday1-8j8.2.6.442"
-                        && dependency.source_file == "LogicSynthesis/sis/seqbdd/verif_util.c"
-                }));
-            }
-            other => panic!("unexpected error: {other:?}"),
-        }
-
-        let verify_error = verify_env_fsm_with_sis_networks(&(), &mut (), &(), &()).unwrap_err();
-        assert!(verify_error.to_string().contains("Prl_VerifyEnvFsm"));
-        assert!(
-            required_port_dependencies()
-                .iter()
-                .any(
-                    |dependency| dependency.bead_id == "LogicFriday1-8j8.2.6.440"
-                        && dependency.source_file == "LogicSynthesis/sis/seqbdd/product.c"
-                )
-        );
-    }
-
     #[test]
     fn no_legacy_c_abi_tokens_are_present_in_this_port() {
         let source = include_str!("prl_extract.rs");

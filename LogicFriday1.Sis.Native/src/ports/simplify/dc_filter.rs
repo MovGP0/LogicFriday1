@@ -1,4 +1,4 @@
-//! Native Rust model for `LogicSynthesis/sis/simplify/dc_filter.c`.
+﻿//! Native Rust model for `LogicSynthesis/sis/simplify/dc_filter.c`.
 //!
 //! The C file filters a don't-care cover by converting the on-set and
 //! don't-care set into a sparse matrix, deleting selected don't-care rows, and
@@ -13,66 +13,6 @@ use std::fmt;
 
 pub const SIZE_BOUND: usize = 3;
 pub const DIST_BOUND: usize = 2;
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead: &'static str,
-    pub c_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_PORT_BEADS: &[PortDependency] = &[
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.2",
-        c_file: "LogicSynthesis/sis/array/array.c",
-        reason: "sm_col_count_init uses array allocation, fetch, insert, and free",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.165",
-        c_file: "LogicSynthesis/sis/espresso/set.c",
-        reason: "node_d1merge/node_d2merge depend on Espresso cover merge semantics",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.318",
-        c_file: "LogicSynthesis/sis/node/node.c",
-        reason: "node_t constants, literals, AND construction, metrics, and node_free",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.321",
-        c_file: "LogicSynthesis/sis/node/nodemisc.c",
-        reason: "node_scc and node_minimum_base after repeated distance-one merge",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.453",
-        c_file: "LogicSynthesis/sis/simplify/simp_sm.c",
-        reason: "simp_node_to_sm and simp_sm_to_node conversion boundary",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.454",
-        c_file: "LogicSynthesis/sis/simplify/filter_util.c",
-        reason: "canonical sparse-matrix filter helper ownership",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.456",
-        c_file: "LogicSynthesis/sis/sparse/cols.c",
-        reason: "native sm_col traversal, flags, and column lengths",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.457",
-        c_file: "LogicSynthesis/sis/sparse/matrix.c",
-        reason: "native sm_matrix row/column deletion and lookup semantics",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.458",
-        c_file: "LogicSynthesis/sis/sparse/rows.c",
-        reason: "native sm_row metadata, flags, lengths, and traversal order",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.485",
-        c_file: "LogicSynthesis/sis/st/st.c",
-        reason: "simp_obsdc_filter consumes an ST table of allowed variables",
-    },
-];
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DcFilter {
@@ -202,22 +142,15 @@ impl FilterMatrix {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum DcFilterError {
-    MissingSisPorts {
-        operation: &'static str,
-        dependencies: &'static [PortDependency],
-    },
+    MissingSisPorts { operation: &'static str },
 }
 
 impl fmt::Display for DcFilterError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingSisPorts {
-                operation,
-                dependencies,
-            } => write!(
+            Self::MissingSisPorts { operation } => write!(
                 f,
-                "{operation} is blocked by {} unported SIS C-file dependencies",
-                dependencies.len()
+                "{operation} requires native Rust SIS ports that are not available yet"
             ),
         }
     }
@@ -225,35 +158,27 @@ impl fmt::Display for DcFilterError {
 
 impl Error for DcFilterError {}
 
-pub fn required_port_beads() -> &'static [PortDependency] {
-    REQUIRED_PORT_BEADS
-}
-
 pub fn simp_dc_filter_in_sis_network() -> Result<(), DcFilterError> {
     Err(DcFilterError::MissingSisPorts {
         operation: "simp_dc_filter",
-        dependencies: REQUIRED_PORT_BEADS,
     })
 }
 
 pub fn simp_obsdc_filter_in_sis_network() -> Result<(), DcFilterError> {
     Err(DcFilterError::MissingSisPorts {
         operation: "simp_obsdc_filter",
-        dependencies: REQUIRED_PORT_BEADS,
     })
 }
 
 pub fn simp_obssatdc_filter_in_sis_network() -> Result<(), DcFilterError> {
     Err(DcFilterError::MissingSisPorts {
         operation: "simp_obssatdc_filter",
-        dependencies: REQUIRED_PORT_BEADS,
     })
 }
 
 pub fn node_d2merge_in_sis_network() -> Result<(), DcFilterError> {
     Err(DcFilterError::MissingSisPorts {
         operation: "node_d2merge",
-        dependencies: REQUIRED_PORT_BEADS,
     })
 }
 
@@ -634,32 +559,17 @@ mod tests {
     }
 
     #[test]
-    fn sis_bound_entries_report_dependency_beads_and_sources() {
-        assert!(required_port_beads().iter().any(|dependency| {
-            dependency.bead == "LogicFriday1-8j8.2.6.453"
-                && dependency.c_file == "LogicSynthesis/sis/simplify/simp_sm.c"
-        }));
-        assert!(required_port_beads().iter().any(|dependency| {
-            dependency.bead == "LogicFriday1-8j8.2.6.454"
-                && dependency.c_file == "LogicSynthesis/sis/simplify/filter_util.c"
-        }));
-        assert!(required_port_beads().iter().any(|dependency| {
-            dependency.bead == "LogicFriday1-8j8.2.6.318"
-                && dependency.c_file == "LogicSynthesis/sis/node/node.c"
-        }));
-
+    fn sis_bound_entries_report_missing_sis_ports() {
         assert_eq!(
             simp_dc_filter_in_sis_network(),
             Err(DcFilterError::MissingSisPorts {
                 operation: "simp_dc_filter",
-                dependencies: REQUIRED_PORT_BEADS,
             })
         );
         assert_eq!(
             node_d2merge_in_sis_network(),
             Err(DcFilterError::MissingSisPorts {
                 operation: "node_d2merge",
-                dependencies: REQUIRED_PORT_BEADS,
             })
         );
     }

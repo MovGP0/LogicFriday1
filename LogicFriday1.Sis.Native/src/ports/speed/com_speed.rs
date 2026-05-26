@@ -18,116 +18,6 @@ pub const DEFAULT_BUFFER_LIMIT: i32 = 2;
 pub const DEFAULT_BUFFER_MODE: i32 = 7;
 pub const V_SMALL: f64 = 1.0e-9;
 
-pub const REQUIRED_PORTS: &[PortDependency] = &[
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.133",
-        source: "LogicSynthesis/sis/delay/delay.c",
-        reason: "delay model lookup, delay tracing, slack and arrival data",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.214",
-        source: "LogicSynthesis/sis/graphics/com_graphics.c",
-        reason: "conditional _speed_plot command registration",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.258",
-        source: "LogicSynthesis/sis/map/libutil.c",
-        reason: "mapped-network detection",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.257",
-        source: "LogicSynthesis/sis/map/library.c",
-        reason: "mapped-library presence and gate data",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.305",
-        source: "LogicSynthesis/sis/network/network_util.c",
-        reason: "network PI count, node selection, and traversal",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.318",
-        source: "LogicSynthesis/sis/node/node.c",
-        reason: "node type/function/fanin/fanout inspection",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.455",
-        source: "LogicSynthesis/sis/simplify/simp.c",
-        reason: "redundancy removal during speed-up",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.467",
-        source: "LogicSynthesis/sis/speed/new_speed.c",
-        reason: "new speed optimization engine",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.468",
-        source: "LogicSynthesis/sis/speed/new_wght_util.c",
-        reason: "local transform selection and new cutset weighting",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.472",
-        source: "LogicSynthesis/sis/speed/speed_and.c",
-        reason: "initial two-input NAND decomposition",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.474",
-        source: "LogicSynthesis/sis/speed/speed_delay.c",
-        reason: "speed delay data setup and tracing",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.475",
-        source: "LogicSynthesis/sis/speed/speed_loop.c",
-        reason: "speed-up script and repeated optimization loop",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.476",
-        source: "LogicSynthesis/sis/speed/speed_net.c",
-        reason: "per-node and per-network decomposition",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.479",
-        source: "LogicSynthesis/sis/speed/speed_plot.c",
-        reason: "graphics command implementation",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.480",
-        source: "LogicSynthesis/sis/speed/speed_util.c",
-        reason: "thresholds, levels, performance reporting",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.481",
-        source: "LogicSynthesis/sis/speed/speedup.c",
-        reason: "legacy speed_up_network implementation",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.483",
-        source: "LogicSynthesis/sis/speed/weight.c",
-        reason: "critical-path weight and cutset computation",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.466",
-        source: "LogicSynthesis/sis/speed/gbx.c",
-        reason: "buffer allocation/free daemons and mapped buffering helpers",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.470",
-        source: "LogicSynthesis/sis/speed/sp_buffer.c",
-        reason: "network and node buffering implementation",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.473",
-        source: "LogicSynthesis/sis/speed/sp_network.c",
-        reason: "PI/PO load and drive default handling",
-    },
-];
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead: &'static str,
-    pub source: &'static str,
-    pub reason: &'static str,
-}
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DelayModel {
     Unit,
@@ -547,40 +437,23 @@ impl Error for CommandParseError {}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum SpeedCommandError {
-    MissingDependencies {
-        command: SpeedCommandKind,
-        dependencies: &'static [PortDependency],
-    },
+    MissingDependencies { command: SpeedCommandKind },
 }
 
 impl fmt::Display for SpeedCommandError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingDependencies {
-                command,
-                dependencies,
-            } => {
+            Self::MissingDependencies { command } => {
                 write!(
                     f,
-                    "{command:?} requires native Rust ports for SIS dependencies: "
-                )?;
-                for (index, dependency) in dependencies.iter().enumerate() {
-                    if index > 0 {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "{} ({})", dependency.bead, dependency.source)?;
-                }
-                Ok(())
+                    "{command:?} requires native Rust ports for SIS dependencies"
+                )
             }
         }
     }
 }
 
 impl Error for SpeedCommandError {}
-
-pub fn required_ports() -> &'static [PortDependency] {
-    REQUIRED_PORTS
-}
 
 pub fn speed_command_registrations(graphics_enabled: bool) -> Vec<CommandRegistration> {
     let mut commands = SPEED_COMMANDS.to_vec();
@@ -909,10 +782,7 @@ pub fn execute_command<Network>(
         SpeedCommand::SpeedPlot => SpeedCommandKind::SpeedPlot,
     };
 
-    Err(SpeedCommandError::MissingDependencies {
-        command: kind,
-        dependencies: REQUIRED_PORTS,
-    })
+    Err(SpeedCommandError::MissingDependencies { command: kind })
 }
 
 fn apply_speed_option(
@@ -1246,19 +1116,9 @@ mod tests {
             error,
             SpeedCommandError::MissingDependencies {
                 command: SpeedCommandKind::SpeedUp,
-                dependencies: REQUIRED_PORTS,
             }
         );
-        assert!(
-            required_ports()
-                .iter()
-                .any(|dependency| dependency.bead == "LogicFriday1-8j8.2.6.475")
-        );
-        assert!(
-            error
-                .to_string()
-                .contains("LogicSynthesis/sis/speed/speed_loop.c")
-        );
+        assert!(error.to_string().contains("requires native Rust ports"));
     }
 
     #[test]

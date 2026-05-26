@@ -1,10 +1,10 @@
-//! Native Rust model for `LogicSynthesis/sis/simplify/simp_sm.c`.
+﻿//! Native Rust model for `LogicSynthesis/sis/simplify/simp_sm.c`.
 //!
 //! The original C file converts SIS `node_t` covers into an `sm_matrix`, prints
 //! that matrix, and converts the remaining don't-care rows back into a node. The
 //! owned model here preserves those transformations without exposing legacy C
 //! ABI entry points. Integration with native SIS `node_t`, sparse-matrix, and
-//! Espresso set-family ports remains blocked by the dependencies listed below.
+//! Espresso set-family ports remains blocked until those native ports exist.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::error::Error;
@@ -13,41 +13,6 @@ use std::hash::Hash;
 
 pub const F_SET: RowKind = RowKind::OnSet;
 pub const DC_SET: RowKind = RowKind::DontCare;
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead: &'static str,
-    pub c_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_PORT_BEADS: &[PortDependency] = &[
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.318",
-        c_file: "LogicSynthesis/sis/node/node.c",
-        reason: "node_t allocation, fanin storage, cubes, literals, and node_replace_internal",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.165",
-        c_file: "LogicSynthesis/sis/espresso/set.c",
-        reason: "sf_new, set_fill, and PUTINPUT set-family semantics",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.457",
-        c_file: "LogicSynthesis/sis/sparse/matrix.c",
-        reason: "canonical native sm_matrix integration surface",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.458",
-        c_file: "LogicSynthesis/sis/sparse/rows.c",
-        reason: "canonical native sm_row metadata and row deletion behavior",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.456",
-        c_file: "LogicSynthesis/sis/sparse/cols.c",
-        reason: "canonical native sm_col metadata and column traversal behavior",
-    },
-];
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Literal {
@@ -190,7 +155,6 @@ pub enum SimpSmError {
     },
     MissingSisPorts {
         operation: &'static str,
-        dependencies: &'static [PortDependency],
     },
 }
 
@@ -205,13 +169,9 @@ impl fmt::Display for SimpSmError {
                 f,
                 "cube {cube_index} has {actual} literals, expected {expected}"
             ),
-            Self::MissingSisPorts {
-                operation,
-                dependencies,
-            } => write!(
+            Self::MissingSisPorts { operation } => write!(
                 f,
-                "{operation} requires {} native SIS prerequisite ports",
-                dependencies.len()
+                "{operation} requires native Rust SIS ports that are not available yet"
             ),
         }
     }
@@ -219,21 +179,15 @@ impl fmt::Display for SimpSmError {
 
 impl Error for SimpSmError {}
 
-pub fn required_port_beads() -> &'static [PortDependency] {
-    REQUIRED_PORT_BEADS
-}
-
 pub fn sis_node_to_sm_unavailable<N>() -> Result<SimpSmMatrix<N>, SimpSmError> {
     Err(SimpSmError::MissingSisPorts {
         operation: "simp_node_to_sm native SIS integration",
-        dependencies: REQUIRED_PORT_BEADS,
     })
 }
 
 pub fn sis_sm_to_node_unavailable<N>() -> Result<LogicNode<N>, SimpSmError> {
     Err(SimpSmError::MissingSisPorts {
         operation: "simp_sm_to_node native SIS integration",
-        dependencies: REQUIRED_PORT_BEADS,
     })
 }
 
@@ -452,21 +406,13 @@ mod tests {
     }
 
     #[test]
-    fn sis_integration_reports_blocking_dependencies() {
+    fn sis_integration_reports_missing_sis_ports() {
         let err = sis_node_to_sm_unavailable::<String>()
             .expect_err("SIS integration should remain explicitly blocked");
 
         match err {
-            SimpSmError::MissingSisPorts {
-                operation,
-                dependencies,
-            } => {
+            SimpSmError::MissingSisPorts { operation } => {
                 assert_eq!(operation, "simp_node_to_sm native SIS integration");
-                assert_eq!(dependencies, REQUIRED_PORT_BEADS);
-                assert!(dependencies.iter().any(|dependency| {
-                    dependency.bead == "LogicFriday1-8j8.2.6.318"
-                        && dependency.c_file == "LogicSynthesis/sis/node/node.c"
-                }));
             }
             other => panic!("unexpected error: {other:?}"),
         }

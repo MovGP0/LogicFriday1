@@ -485,7 +485,9 @@ impl fmt::Display for VirtualDelayError {
                 )
             }
             Self::VirtualNetwork(error) => write!(f, "{error}"),
-            Self::MissingSisPorts { operation } => write!(f, "{operation} requires unavailable native SIS integration"),
+            Self::MissingSisPorts { operation } => {
+                write!(f, "{operation} requires unavailable native SIS integration")
+            }
         }
     }
 }

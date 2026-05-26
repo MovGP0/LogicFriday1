@@ -12,81 +12,6 @@ use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::fmt;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_PORT_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.2",
-        source_file: "LogicSynthesis/sis/array/array.c",
-        reason: "xln_collapse.c stores DFS nodes, fanouts, and affected nodes in array_t",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.297",
-        source_file: "LogicSynthesis/sis/network/dfs.c",
-        reason: "xln_partial_collapse walks network_dfs order before and after collapses",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.305",
-        source_file: "LogicSynthesis/sis/network/network_util.c",
-        reason: "network_num_internal, network_num_pi, network_dup, network_collapse, network_check, network_delete_node, and network_free are required",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.309",
-        source_file: "LogicSynthesis/sis/node/collapse.c",
-        reason: "xln_partial_collapse_node uses node_collapse to test and apply fanout collapses",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.313",
-        source_file: "LogicSynthesis/sis/node/fan.c",
-        reason: "fanin/fanout traversal drives collapse eligibility and affected-node scheduling",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.317",
-        source_file: "LogicSynthesis/sis/node/names.c",
-        reason: "node_long_name is the key for the C cost and affected-node tables",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-        reason: "node type checks, node_dup, node_replace, and node_free are required",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.455",
-        source_file: "LogicSynthesis/sis/simplify/simp.c",
-        reason: "simplify_node and node_simplify normalize nodes before mapping and gain evaluation",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.376",
-        source_file: "LogicSynthesis/sis/pld/pld_util.c",
-        reason: "pld_replace_node_by_network applies the selected mapped network to a SIS node",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.384",
-        source_file: "LogicSynthesis/sis/pld/xln_imp.c",
-        reason: "xln_best_script and xln_try_other_mapping_options produce mapped cost networks",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.392",
-        source_file: "LogicSynthesis/sis/pld/xln_new_part.c",
-        reason: "xln_do_trivial_collapse_network performs the initial trivial collapse loop",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.377",
-        source_file: "LogicSynthesis/sis/pld/xln_aodecomp.c",
-        reason: "xln_cofactor_decomp_network decomposes a fully-collapsed candidate for area",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.386",
-        source_file: "LogicSynthesis/sis/pld/xln_k_decomp.c",
-        reason: "karp_decomp_network supplies the Roth-Karp area candidate",
-    },
-];
-
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct NodeId(pub usize);
 
@@ -378,18 +303,10 @@ pub enum CollapseOperation {
 pub enum XlnCollapseError {
     UnknownNode(NodeId),
     DeletedNode(NodeId),
-    NotAFanin {
-        fanout: NodeId,
-        fanin: NodeId,
-    },
+    NotAFanin { fanout: NodeId, fanin: NodeId },
     MissingCost(NodeId),
-    InvalidSupport {
-        support: usize,
-    },
-    MissingNativePorts {
-        operation: CollapseOperation,
-        dependencies: &'static [PortDependency],
-    },
+    InvalidSupport { support: usize },
+    MissingNativePorts { operation: CollapseOperation },
 }
 
 impl fmt::Display for XlnCollapseError {
@@ -404,23 +321,15 @@ impl fmt::Display for XlnCollapseError {
             Self::InvalidSupport { support } => {
                 write!(f, "PLD support must be positive, got {support}")
             }
-            Self::MissingNativePorts {
-                operation,
-                dependencies,
-            } => write!(
+            Self::MissingNativePorts { operation } => write!(
                 f,
-                "{operation:?} is blocked by {} unported SIS C-file dependencies",
-                dependencies.len()
+                "{operation:?} is blocked by unported SIS C-file dependencies"
             ),
         }
     }
 }
 
 impl Error for XlnCollapseError {}
-
-pub fn required_port_dependencies() -> &'static [PortDependency] {
-    REQUIRED_PORT_DEPENDENCIES
-}
 
 pub fn partial_collapse_blocked<Network>(
     _network: &mut Network,
@@ -453,10 +362,7 @@ pub fn collapse_check_area_blocked<Network>(
 }
 
 fn missing_native_ports<T>(operation: CollapseOperation) -> Result<T, XlnCollapseError> {
-    Err(XlnCollapseError::MissingNativePorts {
-        operation,
-        dependencies: REQUIRED_PORT_DEPENDENCIES,
-    })
+    Err(XlnCollapseError::MissingNativePorts { operation })
 }
 
 pub fn xln_cost_of_node(
@@ -1025,35 +931,6 @@ mod tests {
             ),
             MappedNetwork::new(4)
         );
-    }
-
-    #[test]
-    fn sis_bound_entries_report_dependency_beads_and_sources() {
-        let Err(XlnCollapseError::MissingNativePorts {
-            operation,
-            dependencies,
-        }) = partial_collapse_blocked(&mut (), default_options())
-        else {
-            panic!("expected missing native ports");
-        };
-
-        assert_eq!(operation, CollapseOperation::PartialCollapse);
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.384"
-                && dependency.source_file == "LogicSynthesis/sis/pld/xln_imp.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.392"
-                && dependency.source_file == "LogicSynthesis/sis/pld/xln_new_part.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.309"
-                && dependency.source_file == "LogicSynthesis/sis/node/collapse.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.455"
-                && dependency.source_file == "LogicSynthesis/sis/simplify/simp.c"
-        }));
     }
 
     #[test]

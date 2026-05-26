@@ -58,16 +58,16 @@ pub struct TreeSizeDistributionEntry {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum TreeSizeError {
     Tree(MapperTreeError),
-    MissingSisPorts {
-        operation: &'static str,
-    },
+    MissingSisPorts { operation: &'static str },
 }
 
 impl fmt::Display for TreeSizeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Tree(error) => write!(f, "{error}"),
-            Self::MissingSisPorts { operation } => write!(f, "{operation} requires unavailable native SIS integration"),
+            Self::MissingSisPorts { operation } => {
+                write!(f, "{operation} requires unavailable native SIS integration")
+            }
         }
     }
 }

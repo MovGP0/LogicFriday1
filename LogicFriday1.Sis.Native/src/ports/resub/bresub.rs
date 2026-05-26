@@ -10,19 +10,6 @@ use std::fmt;
 pub const BOOLEAN_RESUB_WARNING: &str =
     "Warning!: Boolean resub has not been implemented, algebraic resub is used.\n";
 
-pub const REQUIRED_PORTS: &[PortDependency] = &[PortDependency {
-    bead_id: "LogicFriday1-8j8.2.6.408",
-    source_file: "LogicSynthesis/sis/resub/aresub.c",
-    reason: "provides resub_alge_node and resub_alge_network fallback behavior",
-}];
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub reason: &'static str,
-}
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum BooleanResubOperation {
     BooleanNode,
@@ -56,32 +43,17 @@ impl BooleanResubPlan {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum BooleanResubError {
-    MissingNativePorts {
-        operation: BooleanResubOperation,
-        dependencies: &'static [PortDependency],
-    },
+    MissingNativePorts { operation: BooleanResubOperation },
     AlgebraicFallback(String),
 }
 
 impl fmt::Display for BooleanResubError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingNativePorts {
-                operation,
-                dependencies,
-            } => {
-                write!(
-                    f,
-                    "{operation:?} requires native Rust ports for SIS dependencies: "
-                )?;
-                for (index, dependency) in dependencies.iter().enumerate() {
-                    if index > 0 {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "{} ({})", dependency.bead_id, dependency.source_file)?;
-                }
-                Ok(())
-            }
+            Self::MissingNativePorts { operation } => write!(
+                f,
+                "{operation:?} requires unavailable native Rust SIS support"
+            ),
             Self::AlgebraicFallback(message) => f.write_str(message),
         }
     }
@@ -120,10 +92,6 @@ pub trait AlgebraicResubBackend {
         network: Self::Network,
         use_complement: bool,
     ) -> Result<(), BooleanResubError>;
-}
-
-pub fn required_port_dependencies() -> &'static [PortDependency] {
-    REQUIRED_PORTS
 }
 
 pub fn resub_bool_node<B, W>(
@@ -201,10 +169,7 @@ pub fn execute_network_with_missing_dependencies(
 }
 
 fn missing(operation: BooleanResubOperation) -> BooleanResubError {
-    BooleanResubError::MissingNativePorts {
-        operation,
-        dependencies: REQUIRED_PORTS,
-    }
+    BooleanResubError::MissingNativePorts { operation }
 }
 
 #[cfg(test)]
@@ -281,45 +246,34 @@ mod tests {
     }
 
     #[test]
-    fn missing_node_fallback_reports_dependency_bead_and_source_file() {
-        let Err(BooleanResubError::MissingNativePorts {
-            operation,
-            dependencies,
-        }) = execute_node_with_missing_dependencies("n1")
+    fn missing_node_fallback_reports_failed_operation() {
+        let Err(BooleanResubError::MissingNativePorts { operation }) =
+            execute_node_with_missing_dependencies("n1")
         else {
             panic!("expected missing native port error");
         };
 
         assert_eq!(operation, BooleanResubOperation::BooleanNode);
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.408"
-                && dependency.source_file == "LogicSynthesis/sis/resub/aresub.c"
-        }));
     }
 
     #[test]
-    fn missing_network_fallback_reports_dependency_bead_and_source_file() {
-        let Err(BooleanResubError::MissingNativePorts {
-            operation,
-            dependencies,
-        }) = execute_network_with_missing_dependencies("net")
+    fn missing_network_fallback_reports_failed_operation() {
+        let Err(BooleanResubError::MissingNativePorts { operation }) =
+            execute_network_with_missing_dependencies("net")
         else {
             panic!("expected missing native port error");
         };
 
         assert_eq!(operation, BooleanResubOperation::BooleanNetwork);
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.408"
-                && dependency.source_file == "LogicSynthesis/sis/resub/aresub.c"
-        }));
     }
 
     #[test]
-    fn dependency_display_includes_bead_and_source() {
+    fn missing_dependency_display_is_generic() {
         let error = execute_network_with_missing_dependencies("net").unwrap_err();
-        let message = error.to_string();
 
-        assert!(message.contains("LogicFriday1-8j8.2.6.408"));
-        assert!(message.contains("LogicSynthesis/sis/resub/aresub.c"));
+        assert_eq!(
+            error.to_string(),
+            "BooleanNetwork requires unavailable native Rust SIS support"
+        );
     }
 }

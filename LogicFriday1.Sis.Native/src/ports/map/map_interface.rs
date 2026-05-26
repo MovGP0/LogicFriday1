@@ -163,13 +163,8 @@ pub struct MapInterfaceResult {
 pub enum MapInterfaceError {
     TwoLevel(TwoLevelError),
     VirtualNetwork(VirtualNetworkError),
-    MissingSisPorts {
-        operation: &'static str,
-    },
-    MissingSignalDriver {
-        node: String,
-        signal: String,
-    },
+    MissingSisPorts { operation: &'static str },
+    MissingSignalDriver { node: String, signal: String },
 }
 
 impl fmt::Display for MapInterfaceError {
@@ -177,7 +172,9 @@ impl fmt::Display for MapInterfaceError {
         match self {
             Self::TwoLevel(error) => write!(f, "{error}"),
             Self::VirtualNetwork(error) => write!(f, "{error}"),
-            Self::MissingSisPorts { operation } => write!(f, "{operation} requires unavailable native SIS integration"),
+            Self::MissingSisPorts { operation } => {
+                write!(f, "{operation} requires unavailable native SIS integration")
+            }
             Self::MissingSignalDriver { node, signal } => {
                 write!(f, "node '{node}' references undriven signal '{signal}'")
             }

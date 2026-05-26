@@ -18,15 +18,6 @@ pub const MAX_ELENGTH: usize = 36;
 pub const MARKED: u8 = 4;
 pub const BARRAY_LEN: usize = 16;
 
-pub const REQUIRED_PORT_BEADS: &[&str] = &[
-    "LogicFriday1-8j8.2.6.487", // stg/enumerate.c: barray and enumeration consumers
-    "LogicFriday1-8j8.2.6.489", // stg/senum_main.c: ndata storage and STG globals
-    "LogicFriday1-8j8.2.6.230", // latch/latch.c: latch_from_node, latch initial values
-    "LogicFriday1-8j8.2.6.299", // network/net_seq.c: network_latch_end
-    "LogicFriday1-8j8.2.6.313", // node/fan.c: fanin/fanout traversal
-    "LogicFriday1-8j8.2.6.318", // node/node.c: node kind, function, cubes, literals
-];
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum LevelPortDisposition {
     BlockedByUnportedNetworkNodeAndLatchApis,
@@ -38,10 +29,6 @@ pub fn level_port_disposition() -> LevelPortDisposition {
 
 pub fn level_port_is_blocked() -> bool {
     level_port_disposition() == LevelPortDisposition::BlockedByUnportedNetworkNodeAndLatchApis
-}
-
-pub fn required_port_beads() -> &'static [&'static str] {
-    REQUIRED_PORT_BEADS
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -673,7 +660,5 @@ mod tests {
             rearrange_gate_inputs(),
             Err(LevelError::MissingDependency(LevelDependency::NodePort))
         );
-        assert!(required_port_beads().contains(&"LogicFriday1-8j8.2.6.489"));
-        assert!(required_port_beads().contains(&"LogicFriday1-8j8.2.6.230"));
     }
 }

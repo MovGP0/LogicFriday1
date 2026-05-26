@@ -1,4 +1,4 @@
-//! Native Rust command scaffold for `LogicSynthesis/sis/power/com_power.c`.
+﻿//! Native Rust command scaffold for `LogicSynthesis/sis/power/com_power.c`.
 //!
 //! The C file registers three SIS commands and provides small command handlers:
 //! `power_estimate` forwards to `power_command_line_interface`, while
@@ -13,32 +13,6 @@ use std::fmt;
 
 pub const POWER_FREE_INFO_USAGE: &str = "Too many arguments. Usage: power_free_info";
 pub const POWER_PRINT_USAGE: &str = "Too many arguments. Usage: power_print";
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_PORT_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.112",
-        source_file: "LogicSynthesis/sis/command/addcom.c",
-        reason: "init_power registers commands through com_add_command",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.400",
-        source_file: "LogicSynthesis/sis/power/power_main.c",
-        reason: "power_estimate dispatches to power_command_line_interface",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.407",
-        source_file: "LogicSynthesis/sis/power/power_util.c",
-        reason: "power_free_info and power_print dispatch to utility routines",
-    },
-];
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PowerCommandKind {
     Estimate,
@@ -102,7 +76,6 @@ impl PowerCommandInvocation {
 pub enum PowerCommandError {
     MissingNativePorts {
         operation: PowerCommandOperation,
-        dependencies: &'static [PortDependency],
     },
     TooManyArguments {
         command: PowerCommandKind,
@@ -114,22 +87,11 @@ pub enum PowerCommandError {
 impl fmt::Display for PowerCommandError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingNativePorts {
-                operation,
-                dependencies,
-            } => {
-                write!(
-                    f,
-                    "{operation:?} requires native Rust ports for SIS dependencies: "
-                )?;
-                for (index, dependency) in dependencies.iter().enumerate() {
-                    if index > 0 {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "{} ({})", dependency.bead_id, dependency.source_file)?;
-                }
-                Ok(())
-            }
+            Self::MissingNativePorts { operation } => write!(
+                f,
+                "operation {:?} requires native SIS prerequisite ports",
+                operation
+            ),
             Self::TooManyArguments { usage, .. } => f.write_str(usage),
             Self::Backend(message) => f.write_str(message),
         }
@@ -161,10 +123,6 @@ impl PowerCommandBackend for MissingPowerCommandBackend {
     fn print_power_info(&mut self) -> Result<i32, PowerCommandError> {
         Err(missing(PowerCommandOperation::Print))
     }
-}
-
-pub fn required_port_dependencies() -> &'static [PortDependency] {
-    REQUIRED_PORT_DEPENDENCIES
 }
 
 pub fn power_command_registrations() -> &'static [CommandRegistration] {
@@ -215,10 +173,7 @@ fn require_no_user_arguments(
 }
 
 fn missing(operation: PowerCommandOperation) -> PowerCommandError {
-    PowerCommandError::MissingNativePorts {
-        operation,
-        dependencies: REQUIRED_PORT_DEPENDENCIES,
-    }
+    PowerCommandError::MissingNativePorts { operation }
 }
 
 #[cfg(test)]
@@ -334,40 +289,11 @@ mod tests {
     }
 
     #[test]
-    fn missing_backend_reports_dependency_beads_and_source_files() {
-        let error = execute_with_missing_dependencies(&PowerCommandInvocation::new(
-            PowerCommandKind::Estimate,
-            ["power_estimate"],
-        ))
-        .unwrap_err();
-
-        let PowerCommandError::MissingNativePorts {
-            operation,
-            dependencies,
-        } = error
-        else {
-            panic!("expected missing native port error");
-        };
-
-        assert_eq!(operation, PowerCommandOperation::Estimate);
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.400"
-                && dependency.source_file == "LogicSynthesis/sis/power/power_main.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.407"
-                && dependency.source_file == "LogicSynthesis/sis/power/power_util.c"
-        }));
-        assert!(format!("{error}").contains("LogicFriday1-8j8.2.6.112"));
-    }
-
-    #[test]
     fn command_registration_is_blocked_on_command_registry_port() {
         assert_eq!(
             register_power_commands(),
             Err(PowerCommandError::MissingNativePorts {
                 operation: PowerCommandOperation::RegisterCommands,
-                dependencies: REQUIRED_PORT_DEPENDENCIES,
             })
         );
     }

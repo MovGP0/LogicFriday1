@@ -18,81 +18,6 @@ pub const POS_LARGE: f64 = 10_000.0;
 pub const NEG_LARGE: f64 = -10_000.0;
 pub const V_SMALL: f64 = 1.0e-5;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead: &'static str,
-    pub c_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_PORT_BEADS: &[PortDependency] = &[
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.133",
-        c_file: "LogicSynthesis/sis/delay/delay.c",
-        reason: "delay arrival, required, slack, load, drive, pin delay, and PO/PI parameters",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.257",
-        c_file: "LogicSynthesis/sis/map/library.c",
-        reason: "mapped gate lookup and mapping-library delay behavior",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.297",
-        c_file: "LogicSynthesis/sis/network/dfs.c",
-        reason: "network_dfs_from_input ordering for diagnostics and duplication",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.305",
-        c_file: "LogicSynthesis/sis/network/network_util.c",
-        reason: "network node lookup, PI/PO traversal, append/delete/rehash, and duplication",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.313",
-        c_file: "LogicSynthesis/sis/node/fan.c",
-        reason: "fanin/fanout traversal and node_patch_fanin rewiring",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.318",
-        c_file: "LogicSynthesis/sis/node/node.c",
-        reason: "node allocation, duplication, names, types, cube counts, simplify/invert state",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.321",
-        c_file: "LogicSynthesis/sis/node/nodemisc.c",
-        reason: "node_replace and collapse cleanup",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.465",
-        c_file: "LogicSynthesis/sis/speed/com_speed.c",
-        reason: "command-layer speed options and model selection",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.466",
-        c_file: "LogicSynthesis/sis/speed/gbx.c",
-        reason: "bypass transform integration used by sp_bypass_opt",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.467",
-        c_file: "LogicSynthesis/sis/speed/new_speed.c",
-        reason: "new speed loop integration and speed_global_t lifecycle",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.468",
-        c_file: "LogicSynthesis/sis/speed/new_wght_util.c",
-        reason: "collapse/fanout/dual weight records consumed by nsp_util",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.474",
-        c_file: "LogicSynthesis/sis/speed/speed_delay.c",
-        reason: "delay trace and speed_delay_arrival_time",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.481",
-        c_file: "LogicSynthesis/sis/speed/speedup.c",
-        reason: "speed criticality and high-level optimization orchestration",
-    },
-];
-
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct DelayTime {
     pub rise: f64,
@@ -754,10 +679,7 @@ where
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum NspUtilError {
-    MissingSisPorts {
-        operation: &'static str,
-        dependencies: &'static [PortDependency],
-    },
+    MissingSisPorts { operation: &'static str },
     MissingOutputSeparator(String),
     InvalidEdgeIndex(String),
     MissingCubeCount,
@@ -766,14 +688,9 @@ pub enum NspUtilError {
 impl fmt::Display for NspUtilError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingSisPorts {
-                operation,
-                dependencies,
-            } => write!(
-                f,
-                "{operation} requires {} native SIS prerequisite ports",
-                dependencies.len()
-            ),
+            Self::MissingSisPorts { operation } => {
+                write!(f, "{operation} is blocked by unported SIS dependencies")
+            }
             Self::MissingOutputSeparator(name) => {
                 write!(
                     f,
@@ -788,49 +705,39 @@ impl fmt::Display for NspUtilError {
 
 impl Error for NspUtilError {}
 
-pub fn required_port_beads() -> &'static [PortDependency] {
-    REQUIRED_PORT_BEADS
-}
-
 pub fn create_collapse_record_from_sis_network() -> Result<(), NspUtilError> {
     Err(NspUtilError::MissingSisPorts {
         operation: "sp_create_collapse_record",
-        dependencies: REQUIRED_PORT_BEADS,
     })
 }
 
 pub fn delete_network_from_sis_network() -> Result<(), NspUtilError> {
     Err(NspUtilError::MissingSisPorts {
         operation: "sp_delete_network",
-        dependencies: REQUIRED_PORT_BEADS,
     })
 }
 
 pub fn append_network_to_sis_network() -> Result<(), NspUtilError> {
     Err(NspUtilError::MissingSisPorts {
         operation: "sp_append_network",
-        dependencies: REQUIRED_PORT_BEADS,
     })
 }
 
 pub fn optimize_sis_network() -> Result<(), NspUtilError> {
     Err(NspUtilError::MissingSisPorts {
         operation: "sp_*_opt",
-        dependencies: REQUIRED_PORT_BEADS,
     })
 }
 
 pub fn duplicate_sis_network() -> Result<(), NspUtilError> {
     Err(NspUtilError::MissingSisPorts {
         operation: "speed_network_dup",
-        dependencies: REQUIRED_PORT_BEADS,
     })
 }
 
 pub fn downsize_non_critical_sis_gates() -> Result<(), NspUtilError> {
     Err(NspUtilError::MissingSisPorts {
         operation: "nsp_downsize_non_crit_gates",
-        dependencies: REQUIRED_PORT_BEADS,
     })
 }
 
@@ -1113,23 +1020,16 @@ mod tests {
 
     #[test]
     fn graph_bound_entry_points_report_missing_dependencies() {
-        assert!(
-            required_port_beads()
-                .iter()
-                .any(|dependency| dependency.bead == "LogicFriday1-8j8.2.6.468")
-        );
         assert_eq!(
             optimize_sis_network(),
             Err(NspUtilError::MissingSisPorts {
                 operation: "sp_*_opt",
-                dependencies: REQUIRED_PORT_BEADS,
             })
         );
         assert_eq!(
             duplicate_sis_network(),
             Err(NspUtilError::MissingSisPorts {
                 operation: "speed_network_dup",
-                dependencies: REQUIRED_PORT_BEADS,
             })
         );
     }

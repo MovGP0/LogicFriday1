@@ -7,70 +7,11 @@
 //! module ports the deterministic equivalence-class and representative-selection
 //! behavior onto owned Rust records. Direct SIS `network_t`, `node_t`,
 //! `array_t`, `st_table`, and BDD manager integration remains blocked on the
-//! native ports listed by `required_port_dependencies`.
+//! missing native SIS ports.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
 use std::fmt;
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub note: &'static str,
-}
-
-pub const REQUIRED_PORT_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.2",
-        source_file: "LogicSynthesis/sis/array/array.c",
-        note: "array_t allocation, indexed fetch, insertion, and ownership for equivalence arrays",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.71",
-        source_file: "LogicSynthesis/sis/bdd_cmu/bdd_port/bddport.c",
-        note: "bdd_not, bdd_dup, bdd_cofactor, bdd_equal, bdd_free, and bdd_is_tautology",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.305",
-        source_file: "LogicSynthesis/sis/network/network_util.c",
-        note: "network node counts, node iteration, node_network, network_add_node, and dc_network ownership",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.313",
-        source_file: "LogicSynthesis/sis/node/fan.c",
-        note: "fanin/fanout iteration and node_patch_fanin",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-        note: "node kind/name fields, node_literal, node_num_literal, node_num_fanout, and node_scc",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.330",
-        source_file: "LogicSynthesis/sis/ntbdd/node_to_bdd.c",
-        note: "ntbdd_node_to_bdd for care-restricted net signatures",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.438",
-        source_file: "LogicSynthesis/sis/seqbdd/prl_seqinfo.c",
-        note: "Prl_SeqInitNetwork and Prl_SeqInfoFree sequencing around equivalence computation",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.439",
-        source_file: "LogicSynthesis/sis/seqbdd/prl_util.c",
-        note: "Prl_GetSimpleDc and Prl_RemoveDcNetwork",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.485",
-        source_file: "LogicSynthesis/sis/st/st.c",
-        note: "st_table pointer maps for recursive cost and depth memoization",
-    },
-];
-
-pub fn required_port_dependencies() -> &'static [PortDependency] {
-    REQUIRED_PORT_DEPENDENCIES
-}
 
 pub fn is_prl_equiv_sis_integration_blocked() -> bool {
     true
@@ -163,31 +104,18 @@ impl EquivNode {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum PrlEquivError {
-    MissingNativePorts {
-        operation: &'static str,
-        dependencies: &'static [PortDependency],
-    },
+    MissingNativePorts { operation: &'static str },
     DuplicateNodeId(NodeId),
-    UnknownFanin {
-        node: NodeId,
-        fanin: NodeId,
-    },
-    RecursiveFaninCycle {
-        node: NodeId,
-    },
+    UnknownFanin { node: NodeId, fanin: NodeId },
+    RecursiveFaninCycle { node: NodeId },
 }
 
 impl fmt::Display for PrlEquivError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingNativePorts {
-                operation,
-                dependencies,
-            } => write!(
-                f,
-                "{operation} is blocked by {} unported SIS C-file dependencies",
-                dependencies.len()
-            ),
+            Self::MissingNativePorts { operation } => {
+                write!(f, "{operation} is blocked by missing native SIS ports")
+            }
             Self::DuplicateNodeId(node) => write!(f, "duplicate prl_equiv node id {:?}", node),
             Self::UnknownFanin { node, fanin } => {
                 write!(f, "node {:?} references unknown fanin {:?}", node, fanin)
@@ -204,7 +132,6 @@ impl Error for PrlEquivError {}
 pub fn prl_equiv_nets_from_sis() -> Result<EquivCollapsePlan, PrlEquivError> {
     Err(PrlEquivError::MissingNativePorts {
         operation: "Prl_EquivNets SIS network/BDD entry",
-        dependencies: REQUIRED_PORT_DEPENDENCIES,
     })
 }
 
@@ -579,28 +506,5 @@ mod tests {
             Err(PrlEquivError::RecursiveFaninCycle { node: NodeId(0) })
                 | Err(PrlEquivError::RecursiveFaninCycle { node: NodeId(1) })
         ));
-    }
-
-    #[test]
-    fn sis_entry_reports_dependency_beads_and_source_files() {
-        let error = prl_equiv_nets_from_sis().unwrap_err();
-        let PrlEquivError::MissingNativePorts { dependencies, .. } = error else {
-            panic!("expected missing native port dependencies");
-        };
-
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.438"
-                && dependency.source_file == "LogicSynthesis/sis/seqbdd/prl_seqinfo.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.439"
-                && dependency.source_file == "LogicSynthesis/sis/seqbdd/prl_util.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.330"
-                && dependency.source_file == "LogicSynthesis/sis/ntbdd/node_to_bdd.c"
-        }));
-        assert!(is_prl_equiv_sis_integration_blocked());
-        assert!(format!("{}", prl_equiv_nets_from_sis().unwrap_err()).contains("blocked"));
     }
 }

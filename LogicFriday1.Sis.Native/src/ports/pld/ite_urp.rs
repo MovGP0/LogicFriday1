@@ -11,66 +11,6 @@ use std::error::Error;
 use std::fmt;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_PORT_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.457",
-        source_file: "LogicSynthesis/sis/sparse/matrix.c",
-        reason: "ite_urp.c stores and splits node covers with sm_matrix rows, columns, and elements",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.456",
-        source_file: "LogicSynthesis/sis/sparse/cols.c",
-        reason: "good_bin_var, update_F, and ite_split_F iterate sparse matrix columns",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.458",
-        source_file: "LogicSynthesis/sis/sparse/rows.c",
-        reason: "build_F and act_mux_inputs_special_case inspect sparse matrix rows",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.485",
-        source_file: "LogicSynthesis/sis/st/st.c",
-        reason: "make_ite uses ite_end_table to share terminal ITE vertices",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.313",
-        source_file: "LogicSynthesis/sis/node/fan.c",
-        reason: "build_F enumerates fanins and urp_F resolves selected columns back to fanin nodes",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.317",
-        source_file: "LogicSynthesis/sis/node/names.c",
-        reason: "build_F stores node_long_name values in cover columns",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-        reason: "make_ite depends on node_function, node cubes, node literals, and node type checks",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.366",
-        source_file: "LogicSynthesis/sis/pld/ite_imp.c",
-        reason: "legacy SIS integration stores the resulting ITE in ACT_ITE_ite(node)",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.367",
-        source_file: "LogicSynthesis/sis/pld/ite_leaf.c",
-        reason: "urp_F delegates unate covers to unate_ite",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.360",
-        source_file: "LogicSynthesis/sis/pld/act_util.c",
-        reason: "ite_split_F calls my_sm_copy_row in the SIS sparse-matrix implementation",
-    },
-];
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum NodeKind {
     PrimaryInput,
     PrimaryOutput,
@@ -303,30 +243,14 @@ pub enum MuxSpecialCase {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum IteUrpError {
-    PrimaryNode {
-        kind: NodeKind,
-    },
-    RowWidthMismatch {
-        expected: usize,
-        actual: usize,
-    },
-    InputWidthMismatch {
-        expected: usize,
-        actual: usize,
-    },
+    PrimaryNode { kind: NodeKind },
+    RowWidthMismatch { expected: usize, actual: usize },
+    InputWidthMismatch { expected: usize, actual: usize },
     UnknownColumn(usize),
-    EmptyColumnName {
-        column: usize,
-    },
+    EmptyColumnName { column: usize },
     InvalidLiteralValue(i32),
-    InvalidCommonVariable {
-        column: usize,
-        phase: LiteralPhase,
-    },
-    MissingNativePorts {
-        operation: &'static str,
-        dependencies: &'static [PortDependency],
-    },
+    InvalidCommonVariable { column: usize, phase: LiteralPhase },
+    MissingNativePorts { operation: &'static str },
 }
 
 impl fmt::Display for IteUrpError {
@@ -354,13 +278,9 @@ impl fmt::Display for IteUrpError {
                     "common variable column {column} has invalid phase {phase:?}"
                 )
             }
-            Self::MissingNativePorts {
-                operation,
-                dependencies,
-            } => write!(
+            Self::MissingNativePorts { operation } => write!(
                 f,
-                "{operation} is blocked by {} unported SIS C-file dependencies",
-                dependencies.len()
+                "{operation} is blocked by unported SIS C-file dependencies"
             ),
         }
     }
@@ -369,10 +289,6 @@ impl fmt::Display for IteUrpError {
 impl Error for IteUrpError {}
 
 pub type IteUrpResult<T> = Result<T, IteUrpError>;
-
-pub fn required_port_dependencies() -> &'static [PortDependency] {
-    REQUIRED_PORT_DEPENDENCIES
-}
 
 pub fn make_ite(node: &CoverNode) -> IteUrpResult<Ite> {
     match node.kind {
@@ -648,10 +564,7 @@ fn ensure_column(matrix: &CoverMatrix, column: usize) -> IteUrpResult<()> {
 }
 
 fn missing_native_ports(operation: &'static str) -> IteUrpError {
-    IteUrpError::MissingNativePorts {
-        operation,
-        dependencies: REQUIRED_PORT_DEPENDENCIES,
-    }
+    IteUrpError::MissingNativePorts { operation }
 }
 
 #[cfg(test)]
@@ -783,28 +696,5 @@ mod tests {
         assert_eq!(ite.evaluate(&[true, false, true]).unwrap(), true);
         assert_eq!(ite.evaluate(&[true, true, false]).unwrap(), true);
         assert_eq!(ite.evaluate(&[true, true, true]).unwrap(), false);
-    }
-
-    #[test]
-    fn blocked_sis_entries_report_dependency_beads_and_sources() {
-        let mut sis_node = ();
-        let Err(IteUrpError::MissingNativePorts { dependencies, .. }) =
-            make_ite_blocked(&mut sis_node)
-        else {
-            panic!("expected missing dependency error");
-        };
-
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.367"
-                && dependency.source_file == "LogicSynthesis/sis/pld/ite_leaf.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.457"
-                && dependency.source_file == "LogicSynthesis/sis/sparse/matrix.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.318"
-                && dependency.source_file == "LogicSynthesis/sis/node/node.c"
-        }));
     }
 }

@@ -28,7 +28,7 @@ pub fn restart_save_state() -> c_int {
 /// the architecture-specific state restoration routines.
 pub fn restart_restore_state() {}
 
-// TODO(LogicFriday1-8j8.2.6.512): keep this retired scaffold native Rust only.
+// TODO: keep this retired scaffold native Rust only.
 
 #[cfg(test)]
 mod tests {

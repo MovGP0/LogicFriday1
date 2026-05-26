@@ -10,26 +10,6 @@ use std::cmp::Ordering;
 use std::error::Error;
 use std::fmt;
 
-pub const REQUIRED_INTEGRATION_PORT_BEADS: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.457",
-        source_file: "LogicSynthesis/sis/sparse/matrix.c",
-        note: "matrix-owned insertion/removal must keep row and column views synchronized",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.458",
-        source_file: "LogicSynthesis/sis/sparse/rows.c",
-        note: "row-vector counterpart is needed for full sparse-matrix integration",
-    },
-];
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub note: &'static str,
-}
-
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SparseColumn {
     col_num: i32,
@@ -223,9 +203,7 @@ impl SparseColumn {
     }
 
     pub fn full_sparse_matrix_integration() -> Result<(), SparseColumnError> {
-        Err(SparseColumnError::MissingSparseMatrixPorts {
-            dependencies: REQUIRED_INTEGRATION_PORT_BEADS,
-        })
+        Err(SparseColumnError::MissingSparseMatrixPorts)
     }
 }
 
@@ -264,9 +242,7 @@ impl ColumnElement {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum SparseColumnError {
     InvalidHashModulus(i32),
-    MissingSparseMatrixPorts {
-        dependencies: &'static [PortDependency],
-    },
+    MissingSparseMatrixPorts,
 }
 
 impl fmt::Display for SparseColumnError {
@@ -275,10 +251,9 @@ impl fmt::Display for SparseColumnError {
             Self::InvalidHashModulus(modulus) => {
                 write!(f, "invalid sparse-column hash modulus {modulus}")
             }
-            Self::MissingSparseMatrixPorts { dependencies } => write!(
+            Self::MissingSparseMatrixPorts => write!(
                 f,
-                "full sparse-column matrix integration is blocked by {} unported dependencies",
-                dependencies.len()
+                "full sparse-column matrix integration requires unavailable native sparse matrix ports"
             ),
         }
     }
@@ -385,13 +360,10 @@ mod tests {
     }
 
     #[test]
-    fn matrix_integration_reports_unported_dependencies() {
-        let Err(SparseColumnError::MissingSparseMatrixPorts { dependencies }) =
-            SparseColumn::full_sparse_matrix_integration()
-        else {
-            panic!("expected missing sparse matrix port error");
-        };
-
-        assert_eq!(dependencies, REQUIRED_INTEGRATION_PORT_BEADS);
+    fn matrix_integration_reports_unavailable_native_ports() {
+        assert_eq!(
+            SparseColumn::full_sparse_matrix_integration(),
+            Err(SparseColumnError::MissingSparseMatrixPorts)
+        );
     }
 }

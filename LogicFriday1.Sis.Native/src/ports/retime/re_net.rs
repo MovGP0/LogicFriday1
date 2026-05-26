@@ -5,7 +5,7 @@
 //! chains from those edge weights. This module ports that behavior to owned
 //! Rust data structures. Direct mutation of SIS `network_t`, `node_t`,
 //! `latch_t`, mapped-gate, delay, and mapper data remains an explicit
-//! dependency error with bead IDs and source files; no legacy C ABI symbols are
+//! dependency error; no legacy C ABI symbols are
 //! exposed here.
 
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -47,120 +47,38 @@ pub enum LatchSynchType {
     Unknown,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_SIS_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.230",
-        source_file: "LogicSynthesis/sis/latch/latch.c",
-        reason: "latch identity, input/output endpoint lookup, type, control, gate, and initial/current values",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.257",
-        source_file: "LogicSynthesis/sis/map/library.c",
-        reason: "mapped D-latch selection and lib_gate latch-pin/type/name queries",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.258",
-        source_file: "LogicSynthesis/sis/map/libutil.c",
-        reason: "lib_set_gate and mapped pin formal/actual binding used by retime_lib_set_gate",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.262",
-        source_file: "LogicSynthesis/sis/map/maputil.c",
-        reason: "map_network and mapped-network decomposition for complex latch remnants",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.305",
-        source_file: "LogicSynthesis/sis/network/network_util.c",
-        reason: "network allocation, node insertion/deletion, latch iteration, PO ordering, and control-node classification",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.313",
-        source_file: "LogicSynthesis/sis/node/fan.c",
-        reason: "fanin/fanout traversal, fanout-pin IDs, and fanin patching",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-        reason: "node allocation, duplication, names, literals, types, copies, and replacement",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.415",
-        source_file: "LogicSynthesis/sis/retime/re_graph.c",
-        reason: "legacy re_graph storage and edge/node accessors consumed by re_net.c",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.422",
-        source_file: "LogicSynthesis/sis/retime/re_util.c",
-        reason: "retime graph allocation, edge creation, ignore-edge tests, and graph traversal helpers",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.423",
-        source_file: "LogicSynthesis/sis/retime/retime_util.c",
-        reason: "retimability checks and temporary-node cleanup expected around network-to-graph conversion",
-    },
-];
-
-pub fn required_sis_dependencies() -> &'static [PortDependency] {
-    REQUIRED_SIS_DEPENDENCIES
-}
-
 pub fn sis_network_to_graph_blocked() -> Result<RetimeGraph, RetimeNetError> {
     Err(RetimeNetError::MissingSisPorts {
         operation: "retime_network_to_graph over SIS network_t",
-        dependencies: REQUIRED_SIS_DEPENDENCIES,
     })
 }
 
 pub fn sis_graph_to_network_blocked() -> Result<NetworkSketch, RetimeNetError> {
     Err(RetimeNetError::MissingSisPorts {
         operation: "retime_graph_to_network over SIS network_t",
-        dependencies: REQUIRED_SIS_DEPENDENCIES,
     })
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum RetimeNetError {
-    MissingSisPorts {
-        operation: &'static str,
-        dependencies: &'static [PortDependency],
-    },
+    MissingSisPorts { operation: &'static str },
     MissingMappedDLatch,
     MissingNode(NodeId),
     MissingEdge(EdgeId),
     MissingLatch(LatchId),
     MissingLatchOutput(NodeId),
-    MissingFanin {
-        node: NodeId,
-        index: usize,
-    },
+    MissingFanin { node: NodeId, index: usize },
     MissingGraphNodeForNetworkNode(NodeId),
-    NegativeEdgeWeight {
-        edge: EdgeId,
-        weight: i32,
-    },
-    UntraversedLatchCycle {
-        latches: Vec<LatchId>,
-    },
+    NegativeEdgeWeight { edge: EdgeId, weight: i32 },
+    UntraversedLatchCycle { latches: Vec<LatchId> },
 }
 
 impl fmt::Display for RetimeNetError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingSisPorts {
-                operation,
-                dependencies,
-            } => write!(
-                f,
-                "{operation} requires {} native SIS prerequisite ports",
-                dependencies.len()
-            ),
+            Self::MissingSisPorts { operation } => {
+                write!(f, "{operation} requires native prerequisite ports")
+            }
             Self::MissingMappedDLatch => {
                 write!(f, "mapped retiming requires a native D-latch library gate")
             }
@@ -1214,25 +1132,5 @@ mod tests {
         assert_eq!(deleted, 1);
         assert_eq!(network.nodes[temp.0].kind, NodeKind::Deleted);
         assert_eq!(network.nodes[sink.0].fanins, vec![source]);
-    }
-
-    #[test]
-    fn dependency_scaffold_reports_beads_and_source_files() {
-        assert!(required_sis_dependencies().iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.305"
-                && dependency.source_file == "LogicSynthesis/sis/network/network_util.c"
-        }));
-        assert!(required_sis_dependencies().iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.422"
-                && dependency.source_file == "LogicSynthesis/sis/retime/re_util.c"
-        }));
-
-        assert_eq!(
-            sis_network_to_graph_blocked(),
-            Err(RetimeNetError::MissingSisPorts {
-                operation: "retime_network_to_graph over SIS network_t",
-                dependencies: REQUIRED_SIS_DEPENDENCIES,
-            })
-        );
     }
 }

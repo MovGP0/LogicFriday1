@@ -1,4 +1,4 @@
-//! Native Rust scaffold for `LogicSynthesis/sis/simplify/simp_util.c`.
+﻿//! Native Rust scaffold for `LogicSynthesis/sis/simplify/simp_util.c`.
 //!
 //! The original C module mixes three kinds of behavior:
 //! - building a temporary expression copy of the external don't-care network,
@@ -8,73 +8,13 @@
 //! The sorting and expression-copy behavior are represented here over owned
 //! Rust data. Entry points that require mutating legacy `network_t`, `node_t`,
 //! `array_t`, `st_table`, CSPF/ODC slots, or BDD state report explicit missing
-//! native-port dependencies instead of exposing C ABI shims.
+//! native Rust ports instead of exposing C ABI shims.
 
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
 use std::hash::Hash;
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub note: &'static str,
-}
-
-pub const REQUIRED_PORT_BEADS: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.2",
-        source_file: "LogicSynthesis/sis/array/array.c",
-        note: "array_alloc, array_fetch, array_insert_last, array_sort, and array_free",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.195",
-        source_file: "LogicSynthesis/sis/factor/factor.c",
-        note: "factor_num_literal used by simp_order",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.297",
-        source_file: "LogicSynthesis/sis/network/dfs.c",
-        note: "network_dfs and network_dfs_from_input traversal order",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.305",
-        source_file: "LogicSynthesis/sis/network/network_util.c",
-        note: "network_dc_network, network_num_pi, and network_get_pi",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.313",
-        source_file: "LogicSynthesis/sis/node/fan.c",
-        note: "node_get_fanin traversal",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-        note: "node constants, literals, AND/OR construction, functions, covers, and cube counts",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.321",
-        source_file: "LogicSynthesis/sis/node/nodemisc.c",
-        note: "node_dup for copied external don't-care expressions",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.326",
-        source_file: "LogicSynthesis/sis/ntbdd/bdd_at_node.c",
-        note: "ntbdd_free_at_node cleanup for temporary copied nodes",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.447",
-        source_file: "LogicSynthesis/sis/simplify/compute_dc.c",
-        note: "cspf_alloc/free, odc_alloc/free, odc_value, and find_odc_level",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.485",
-        source_file: "LogicSynthesis/sis/st/st.c",
-        note: "st_lookup for care-output to external-DC-output lookup",
-    },
-];
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SimplifyNodeKind {
@@ -242,32 +182,18 @@ where
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum SimpUtilError {
-    MissingSisPorts {
-        operation: &'static str,
-        dependencies: &'static [PortDependency],
-    },
-    MissingDcFanin {
-        node: String,
-        fanin_index: usize,
-    },
-    MissingCarePrimaryInput {
-        dc_input_name: String,
-    },
-    PrimaryOutputWithoutFanin {
-        node: String,
-    },
+    MissingSisPorts { operation: &'static str },
+    MissingDcFanin { node: String, fanin_index: usize },
+    MissingCarePrimaryInput { dc_input_name: String },
+    PrimaryOutputWithoutFanin { node: String },
 }
 
 impl fmt::Display for SimpUtilError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingSisPorts {
-                operation,
-                dependencies,
-            } => write!(
+            Self::MissingSisPorts { operation } => write!(
                 f,
-                "{operation} is blocked by {} unported SIS dependencies",
-                dependencies.len()
+                "{operation} requires native Rust SIS ports that are not available yet"
             ),
             Self::MissingDcFanin { node, fanin_index } => {
                 write!(
@@ -287,10 +213,6 @@ impl fmt::Display for SimpUtilError {
 }
 
 impl Error for SimpUtilError {}
-
-pub fn required_port_beads() -> &'static [PortDependency] {
-    REQUIRED_PORT_BEADS
-}
 
 pub fn copy_dcnetwork_model<N>(
     care_network: Option<&SimplifyNetwork<N>>,
@@ -493,28 +415,24 @@ pub fn fsize_cmp<N>(left: &FactorSizeEntry<N>, right: &FactorSizeEntry<N>) -> Or
 pub fn copy_dcnetwork_in_sis_network() -> Result<(), SimpUtilError> {
     Err(SimpUtilError::MissingSisPorts {
         operation: "copy_dcnetwork",
-        dependencies: REQUIRED_PORT_BEADS,
     })
 }
 
 pub fn find_node_exdc_in_sis_network() -> Result<(), SimpUtilError> {
     Err(SimpUtilError::MissingSisPorts {
         operation: "find_node_exdc",
-        dependencies: REQUIRED_PORT_BEADS,
     })
 }
 
 pub fn free_dcnetwork_copy_in_sis_network() -> Result<(), SimpUtilError> {
     Err(SimpUtilError::MissingSisPorts {
         operation: "free_dcnetwork_copy",
-        dependencies: REQUIRED_PORT_BEADS,
     })
 }
 
 pub fn order_nodes_elim_in_sis_network() -> Result<(), SimpUtilError> {
     Err(SimpUtilError::MissingSisPorts {
         operation: "order_nodes_elim",
-        dependencies: REQUIRED_PORT_BEADS,
     })
 }
 
@@ -725,28 +643,17 @@ mod tests {
     }
 
     #[test]
-    fn sis_bound_entry_points_report_dependency_beads_and_sources() {
-        assert!(required_port_beads().iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.447"
-                && dependency.source_file == "LogicSynthesis/sis/simplify/compute_dc.c"
-        }));
-        assert!(required_port_beads().iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.318"
-                && dependency.source_file == "LogicSynthesis/sis/node/node.c"
-        }));
-
+    fn sis_bound_entry_points_report_missing_sis_ports() {
         assert_eq!(
             copy_dcnetwork_in_sis_network(),
             Err(SimpUtilError::MissingSisPorts {
                 operation: "copy_dcnetwork",
-                dependencies: REQUIRED_PORT_BEADS,
             })
         );
         assert_eq!(
             order_nodes_elim_in_sis_network(),
             Err(SimpUtilError::MissingSisPorts {
                 operation: "order_nodes_elim",
-                dependencies: REQUIRED_PORT_BEADS,
             })
         );
     }

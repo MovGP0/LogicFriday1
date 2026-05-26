@@ -5,80 +5,11 @@
 //! and reverse images by smoothing and substitution. This module ports that
 //! behavior onto owned Rust data structures so the semantics are testable while
 //! direct SIS network, st_table, array_t, ntbdd, and BDD-manager integration
-//! remains represented by explicit dependency errors.
+//! remains represented by generic missing-port diagnostics.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::error::Error;
 use std::fmt;
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub note: &'static str,
-}
-
-pub const REQUIRED_CONSISTENCY_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.2",
-        source_file: "LogicSynthesis/sis/array/array.c",
-        note: "array_t allocation, fetch, insertion, and release used for ordered node and BDD arrays",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.71",
-        source_file: "LogicSynthesis/sis/bdd_cmu/bdd_port/bddport.c",
-        note: "BDD manager bridge, bdd_leq, bdd_size, variable extraction, and BDD lifetime calls",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.75",
-        source_file: "LogicSynthesis/sis/bdd_ucb/and_smooth.c",
-        note: "bdd_and_smooth used by forward and reverse image computation",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.89",
-        source_file: "LogicSynthesis/sis/bdd_ucb/bdd_substit.c",
-        note: "bdd_substitute used to rename present-state and next-state variables",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.230",
-        source_file: "LogicSynthesis/sis/latch/latch.c",
-        note: "latch input/output traversal for state variable matching",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.305",
-        source_file: "LogicSynthesis/sis/network/network_util.c",
-        note: "network latch iteration and node name lookup",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-        note: "node identity, type, names, and BDD attachment lifetime",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.326",
-        source_file: "LogicSynthesis/sis/ntbdd/bdd_at_node.c",
-        note: "ntbdd_node_to_bdd and ntbdd_free_at_node for init, output, and consistency nodes",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.329",
-        source_file: "LogicSynthesis/sis/ntbdd/manager.c",
-        note: "ntbdd_start_manager and ntbdd_end_manager",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.442",
-        source_file: "LogicSynthesis/sis/seqbdd/verif_util.c",
-        note: "output_info construction, bdd_extract_var_array, and report_inconsistency",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.485",
-        source_file: "LogicSynthesis/sis/st/st.c",
-        note: "st_table name and pointer maps used while pairing state variables",
-    },
-];
-
-pub fn required_consistency_dependencies() -> &'static [PortDependency] {
-    REQUIRED_CONSISTENCY_DEPENDENCIES
-}
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct NodeId(pub usize);
@@ -163,7 +94,6 @@ impl SeqNetwork {
 pub enum ConsistencyError {
     MissingSisDependencies {
         operation: &'static str,
-        dependencies: &'static [PortDependency],
     },
     UnknownNode(NodeId),
     DuplicatePiOrdering(NodeId),
@@ -195,14 +125,9 @@ pub enum ConsistencyError {
 impl fmt::Display for ConsistencyError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingSisDependencies {
-                operation,
-                dependencies,
-            } => write!(
-                f,
-                "{operation} requires {} unported SIS/BDD dependencies",
-                dependencies.len()
-            ),
+            Self::MissingSisDependencies { operation } => {
+                write!(f, "{operation} is blocked by missing native SIS ports")
+            }
             Self::UnknownNode(node) => write!(f, "unknown seqbdd consistency node {:?}", node),
             Self::DuplicatePiOrdering(node) => {
                 write!(f, "duplicate PI ordering entry for {:?}", node)
@@ -634,10 +559,7 @@ pub fn consistency_sis_check_output() -> Result<(), ConsistencyError> {
 }
 
 fn missing_sis_dependencies<T>(operation: &'static str) -> Result<T, ConsistencyError> {
-    Err(ConsistencyError::MissingSisDependencies {
-        operation,
-        dependencies: REQUIRED_CONSISTENCY_DEPENDENCIES,
-    })
+    Err(ConsistencyError::MissingSisDependencies { operation })
 }
 
 #[cfg(test)]
@@ -817,32 +739,6 @@ mod tests {
                 expected: 2,
                 actual: 1,
             }
-        );
-    }
-
-    #[test]
-    fn sis_bound_entry_points_report_dependency_beads_and_sources() {
-        let error = consistency_alloc_range_data().unwrap_err();
-        let ConsistencyError::MissingSisDependencies {
-            operation,
-            dependencies,
-        } = error
-        else {
-            panic!("unexpected error kind");
-        };
-
-        assert_eq!(operation, "consistency_alloc_range_data");
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.75"
-                && dependency.source_file == "LogicSynthesis/sis/bdd_ucb/and_smooth.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.442"
-                && dependency.source_file == "LogicSynthesis/sis/seqbdd/verif_util.c"
-        }));
-        assert_eq!(
-            required_consistency_dependencies(),
-            REQUIRED_CONSISTENCY_DEPENDENCIES
         );
     }
 }

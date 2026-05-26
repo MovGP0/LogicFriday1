@@ -11,31 +11,6 @@ use std::fmt;
 
 const ITE_TERMINAL_TABLE_CAPACITY: usize = 100;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_PORT_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.317",
-        source_file: "LogicSynthesis/sis/node/names.c",
-        reason: "ite_print() calls node_long_name() for literal terminals",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-        reason: "ite_vertex literal terminals store SIS node_t fanin pointers",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.485",
-        source_file: "LogicSynthesis/sis/st/st.c",
-        reason: "full SIS ITE graph ownership depends on the shared table infrastructure used by adjacent ITE ports",
-    },
-];
-
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct NodeId(pub usize);
 
@@ -149,7 +124,6 @@ pub struct IteTerminal {
 pub enum ItePldError {
     MissingNativePorts {
         operation: &'static str,
-        dependencies: &'static [PortDependency],
     },
     MissingVertex(IteVertexId),
     MissingChild {
@@ -166,13 +140,9 @@ pub enum ItePldError {
 impl fmt::Display for ItePldError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingNativePorts {
-                operation,
-                dependencies,
-            } => write!(
+            Self::MissingNativePorts { operation } => write!(
                 f,
-                "{operation} is blocked by {} unported SIS C-file dependencies",
-                dependencies.len()
+                "{operation} is blocked by unported SIS C-file dependencies"
             ),
             Self::MissingVertex(vertex) => write!(f, "missing ITE vertex {}", vertex.0),
             Self::MissingChild { parent, child_name } => {
@@ -411,10 +381,6 @@ impl IteGraph {
     }
 }
 
-pub fn required_port_dependencies() -> &'static [PortDependency] {
-    REQUIRED_PORT_DEPENDENCIES
-}
-
 pub fn ite_print_dag_blocked<LegacyIte>(_ite: &LegacyIte) -> ItePldResult<Vec<String>> {
     Err(missing_native_ports(
         "ite_print_dag SIS node_long_name integration",
@@ -428,10 +394,7 @@ pub fn ite_print_out_blocked<LegacyIte>(_ite: &LegacyIte) -> ItePldResult<Vec<St
 }
 
 fn missing_native_ports(operation: &'static str) -> ItePldError {
-    ItePldError::MissingNativePorts {
-        operation,
-        dependencies: REQUIRED_PORT_DEPENDENCIES,
-    }
+    ItePldError::MissingNativePorts { operation }
 }
 
 fn required_child(
@@ -550,30 +513,5 @@ mod tests {
 
         assert_eq!(graph.vertex(root).unwrap().mark, 0);
         assert!(!graph.vertex(root).unwrap().print_mark);
-    }
-
-    #[test]
-    fn blocked_legacy_print_reports_dependency_beads_and_sources() {
-        let Err(ItePldError::MissingNativePorts {
-            operation,
-            dependencies,
-        }) = ite_print_dag_blocked(&())
-        else {
-            panic!("expected missing dependency error");
-        };
-
-        assert_eq!(operation, "ite_print_dag SIS node_long_name integration");
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.317"
-                && dependency.source_file == "LogicSynthesis/sis/node/names.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.318"
-                && dependency.source_file == "LogicSynthesis/sis/node/node.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.485"
-                && dependency.source_file == "LogicSynthesis/sis/st/st.c"
-        }));
     }
 }

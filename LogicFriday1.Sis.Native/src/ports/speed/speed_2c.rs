@@ -1,4 +1,4 @@
-//! Native Rust port scaffold for `sis/speed/speed_2c.c`.
+﻿//! Native Rust port scaffold for `sis/speed/speed_2c.c`.
 //!
 //! The C file searches two-cube kernels, evaluates each kernel/cokernel pair,
 //! and recursively decomposes the chosen divisor. Kernel generation and SIS
@@ -15,15 +15,6 @@ pub const CRITICAL_FRACTION: f64 = 0.05;
 pub const FUDGE: f64 = 0.0001;
 pub const POS_LARGE: f64 = 10_000.0;
 pub const NEG_LARGE: f64 = -10_000.0;
-
-pub const REQUIRED_PORT_BEADS: &[&str] = &[
-    "LogicFriday1-8j8.2.6.473", // speed/speed_and.c and speed/speed_or.c fallback
-    "LogicFriday1-8j8.2.6.476", // speed/speed_net.c: node_evaluate and network mutation
-    "LogicFriday1-8j8.2.6.480", // speed/speed_util.c: critical-cube deletion
-    "LogicFriday1-8j8.2.6.313", // node/fan.c: fanin traversal
-    "LogicFriday1-8j8.2.6.318", // node/node.c: node_div, node_function, substitute
-    "LogicFriday1-8j8.2.6.207", // factor/gen_2c_kernel.c equivalent kernel generation
-];
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct DelayTime {

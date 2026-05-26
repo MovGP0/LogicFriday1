@@ -93,15 +93,10 @@ impl FanoutUnmapReason {
 pub enum FanoutLogError {
     LogDisabled,
     MissingNode(NodeId),
-    LoggedNodeHasFanout {
-        node: NodeId,
-        fanout_count: usize,
-    },
+    LoggedNodeHasFanout { node: NodeId, fanout_count: usize },
     LoggedNodeNotInternal(NodeId),
     VirtualNetwork(VirtualNetworkError),
-    MissingSisPorts {
-        operation: &'static str,
-    },
+    MissingSisPorts { operation: &'static str },
 }
 
 impl fmt::Display for FanoutLogError {
@@ -124,7 +119,9 @@ impl fmt::Display for FanoutLogError {
                 )
             }
             Self::VirtualNetwork(error) => write!(f, "{error}"),
-            Self::MissingSisPorts { operation } => write!(f, "{operation} requires unavailable native SIS integration"),
+            Self::MissingSisPorts { operation } => {
+                write!(f, "{operation} requires unavailable native SIS integration")
+            }
         }
     }
 }
@@ -376,11 +373,7 @@ fn push_escaped_name(trace: &mut String, name: &str) {
 }
 
 fn bool_trace(value: bool) -> &'static str {
-    if value {
-        "true"
-    } else {
-        "false"
-    }
+    if value { "true" } else { "false" }
 }
 
 fn node_ids_for_len(len: usize) -> Vec<NodeId> {

@@ -15,76 +15,6 @@ pub const NSP_INPUT_SEPARATOR: char = '#';
 pub const POS_LARGE: f64 = 10_000.0;
 pub const NEG_LARGE: f64 = -10_000.0;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead: &'static str,
-    pub c_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_PORT_BEADS: &[PortDependency] = &[
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.133",
-        c_file: "LogicSynthesis/sis/delay/delay.c",
-        reason: "delay_trace, arrival/required/slack parameter access, delay_load",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.257",
-        c_file: "LogicSynthesis/sis/map/library.c",
-        reason: "mapped gate lookup and mapped-network validation",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.297",
-        c_file: "LogicSynthesis/sis/network/dfs.c",
-        reason: "network traversal and cleanup support",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.305",
-        c_file: "LogicSynthesis/sis/network/network_util.c",
-        reason: "network construction, duplication, node lookup, PI/PO traversal",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.309",
-        c_file: "LogicSynthesis/sis/node/collapse.c",
-        reason: "node collapse while cleaning appended networks",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.313",
-        c_file: "LogicSynthesis/sis/node/fan.c",
-        reason: "fanin/fanout traversal and patching",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.318",
-        c_file: "LogicSynthesis/sis/node/node.c",
-        reason: "node allocation, duplication, naming, function and type data",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.468",
-        c_file: "LogicSynthesis/sis/speed/new_wght_util.c",
-        reason: "new_speed_compute_weight, new_speed_select_xform, collapse records",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.469",
-        c_file: "LogicSynthesis/sis/speed/nsp_util.c",
-        reason: "new_speed_adjust_po_arrival and new-speed cache/record helpers",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.474",
-        c_file: "LogicSynthesis/sis/speed/speed_delay.c",
-        reason: "new_delay_arrival/new_delay_required/new_delay_slack callbacks",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.476",
-        c_file: "LogicSynthesis/sis/speed/speed_net.c",
-        reason: "sp_delete_network, sp_append_network, speed_network_dup",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.480",
-        c_file: "LogicSynthesis/sis/speed/speed_util.c",
-        reason: "set_speed_thresh, speed_critical, revised cut ordering",
-    },
-];
-
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct NodeId(pub usize);
 
@@ -247,9 +177,7 @@ impl NewSpeedGraph {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum NewSpeedError {
-    MissingSisGraphPorts {
-        dependencies: &'static [PortDependency],
-    },
+    MissingSisGraphPorts {},
     UnknownNode(NodeId),
     MissingWeight(NodeId),
     MismatchedDeltaInputs {
@@ -261,10 +189,9 @@ pub enum NewSpeedError {
 impl fmt::Display for NewSpeedError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingSisGraphPorts { dependencies } => write!(
+            Self::MissingSisGraphPorts {} => write!(
                 f,
-                "SIS new_speed optimizer is blocked by {} unported dependencies",
-                dependencies.len()
+                "SIS new_speed optimizer is blocked by unported SIS dependencies"
             ),
             Self::UnknownNode(node) => write!(f, "unknown new_speed node {:?}", node),
             Self::MissingWeight(node) => write!(f, "missing transform weight for {:?}", node),
@@ -305,17 +232,11 @@ pub struct RecursionConstraint {
     pub fall: f64,
 }
 
-pub fn required_port_beads() -> &'static [PortDependency] {
-    REQUIRED_PORT_BEADS
-}
-
 pub fn new_speed_network_bound<Network>(
     _network: &mut Network,
     _options: &NewSpeedOptions,
 ) -> Result<bool, NewSpeedError> {
-    Err(NewSpeedError::MissingSisGraphPorts {
-        dependencies: REQUIRED_PORT_BEADS,
-    })
+    Err(NewSpeedError::MissingSisGraphPorts {})
 }
 
 pub fn adaptive_initial_threshold(
@@ -1076,18 +997,11 @@ mod tests {
     }
 
     #[test]
-    fn network_bound_entry_reports_missing_dependency_list() {
+    fn network_bound_entry_reports_missing_dependencies() {
         let mut network = ();
-        assert!(
-            required_port_beads()
-                .iter()
-                .any(|dependency| dependency.bead == "LogicFriday1-8j8.2.6.468")
-        );
         assert_eq!(
             new_speed_network_bound(&mut network, &NewSpeedOptions::default()),
-            Err(NewSpeedError::MissingSisGraphPorts {
-                dependencies: REQUIRED_PORT_BEADS
-            })
+            Err(NewSpeedError::MissingSisGraphPorts {})
         );
     }
 }

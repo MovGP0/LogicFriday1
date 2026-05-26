@@ -11,71 +11,6 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
 use std::fmt;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_PORT_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.2",
-        source_file: "LogicSynthesis/sis/array/array.c",
-        reason: "pld_util.c returns and consumes array_t collections of nodes, fanins, cubes, rows, and columns",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.297",
-        source_file: "LogicSynthesis/sis/network/dfs.c",
-        reason: "pld_replace_node_by_network traverses the replacement network in DFS order",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.305",
-        source_file: "LogicSynthesis/sis/network/network_util.c",
-        reason: "network_find_node and network_add_node are required for primary-input remap and replacement",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.313",
-        source_file: "LogicSynthesis/sis/node/fan.c",
-        reason: "fanin traversal, fanin counts, and fanin-index lookup drive most PLD utilities",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-        reason: "node constructors, literals, Boolean operations, node function classification, and node_free are used throughout",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.321",
-        source_file: "LogicSynthesis/sis/node/nodemisc.c",
-        reason: "node_replace installs remapped or array-provided logic into the original node",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.455",
-        source_file: "LogicSynthesis/sis/simplify/simp.c",
-        reason: "pld_simplify_network_without_dc invokes simplify_node with SIS simplify constants",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.485",
-        source_file: "LogicSynthesis/sis/st/st.c",
-        reason: "st_table stores remap correspondence and intermediate-node sets",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.457",
-        source_file: "LogicSynthesis/sis/sparse/matrix.c",
-        reason: "sm_get_row, sm_get_col, sm_delrow, and sm_delcol back the sparse matrix helpers",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.458",
-        source_file: "LogicSynthesis/sis/sparse/rows.c",
-        reason: "row element traversal is needed by sm_get_cols_covered_by_row",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.456",
-        source_file: "LogicSynthesis/sis/sparse/cols.c",
-        reason: "column element traversal is needed by sm_get_rows_covered_by_col",
-    },
-];
-
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct NodeId(pub usize);
 
@@ -297,19 +232,11 @@ impl PldNetwork {
 pub enum PldUtilError {
     UnknownNode(NodeId),
     MissingFaninMapping(NodeId),
-    MissingPrimaryInput {
-        name: String,
-    },
-    CubeArityMismatch {
-        fanins: usize,
-        literals: usize,
-    },
+    MissingPrimaryInput { name: String },
+    CubeArityMismatch { fanins: usize, literals: usize },
     EmptyReplacementArray,
     MissingTableNode(NodeId),
-    MissingNativePorts {
-        operation: &'static str,
-        dependencies: &'static [PortDependency],
-    },
+    MissingNativePorts { operation: &'static str },
 }
 
 impl fmt::Display for PldUtilError {
@@ -331,22 +258,10 @@ impl fmt::Display for PldUtilError {
             ),
             Self::EmptyReplacementArray => write!(f, "node replacement array is empty"),
             Self::MissingTableNode(node) => write!(f, "node {:?} is absent from table", node),
-            Self::MissingNativePorts {
-                operation,
-                dependencies,
-            } => {
-                write!(
-                    f,
-                    "{operation} requires native Rust ports for SIS dependencies: "
-                )?;
-                for (index, dependency) in dependencies.iter().enumerate() {
-                    if index > 0 {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "{} ({})", dependency.bead_id, dependency.source_file)?;
-                }
-                Ok(())
-            }
+            Self::MissingNativePorts { operation } => write!(
+                f,
+                "{operation} requires native Rust ports for SIS dependencies"
+            ),
         }
     }
 }
@@ -354,10 +269,6 @@ impl fmt::Display for PldUtilError {
 impl Error for PldUtilError {}
 
 pub type PldUtilResult<T> = Result<T, PldUtilError>;
-
-pub fn required_port_dependencies() -> &'static [PortDependency] {
-    REQUIRED_PORT_DEPENDENCIES
-}
 
 pub fn sis_bound_operation_unavailable(operation: &'static str) -> PldUtilResult<()> {
     Err(missing_native_ports(operation))
@@ -535,10 +446,7 @@ fn identity_mapping(fanins: &[NodeId]) -> BTreeMap<NodeId, NodeId> {
 }
 
 fn missing_native_ports(operation: &'static str) -> PldUtilError {
-    PldUtilError::MissingNativePorts {
-        operation,
-        dependencies: REQUIRED_PORT_DEPENDENCIES,
-    }
+    PldUtilError::MissingNativePorts { operation }
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -808,39 +716,6 @@ mod tests {
         sm_delete_cols_covered_by_row(&mut matrix, RowId(4));
         assert!(!matrix.contains(RowId(4), ColId(40)));
         assert!(!matrix.contains(RowId(5), ColId(50)));
-    }
-
-    #[test]
-    fn blocked_entries_report_dependency_beads_and_sources() {
-        let error = sis_bound_operation_unavailable("pld_replace_node_by_network").unwrap_err();
-
-        let PldUtilError::MissingNativePorts {
-            operation,
-            dependencies,
-        } = error
-        else {
-            panic!("expected missing SIS dependencies");
-        };
-
-        assert_eq!(operation, "pld_replace_node_by_network");
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.297"
-                && dependency.source_file == "LogicSynthesis/sis/network/dfs.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.485"
-                && dependency.source_file == "LogicSynthesis/sis/st/st.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.457"
-                && dependency.source_file == "LogicSynthesis/sis/sparse/matrix.c"
-        }));
-
-        let message = simplify_network_without_dc_blocked(&mut ())
-            .unwrap_err()
-            .to_string();
-        assert!(message.contains("LogicFriday1-8j8.2.6.455"));
-        assert!(message.contains("LogicSynthesis/sis/simplify/simp.c"));
     }
 
     #[test]

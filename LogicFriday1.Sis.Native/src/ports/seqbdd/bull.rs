@@ -4,101 +4,12 @@
 //! then computes next-state images with a recursive BDD cofactor algorithm. The
 //! actual `network_t`, `node_t`, `st_table`, `array_t`, and `bdd_t` integration
 //! remains blocked on other SIS ports, so those entry points return explicit
-//! dependency errors. The cache-key and support-partition behavior is modeled
+//! missing-port errors. The cache-key and support-partition behavior is modeled
 //! with owned Rust data and covered by tests.
 
 use std::collections::BTreeSet;
 use std::error::Error;
 use std::fmt;
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub note: &'static str,
-}
-
-pub const REQUIRED_BULL_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.2",
-        source_file: "LogicSynthesis/sis/array/array.c",
-        note: "array_t allocation, fetch, insert, and ownership used throughout bull.c",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.71",
-        source_file: "LogicSynthesis/sis/bdd_cmu/bdd_port/bddport.c",
-        note: "BDD manager, constants, variables, equality, size, leq, and top-var access",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.78",
-        source_file: "LogicSynthesis/sis/bdd_ucb/bdd_cofactor.c",
-        note: "bdd_cofactor used by bull_compute_next_states and bull_cofactor recursion",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.89",
-        source_file: "LogicSynthesis/sis/bdd_ucb/bdd_substit.c",
-        note: "bdd_substitute and bdd_compose used when reusing BULL cache entries",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.90",
-        source_file: "LogicSynthesis/sis/bdd_ucb/bdd_support.c",
-        note: "bdd_get_support used to partition recursive cofactor work",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.230",
-        source_file: "LogicSynthesis/sis/latch/latch.c",
-        note: "network_latch_end maps next-state outputs to present-state inputs",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.305",
-        source_file: "LogicSynthesis/sis/network/network_util.c",
-        note: "primary-input iteration and network/node lookup for range-data allocation",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-        note: "node_t identity and BDD attachment lifetime",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.326",
-        source_file: "LogicSynthesis/sis/ntbdd/bdd_at_node.c",
-        note: "ntbdd_at_node and ntbdd_free_at_node",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.329",
-        source_file: "LogicSynthesis/sis/ntbdd/manager.c",
-        note: "ntbdd_start_manager and ntbdd_end_manager",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.330",
-        source_file: "LogicSynthesis/sis/ntbdd/node_to_bdd.c",
-        note: "ntbdd_node_to_bdd for initial state, outputs, and next-state functions",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.424",
-        source_file: "LogicSynthesis/sis/seqbdd/bull_util.c",
-        note: "input_cofactor, disjoint_support_functions, and range_2_compute helpers",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.442",
-        source_file: "LogicSynthesis/sis/seqbdd/verif_util.c",
-        note: "order_nodes, get_remaining_po, from_array_to_table, report_inconsistency",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.485",
-        source_file: "LogicSynthesis/sis/st/st.c",
-        note: "st_table maps for PI ordering and the BULL cache",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.518",
-        source_file: "LogicSynthesis/sis/var_set/var_set.c",
-        note: "var_set support arithmetic used by bull_cofactor",
-    },
-];
-
-pub fn required_bull_dependencies() -> &'static [PortDependency] {
-    REQUIRED_BULL_DEPENDENCIES
-}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum BullPortDisposition {
@@ -111,29 +22,18 @@ pub fn bull_port_disposition() -> BullPortDisposition {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum BullError {
-    MissingSisDependencies {
-        operation: &'static str,
-        dependencies: &'static [PortDependency],
-    },
+    MissingSisDependencies { operation: &'static str },
     EmptyTransitionSet,
-    VariableOutOfRange {
-        variable: usize,
-        n_vars: usize,
-    },
+    VariableOutOfRange { variable: usize, n_vars: usize },
     CacheHashModulusZero,
 }
 
 impl fmt::Display for BullError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingSisDependencies {
-                operation,
-                dependencies,
-            } => write!(
-                f,
-                "{operation} is blocked by {} unported SIS/BDD dependencies",
-                dependencies.len()
-            ),
+            Self::MissingSisDependencies { operation } => {
+                write!(f, "{operation} is blocked by missing native SIS ports")
+            }
             Self::EmptyTransitionSet => write!(f, "BULL transition set is empty"),
             Self::VariableOutOfRange { variable, n_vars } => {
                 write!(
@@ -169,10 +69,7 @@ pub fn bull_bdd_sizes_blocked() -> Result<(), BullError> {
 }
 
 fn missing_dependencies(operation: &'static str) -> Result<(), BullError> {
-    Err(BullError::MissingSisDependencies {
-        operation,
-        dependencies: REQUIRED_BULL_DEPENDENCIES,
-    })
+    Err(BullError::MissingSisDependencies { operation })
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -482,29 +379,6 @@ mod tests {
     fn set(values: &[usize]) -> BTreeSet<usize> {
         values.iter().copied().collect()
     }
-
-    #[test]
-    fn dependency_errors_name_bull_operations_and_blockers() {
-        let error = bull_compute_next_states_blocked().unwrap_err();
-        match error {
-            BullError::MissingSisDependencies {
-                operation,
-                dependencies,
-            } => {
-                assert_eq!(operation, "bull_compute_next_states");
-                assert!(dependencies.iter().any(|dependency| {
-                    dependency.bead_id == "LogicFriday1-8j8.2.6.424"
-                        && dependency.source_file == "LogicSynthesis/sis/seqbdd/bull_util.c"
-                }));
-                assert!(dependencies.iter().any(|dependency| {
-                    dependency.bead_id == "LogicFriday1-8j8.2.6.442"
-                        && dependency.source_file == "LogicSynthesis/sis/seqbdd/verif_util.c"
-                }));
-            }
-            other => panic!("unexpected error: {other:?}"),
-        }
-    }
-
     #[test]
     fn cache_key_matches_functions_equal_up_to_complement() {
         let f0 = BddSignature::new(10, 2, false);

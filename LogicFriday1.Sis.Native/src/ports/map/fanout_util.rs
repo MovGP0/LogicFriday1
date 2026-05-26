@@ -404,7 +404,9 @@ impl fmt::Display for FanoutUtilError {
                 sink.index()
             ),
             Self::VirtualNetwork(error) => write!(f, "{error}"),
-            Self::MissingSisPorts { operation } => write!(f, "{operation} requires unavailable native SIS integration"),
+            Self::MissingSisPorts { operation } => {
+                write!(f, "{operation} requires unavailable native SIS integration")
+            }
         }
     }
 }

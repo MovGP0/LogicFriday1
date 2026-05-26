@@ -7,117 +7,12 @@
 //!
 //! This module ports the deterministic behavior onto owned Rust data
 //! structures. Operations that still require SIS network, node, latch, array,
-//! st_table, or BDD ports return explicit dependency errors with bead IDs and
-//! source files.
+//! st_table, or BDD ports return generic missing-port diagnostics with generic missing-port diagnostics.
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::error::Error;
 use std::fmt;
 use std::time::Duration;
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub note: &'static str,
-}
-
-pub const REQUIRED_PORT_BEADS: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.2",
-        source_file: "LogicSynthesis/sis/array/array.c",
-        note: "array_t allocation, indexed insert/fetch, sorting, and ownership",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.71",
-        source_file: "LogicSynthesis/sis/bdd_cmu/bdd_port/bddport.c",
-        note: "BDD constants, boolean operations, cofactor, smoothing, cube iteration, and var IDs",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.230",
-        source_file: "LogicSynthesis/sis/latch/latch.c",
-        note: "latch lookup from PI nodes and latch initial values",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.297",
-        source_file: "LogicSynthesis/sis/network/dfs.c",
-        note: "network_dfs used while building unreached-state EXDC networks",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.299",
-        source_file: "LogicSynthesis/sis/network/net_seq.c",
-        note: "real PI/PO and latch classification",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.305",
-        source_file: "LogicSynthesis/sis/network/network_util.c",
-        note: "network lookup, node naming, PO/PI iteration, and mutation",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.313",
-        source_file: "LogicSynthesis/sis/node/fan.c",
-        note: "fanin traversal and node_get_fanin",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.317",
-        source_file: "LogicSynthesis/sis/node/names.c",
-        note: "node_long_name used in failing minterm reports",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-        note: "node types, duplication, literals, constants, AND/XNOR creation, and BDD slots",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.326",
-        source_file: "LogicSynthesis/sis/ntbdd/bdd_at_node.c",
-        note: "ntbdd_at_node, ntbdd_set_at_node, and ntbdd_node_to_bdd",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.335",
-        source_file: "LogicSynthesis/sis/order/dfs_order.c",
-        note: "order_dfs PI ordering heuristic",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.430",
-        source_file: "LogicSynthesis/sis/seqbdd/ordering.c",
-        note: "find_best_set_order PO support ordering heuristic",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.429",
-        source_file: "LogicSynthesis/sis/seqbdd/network_info.c",
-        note: "extract_network_info and product-network construction inputs",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.440",
-        source_file: "LogicSynthesis/sis/seqbdd/product.c",
-        note: "product-method range data, next-state image, reverse image, and output checks",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.425",
-        source_file: "LogicSynthesis/sis/seqbdd/bull.c",
-        note: "BULL-method range data, next-state image, reverse image, and output checks",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.427",
-        source_file: "LogicSynthesis/sis/seqbdd/consistency.c",
-        note: "consistency-method range data, next-state image, reverse image, and output checks",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.485",
-        source_file: "LogicSynthesis/sis/st/st.c",
-        note: "st_table ordering maps and pointer/name tables",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.504",
-        source_file: "LogicSynthesis/sis/util/cpu_time.c",
-        note: "elapsed timing reports",
-    },
-];
-
-pub fn required_port_beads() -> &'static [PortDependency] {
-    REQUIRED_PORT_BEADS
-}
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct NodeId(pub usize);
@@ -320,7 +215,6 @@ pub enum VerifUtilError {
     },
     MissingNativePorts {
         operation: &'static str,
-        dependencies: &'static [PortDependency],
     },
 }
 
@@ -372,14 +266,9 @@ impl fmt::Display for VerifUtilError {
                 "node {:?} at PI ordering index {pi_index} has no native BDD variable",
                 node
             ),
-            Self::MissingNativePorts {
-                operation,
-                dependencies,
-            } => write!(
-                f,
-                "{operation} requires native Rust ports for {} SIS dependencies",
-                dependencies.len()
-            ),
+            Self::MissingNativePorts { operation } => {
+                write!(f, "{operation} is blocked by missing native SIS ports")
+            }
         }
     }
 }
@@ -887,7 +776,6 @@ pub fn seq_verify_interface<Network>(
 ) -> Result<(), VerifUtilError> {
     Err(VerifUtilError::MissingNativePorts {
         operation: "seq_verify_interface",
-        dependencies: REQUIRED_PORT_BEADS,
     })
 }
 
@@ -897,7 +785,6 @@ pub fn range_computation_interface<Network>(
 ) -> Result<(), VerifUtilError> {
     Err(VerifUtilError::MissingNativePorts {
         operation: "range_computation_interface",
-        dependencies: REQUIRED_PORT_BEADS,
     })
 }
 
@@ -907,7 +794,6 @@ pub fn network_copy_subnetwork<Network, Node>(
 ) -> Result<(), VerifUtilError> {
     Err(VerifUtilError::MissingNativePorts {
         operation: "network_copy_subnetwork",
-        dependencies: REQUIRED_PORT_BEADS,
     })
 }
 
@@ -917,7 +803,6 @@ pub fn report_inconsistency<Bdd>(
 ) -> Result<(), VerifUtilError> {
     Err(VerifUtilError::MissingNativePorts {
         operation: "report_inconsistency",
-        dependencies: REQUIRED_PORT_BEADS,
     })
 }
 
@@ -1098,28 +983,5 @@ mod tests {
             print_node_table(&network, &HashMap::from([(NodeId(1), 2), (NodeId(0), 1)])),
             "a=>1 b=>2 \n"
         );
-    }
-
-    #[test]
-    fn blocked_operations_report_dependency_beads_and_source_files() {
-        let error = seq_verify_interface(&mut (), &mut (), RangeMethod::Product).unwrap_err();
-
-        match error {
-            VerifUtilError::MissingNativePorts {
-                operation,
-                dependencies,
-            } => {
-                assert_eq!(operation, "seq_verify_interface");
-                assert!(dependencies.iter().any(|dependency| {
-                    dependency.bead_id == "LogicFriday1-8j8.2.6.71"
-                        && dependency.source_file == "LogicSynthesis/sis/bdd_cmu/bdd_port/bddport.c"
-                }));
-                assert!(dependencies.iter().any(|dependency| {
-                    dependency.bead_id == "LogicFriday1-8j8.2.6.440"
-                        && dependency.source_file == "LogicSynthesis/sis/seqbdd/product.c"
-                }));
-            }
-            other => panic!("unexpected error: {other:?}"),
-        }
     }
 }

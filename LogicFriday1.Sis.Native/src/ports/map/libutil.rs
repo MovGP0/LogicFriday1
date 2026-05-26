@@ -274,7 +274,9 @@ impl fmt::Display for LibUtilError {
                 "gate '{gate}' has no {direction:?} pin at position {pin}"
             ),
             Self::InvalidLoad { load } => write!(f, "invalid output load {load}"),
-            Self::MissingSisPorts { operation } => write!(f, "{operation} requires unavailable native SIS integration"),
+            Self::MissingSisPorts { operation } => {
+                write!(f, "{operation} requires unavailable native SIS integration")
+            }
         }
     }
 }

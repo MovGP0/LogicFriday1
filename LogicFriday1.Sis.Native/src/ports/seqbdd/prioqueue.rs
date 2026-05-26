@@ -8,42 +8,13 @@
 //!
 //! No legacy C ABI is exposed here. Higher-level SIS integrations that need to
 //! bind this queue to original `fn_info_t` pointers remain explicit
-//! missing-dependency errors until their native Rust ports are available.
+//! missing-missing-port errors until their native Rust ports are available.
 
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
 use std::hash::Hash;
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_INTEGRATION_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.436",
-        source_file: "LogicSynthesis/sis/seqbdd/prl_product.c",
-        reason: "parallel product integration owns fn_info_t priority data observed by the queue comparator",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.440",
-        source_file: "LogicSynthesis/sis/seqbdd/product.c",
-        reason: "sequential product integration owns fn_info_t priority data observed by the queue comparator",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.485",
-        source_file: "LogicSynthesis/sis/st/st.c",
-        reason: "legacy C queue entry points used st_table pointer identity maps; native Rust uses HashMap keys instead",
-    },
-];
-
-pub fn required_integration_dependencies() -> &'static [PortDependency] {
-    REQUIRED_INTEGRATION_DEPENDENCIES
-}
 
 pub fn is_legacy_sis_pointer_queue_blocked() -> bool {
     true
@@ -56,10 +27,7 @@ pub fn legacy_sis_pointer_queue_blocked() -> Result<(), PriorityQueueError<()>> 
 fn missing_integration_dependencies<T>(
     operation: &'static str,
 ) -> Result<T, PriorityQueueError<()>> {
-    Err(PriorityQueueError::MissingIntegrationDependencies {
-        operation,
-        dependencies: REQUIRED_INTEGRATION_DEPENDENCIES,
-    })
+    Err(PriorityQueueError::MissingIntegrationDependencies { operation })
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -90,7 +58,6 @@ pub enum PriorityQueueError<T> {
     },
     MissingIntegrationDependencies {
         operation: &'static str,
-        dependencies: &'static [PortDependency],
     },
 }
 
@@ -128,14 +95,9 @@ impl<T: fmt::Debug> fmt::Display for PriorityQueueError<T> {
                 f,
                 "priority queue accounting mismatch: heap has {heap_len} items, table has {table_len}"
             ),
-            Self::MissingIntegrationDependencies {
-                operation,
-                dependencies,
-            } => write!(
-                f,
-                "{operation} is blocked by {} unported SIS integration dependencies",
-                dependencies.len()
-            ),
+            Self::MissingIntegrationDependencies { operation } => {
+                write!(f, "{operation} is blocked by missing native SIS ports")
+            }
         }
     }
 }
@@ -471,38 +433,6 @@ mod tests {
         assert_eq!(
             queue.render_levels(|item| item.to_string()),
             "priority queue\n\t1 \n\t2 3 \n"
-        );
-    }
-
-    #[test]
-    fn blocked_legacy_facade_reports_dependency_beads_and_sources() {
-        let error = legacy_sis_pointer_queue_blocked()
-            .expect_err("legacy pointer facade should remain blocked");
-        let PriorityQueueError::MissingIntegrationDependencies {
-            operation,
-            dependencies,
-        } = error
-        else {
-            panic!("unexpected error kind");
-        };
-
-        assert_eq!(operation, "legacy SIS pointer priority queue facade");
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.436"
-                && dependency.source_file == "LogicSynthesis/sis/seqbdd/prl_product.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.440"
-                && dependency.source_file == "LogicSynthesis/sis/seqbdd/product.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.485"
-                && dependency.source_file == "LogicSynthesis/sis/st/st.c"
-        }));
-        assert!(is_legacy_sis_pointer_queue_blocked());
-        assert_eq!(
-            required_integration_dependencies(),
-            REQUIRED_INTEGRATION_DEPENDENCIES
         );
     }
 }

@@ -1,4 +1,4 @@
-//! Native Rust model for `LogicSynthesis/sis/power/power_main.c`.
+﻿//! Native Rust model for `LogicSynthesis/sis/power/power_main.c`.
 //!
 //! The C file owns the power-estimation command defaults, option parsing,
 //! construction of per-node capacitance/probability/delay tables, mapped-delay
@@ -19,76 +19,6 @@ pub const DEFAULT_MAX_INPUT_SIZING: usize = 4;
 pub const DEFAULT_PS_MAX_ALLOWED_ERROR: f64 = 0.01;
 pub const CAP_IN_LATCH: i32 = 4;
 pub const CAP_OUT_LATCH: i32 = 20;
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_SIS_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.397",
-        source_file: "LogicSynthesis/sis/power/power_comb.c",
-        reason: "power_main_driver dispatches combinational zero/unit/general-delay estimation",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.399",
-        source_file: "LogicSynthesis/sis/power/power_dynamic.c",
-        reason: "power_main_driver dispatches dynamic-domino estimation",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.401",
-        source_file: "LogicSynthesis/sis/power/power_pipe.c",
-        reason: "power_main_driver dispatches pipeline estimation",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.405",
-        source_file: "LogicSynthesis/sis/power/power_seq.c",
-        reason: "power_main_driver dispatches sequential estimation",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.406",
-        source_file: "LogicSynthesis/sis/power/power_sim.c",
-        reason: "sample-mode command dispatch calls power_simulation_estimate",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.407",
-        source_file: "LogicSynthesis/sis/power/power_util.c",
-        reason: "legacy global power_info_table allocation and cleanup are shared with utility code",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.133",
-        source_file: "LogicSynthesis/sis/delay/delay.c",
-        reason: "general-delay mode requires delay_trace and delay_arrival_time over SIS nodes",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.305",
-        source_file: "LogicSynthesis/sis/network/network_util.c",
-        reason: "SIS bridge needs network/node lookup, network name, latch counts, and real PI/PO checks",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.313",
-        source_file: "LogicSynthesis/sis/node/fan.c",
-        reason: "SIS bridge needs fanin/fanout iteration",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-        reason: "SIS bridge needs node function, literal counts, and factored-form usage counts",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.485",
-        source_file: "LogicSynthesis/sis/st/st.c",
-        reason: "C implementation stores node_info_t and power_info_t in pointer-keyed st_table values",
-    },
-];
-
-pub fn required_sis_dependencies() -> &'static [PortDependency] {
-    REQUIRED_SIS_DEPENDENCIES
-}
-
 pub fn sis_power_estimate_blocked() -> Result<(), PowerMainError> {
     missing_sis_dependencies(PowerMainOperation::PowerEstimate)
 }
@@ -106,10 +36,7 @@ pub fn sis_power_get_node_info_blocked() -> Result<(), PowerMainError> {
 }
 
 fn missing_sis_dependencies(operation: PowerMainOperation) -> Result<(), PowerMainError> {
-    Err(PowerMainError::MissingSisDependencies {
-        operation,
-        dependencies: REQUIRED_SIS_DEPENDENCIES,
-    })
+    Err(PowerMainError::MissingSisDependencies { operation })
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -891,7 +818,6 @@ pub fn command_summary(
 pub enum PowerMainError {
     MissingSisDependencies {
         operation: PowerMainOperation,
-        dependencies: &'static [PortDependency],
     },
     MissingOptionValue(&'static str),
     InvalidNumericValue {
@@ -930,19 +856,11 @@ pub enum PowerMainError {
 impl fmt::Display for PowerMainError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingSisDependencies {
-                operation,
-                dependencies,
-            } => {
-                write!(f, "{operation:?} requires native SIS prerequisite ports: ")?;
-                for (index, dependency) in dependencies.iter().enumerate() {
-                    if index > 0 {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "{} ({})", dependency.bead_id, dependency.source_file)?;
-                }
-                Ok(())
-            }
+            Self::MissingSisDependencies { operation } => write!(
+                f,
+                "operation {:?} requires native SIS prerequisite ports",
+                operation
+            ),
             Self::MissingOptionValue(option) => write!(f, "missing value for option {option}"),
             Self::InvalidNumericValue { option, value } => {
                 write!(f, "invalid numeric value {value:?} for option {option}")
@@ -1182,17 +1100,6 @@ mod tests {
 
         assert_eq!(tables.node_info(NodeId(0)).unwrap().delay, 8);
         assert_eq!(tables.node_info(NodeId(2)).unwrap().delay, 3);
-    }
-
-    #[test]
-    fn reports_missing_dependencies_with_bead_ids_and_sources() {
-        let error = sis_power_main_driver_blocked().unwrap_err();
-        let message = error.to_string();
-
-        assert!(message.contains("LogicFriday1-8j8.2.6.397"));
-        assert!(message.contains("LogicSynthesis/sis/power/power_comb.c"));
-        assert!(message.contains("LogicFriday1-8j8.2.6.305"));
-        assert!(message.contains("LogicSynthesis/sis/network/network_util.c"));
     }
 
     #[test]

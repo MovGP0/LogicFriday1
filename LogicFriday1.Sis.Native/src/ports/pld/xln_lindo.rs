@@ -12,41 +12,6 @@ use std::fmt;
 
 pub const TERMS_PER_LINE: usize = 5;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_PORT_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.2",
-        source_file: "LogicSynthesis/sis/array/array.c",
-        reason: "get_Lindo_result reads candidate node arrays and appends match arrays",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.456",
-        source_file: "LogicSynthesis/sis/sparse/cols.c",
-        reason: "selected match columns use first_row and last_row from sm_col",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.457",
-        source_file: "LogicSynthesis/sis/sparse/matrix.c",
-        reason: "formulate_Lindo and get_Lindo_result traverse sm_matrix rows and columns",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.458",
-        source_file: "LogicSynthesis/sis/sparse/rows.c",
-        reason: "formulate_Lindo emits one <= 1 constraint per sm_row",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.390",
-        source_file: "LogicSynthesis/sis/pld/xln_merge.c",
-        reason: "xln_merge.c owns the full merge flow around LINDO invocation and node merging",
-    },
-];
-
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SparseCoefficientMatrix {
     ncols: usize,
@@ -152,7 +117,6 @@ pub enum XlnLindoError {
     },
     MissingSisPorts {
         operation: &'static str,
-        dependencies: &'static [PortDependency],
     },
 }
 
@@ -178,13 +142,9 @@ impl fmt::Display for XlnLindoError {
             Self::MissingVariableValue { variable } => {
                 write!(f, "LINDO solution is missing a value after X{variable}")
             }
-            Self::MissingSisPorts {
-                operation,
-                dependencies,
-            } => write!(
+            Self::MissingSisPorts { operation } => write!(
                 f,
-                "{operation} is blocked by {} unported SIS C-file dependencies",
-                dependencies.len()
+                "{operation} is blocked by unported SIS C-file dependencies"
             ),
         }
     }
@@ -192,15 +152,8 @@ impl fmt::Display for XlnLindoError {
 
 impl Error for XlnLindoError {}
 
-pub fn required_port_dependencies() -> &'static [PortDependency] {
-    REQUIRED_PORT_DEPENDENCIES
-}
-
 pub fn sis_bound_operation_unavailable(operation: &'static str) -> Result<(), XlnLindoError> {
-    Err(XlnLindoError::MissingSisPorts {
-        operation,
-        dependencies: REQUIRED_PORT_DEPENDENCIES,
-    })
+    Err(XlnLindoError::MissingSisPorts { operation })
 }
 
 pub fn formulate_lindo(matrix: &SparseCoefficientMatrix) -> Result<String, XlnLindoError> {
@@ -431,31 +384,6 @@ mod tests {
                 ncols: 2,
             })
         );
-    }
-
-    #[test]
-    fn sis_bound_entry_reports_dependency_beads_and_sources() {
-        let Err(XlnLindoError::MissingSisPorts {
-            operation,
-            dependencies,
-        }) = sis_bound_operation_unavailable("get_Lindo_result over SIS arrays")
-        else {
-            panic!("expected missing SIS ports");
-        };
-
-        assert_eq!(operation, "get_Lindo_result over SIS arrays");
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.2"
-                && dependency.source_file == "LogicSynthesis/sis/array/array.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.457"
-                && dependency.source_file == "LogicSynthesis/sis/sparse/matrix.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.390"
-                && dependency.source_file == "LogicSynthesis/sis/pld/xln_merge.c"
-        }));
     }
 
     #[test]

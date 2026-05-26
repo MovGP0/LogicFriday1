@@ -21,6 +21,6 @@
 /// module without exposing allocator ABI.
 pub const SAFE_MEM_RETIRED: bool = true;
 
-// TODO(LogicFriday1-8j8.2.6.510): if module wiring later exposes
-// this file, keep it documentation-only unless translated code has a concrete
-// compatibility dependency on the legacy SIS allocator symbols.
+// TODO: if module wiring later exposes this file, keep it documentation-only
+// unless translated code has a concrete compatibility dependency on the legacy
+// SIS allocator symbols.

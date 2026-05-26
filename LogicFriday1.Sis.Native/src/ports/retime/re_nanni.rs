@@ -12,44 +12,9 @@ use std::fmt;
 
 pub const RETIME_TEST_NOT_SET: f64 = -50_000.0;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_SIS_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.413",
-        source_file: "LogicSynthesis/sis/retime/re_delay.c",
-        reason: "re_nanni.c calls re_evaluate_delay while discovering slow nodes",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.415",
-        source_file: "LogicSynthesis/sis/retime/re_graph.c",
-        reason: "legacy graph iteration macros and graph invariants are defined around re_graph",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.422",
-        source_file: "LogicSynthesis/sis/retime/re_util.c",
-        reason: "retime_single_node and edge-ignore semantics are used by the Nanni routine",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.423",
-        source_file: "LogicSynthesis/sis/retime/retime_util.c",
-        reason: "native re_graph allocation/accessor helpers are needed for direct SIS graph exchange",
-    },
-];
-
-pub fn required_sis_dependencies() -> &'static [PortDependency] {
-    REQUIRED_SIS_DEPENDENCIES
-}
-
 pub fn sis_re_nanni_integration_blocked() -> Result<(), NanniError> {
     Err(NanniError::MissingSisDependencies {
         operation: "retime_nanni_routine SIS graph integration",
-        dependencies: REQUIRED_SIS_DEPENDENCIES,
     })
 }
 
@@ -369,32 +334,19 @@ impl RetimeGraph {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum NanniError {
-    MissingSisDependencies {
-        operation: &'static str,
-        dependencies: &'static [PortDependency],
-    },
+    MissingSisDependencies { operation: &'static str },
     MissingNode(NodeId),
     MissingEdge(EdgeId),
-    ZeroWeightDelayCycle {
-        node: NodeId,
-    },
-    UnbalancedIoRetiming {
-        max_pi: i32,
-        max_po: i32,
-    },
+    ZeroWeightDelayCycle { node: NodeId },
+    UnbalancedIoRetiming { max_pi: i32, max_po: i32 },
 }
 
 impl fmt::Display for NanniError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingSisDependencies {
-                operation,
-                dependencies,
-            } => write!(
-                f,
-                "{operation} requires {} native SIS prerequisite ports",
-                dependencies.len()
-            ),
+            Self::MissingSisDependencies { operation } => {
+                write!(f, "{operation} requires native prerequisite ports")
+            }
             Self::MissingNode(node) => write!(f, "retime graph references missing node {}", node.0),
             Self::MissingEdge(edge) => write!(f, "retime graph references missing edge {}", edge.0),
             Self::ZeroWeightDelayCycle { node } => {
@@ -520,21 +472,5 @@ mod tests {
         let result = retime_nanni_routine(&mut graph, 1.0).unwrap();
         assert!(!result.feasible);
         assert_eq!(result.retiming.len(), graph.nodes.len());
-    }
-
-    #[test]
-    fn explicit_sis_dependency_error_includes_beads_and_sources() {
-        let err = sis_re_nanni_integration_blocked().unwrap_err();
-        let NanniError::MissingSisDependencies { dependencies, .. } = err else {
-            panic!("expected missing dependency error");
-        };
-        assert!(dependencies.iter().any(|dep| {
-            dep.bead_id == "LogicFriday1-8j8.2.6.413"
-                && dep.source_file == "LogicSynthesis/sis/retime/re_delay.c"
-        }));
-        assert!(dependencies.iter().any(|dep| {
-            dep.bead_id == "LogicFriday1-8j8.2.6.422"
-                && dep.source_file == "LogicSynthesis/sis/retime/re_util.c"
-        }));
     }
 }

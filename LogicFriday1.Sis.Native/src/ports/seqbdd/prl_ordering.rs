@@ -12,40 +12,10 @@ use std::fmt;
 
 const LARGE_NUMBER: i32 = 0x1fff_ffff;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub note: &'static str,
-}
-
-pub const REQUIRED_PRL_ORDERING_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.2",
-        source_file: "LogicSynthesis/sis/array/array.c",
-        note: "legacy array_t allocation, insertion, fetch, sorting, and ownership",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.485",
-        source_file: "LogicSynthesis/sis/st/st.c",
-        note: "legacy st_table cache keyed by var_set_t values",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.518",
-        source_file: "LogicSynthesis/sis/var_set/var_set.c",
-        note: "legacy var_set_t bitsets, hashing, comparison, and set operations",
-    },
-];
-
-pub fn required_prl_ordering_dependencies() -> &'static [PortDependency] {
-    REQUIRED_PRL_ORDERING_DEPENDENCIES
-}
-
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum PrlOrderingError {
     MissingNativePorts {
         operation: &'static str,
-        dependencies: &'static [PortDependency],
     },
     EmptySetCollection,
     SetVariableOutOfRange {
@@ -63,14 +33,9 @@ pub enum PrlOrderingError {
 impl fmt::Display for PrlOrderingError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingNativePorts {
-                operation,
-                dependencies,
-            } => write!(
-                f,
-                "{operation} requires native Rust ports for {} SIS dependencies",
-                dependencies.len()
-            ),
+            Self::MissingNativePorts { operation } => {
+                write!(f, "{operation} is blocked by missing native SIS ports")
+            }
             Self::EmptySetCollection => write!(f, "set ordering requires at least one set"),
             Self::SetVariableOutOfRange {
                 set_index,
@@ -181,7 +146,6 @@ pub fn prl_order_set_heuristic(
 pub fn prl_order_set_heuristic_from_sis() -> Result<OrderingResult, PrlOrderingError> {
     Err(PrlOrderingError::MissingNativePorts {
         operation: "Prl_OrderSetHeuristic SIS array_t/var_set_t entry",
-        dependencies: REQUIRED_PRL_ORDERING_DEPENDENCIES,
     })
 }
 
@@ -541,37 +505,6 @@ mod tests {
         assert_eq!(
             SetInfo::new(2, Vec::<Vec<usize>>::new()),
             Err(PrlOrderingError::EmptySetCollection)
-        );
-    }
-
-    #[test]
-    fn sis_entry_reports_dependency_beads_and_sources() {
-        let error = prl_order_set_heuristic_from_sis().unwrap_err();
-
-        match error {
-            PrlOrderingError::MissingNativePorts {
-                operation,
-                dependencies,
-            } => {
-                assert_eq!(
-                    operation,
-                    "Prl_OrderSetHeuristic SIS array_t/var_set_t entry"
-                );
-                assert!(dependencies.iter().any(|dependency| {
-                    dependency.bead_id == "LogicFriday1-8j8.2.6.2"
-                        && dependency.source_file == "LogicSynthesis/sis/array/array.c"
-                }));
-                assert!(dependencies.iter().any(|dependency| {
-                    dependency.bead_id == "LogicFriday1-8j8.2.6.518"
-                        && dependency.source_file == "LogicSynthesis/sis/var_set/var_set.c"
-                }));
-            }
-            other => panic!("unexpected error: {other:?}"),
-        }
-
-        assert_eq!(
-            required_prl_ordering_dependencies(),
-            REQUIRED_PRL_ORDERING_DEPENDENCIES
         );
     }
 }

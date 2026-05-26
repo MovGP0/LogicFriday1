@@ -15,66 +15,6 @@ pub const POS_LARGE: f64 = 10_000.0;
 pub const NEG_LARGE: f64 = -10_000.0;
 pub const V_SMALL: f64 = 0.000001;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead: &'static str,
-    pub c_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_PORT_BEADS: &[PortDependency] = &[
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.133",
-        c_file: "LogicSynthesis/sis/delay/delay.c",
-        reason: "delay_generate_decomposition and get_pin_delay",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.257",
-        c_file: "LogicSynthesis/sis/map/library.c",
-        reason: "mapped lib_gate_t delay records",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.258",
-        c_file: "LogicSynthesis/sis/map/libutil.c",
-        reason: "lib_gate lookup and equivalent gate versions",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.262",
-        c_file: "LogicSynthesis/sis/map/maputil.c",
-        reason: "map_invalid during decomposition trial",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.305",
-        c_file: "LogicSynthesis/sis/network/network_util.c",
-        reason: "network_add_node, network_free, and node array construction",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.313",
-        c_file: "LogicSynthesis/sis/node/fan.c",
-        reason: "fanin count and fanin/fanout rewiring",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.318",
-        c_file: "LogicSynthesis/sis/node/node.c",
-        reason: "node_replace and node_free",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.460",
-        c_file: "LogicSynthesis/sis/speed/buf_delay.c",
-        reason: "sp_subtract_delay and buffer required-time helpers",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.464",
-        c_file: "LogicSynthesis/sis/speed/buf_util.c",
-        reason: "buffer/gate implementation mutation helpers",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.471",
-        c_file: "LogicSynthesis/sis/speed/sp_network.c",
-        reason: "network_and_node_to_array decomposition copy plan",
-    },
-];
-
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct DelayTime {
     pub rise: f64,
@@ -245,7 +185,6 @@ pub struct DecompositionBlockedPlan {
     pub inverter_required_time: Option<DelayTime>,
     pub saving: DelayTime,
     pub total_root_load: f64,
-    pub dependencies: &'static [PortDependency],
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -261,10 +200,7 @@ pub enum BufReplaceError {
     MissingInverterChoices,
     InvalidPhase(PinPhase),
     ImprovedWithoutConfigurationChange,
-    MissingSisPorts {
-        operation: &'static str,
-        dependencies: &'static [PortDependency],
-    },
+    MissingSisPorts { operation: &'static str },
 }
 
 impl fmt::Display for BufReplaceError {
@@ -282,14 +218,9 @@ impl fmt::Display for BufReplaceError {
                 f,
                 "timing improved even though the selected root/inverter configuration did not change"
             ),
-            Self::MissingSisPorts {
-                operation,
-                dependencies,
-            } => write!(
-                f,
-                "{operation} is blocked by {} unported SIS C-file dependencies",
-                dependencies.len()
-            ),
+            Self::MissingSisPorts { operation } => {
+                write!(f, "{operation} is blocked by unported SIS dependencies")
+            }
         }
     }
 }
@@ -335,7 +266,6 @@ pub fn subtract_delay(
 pub fn replacement_in_sis_network_bound() -> Result<(), BufReplaceError> {
     Err(BufReplaceError::MissingSisPorts {
         operation: "sp_replace_cell_strength network mutation",
-        dependencies: REQUIRED_PORT_BEADS,
     })
 }
 
@@ -407,7 +337,6 @@ pub fn plan_cell_strength_replacement(
         let Some(pin_delay) = decomposition_pin_delay else {
             return Err(BufReplaceError::MissingSisPorts {
                 operation: "delay_generate_decomposition trial",
-                dependencies: REQUIRED_PORT_BEADS,
             });
         };
         return plan_decomposition(input, pin_delay, &inverter_fanouts, original_required);
@@ -576,7 +505,6 @@ fn plan_decomposition(
                 inverter_required_time: best.inverter_required_time,
                 saving: best.required_time.difference(original_required),
                 total_root_load: best.total_root_load,
-                dependencies: REQUIRED_PORT_BEADS,
             },
         ))
     } else {
@@ -789,7 +717,6 @@ mod tests {
             plan_cell_strength_replacement(&decomposable, &weak, &[], None),
             Err(BufReplaceError::MissingSisPorts {
                 operation: "delay_generate_decomposition trial",
-                dependencies: REQUIRED_PORT_BEADS,
             })
         );
     }
@@ -814,7 +741,6 @@ mod tests {
         assert_eq!(plan.inverter_choice_index, None);
         assert_close(plan.projected_root_required_time.rise, 18.2);
         assert_close(plan.saving.rise, 8.6);
-        assert_eq!(plan.dependencies, REQUIRED_PORT_BEADS);
     }
 
     #[test]
@@ -823,7 +749,6 @@ mod tests {
             replacement_in_sis_network_bound(),
             Err(BufReplaceError::MissingSisPorts {
                 operation: "sp_replace_cell_strength network mutation",
-                dependencies: REQUIRED_PORT_BEADS,
             })
         );
     }

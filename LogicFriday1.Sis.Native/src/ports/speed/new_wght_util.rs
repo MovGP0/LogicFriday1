@@ -25,110 +25,21 @@ pub const TRANSFORM_BASED: i32 = 1;
 pub const BEST_BENEFIT: i32 = 0;
 pub const BEST_BANG_FOR_BUCK: i32 = 1;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead: &'static str,
-    pub c_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_PORT_BEADS: &[PortDependency] = &[
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.133",
-        c_file: "LogicSynthesis/sis/delay/delay.c",
-        reason: "delay_slack_time, delay_arrival_time, delay_wire_required_time, delay_trace",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.297",
-        c_file: "LogicSynthesis/sis/network/dfs.c",
-        reason: "network_dfs and network_dfs_from_input traversal order",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.313",
-        c_file: "LogicSynthesis/sis/node/fan.c",
-        reason: "fanin/fanout traversal and critical fanin lookup",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.318",
-        c_file: "LogicSynthesis/sis/node/node.c",
-        reason: "node kinds, names, and network membership",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.467",
-        c_file: "LogicSynthesis/sis/speed/new_speed.c",
-        reason: "new_speed_is_fanout_po, dual network creation, delay saving",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.469",
-        c_file: "LogicSynthesis/sis/speed/nsp_util.c",
-        reason: "new-speed network append/delete/reorder helpers",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.474",
-        c_file: "LogicSynthesis/sis/speed/speed_delay.c",
-        reason: "new_delay_arrival, new_delay_required, new_delay_slack",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.480",
-        c_file: "LogicSynthesis/sis/speed/speed_util.c",
-        reason: "criticality, area, collapse scope, selection expansion",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.481",
-        c_file: "LogicSynthesis/sis/speed/speedup.c",
-        reason: "local transform optimize functions",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.88",
-        c_file: "LogicSynthesis/sis/bdd_ucb/bdd_start.c",
-        reason: "BDD manager lifecycle for valid-set construction",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.93",
-        c_file: "LogicSynthesis/sis/bdd_ucb/boolean_ops.c",
-        reason: "BDD and/or/then/else/tautology operations",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.81",
-        c_file: "LogicSynthesis/sis/bdd_ucb/bdd_end.c",
-        reason: "BDD manager cleanup",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.327",
-        c_file: "LogicSynthesis/sis/ntbdd/bdd_to_ntwk.c",
-        reason: "debug-only BDD-to-network printing",
-    },
-];
-
 #[derive(Clone, Debug, PartialEq)]
 pub enum NewWeightError {
-    MissingSisPorts {
-        operation: &'static str,
-        dependencies: &'static [PortDependency],
-    },
+    MissingSisPorts { operation: &'static str },
     MissingNode(String),
     InvalidTransformIndex(usize),
-    NonFiniteCost {
-        transform_index: usize,
-        value: f64,
-    },
-    SelectionVariableOutOfRange {
-        variable: usize,
-        variables: usize,
-    },
+    NonFiniteCost { transform_index: usize, value: f64 },
+    SelectionVariableOutOfRange { variable: usize, variables: usize },
 }
 
 impl fmt::Display for NewWeightError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingSisPorts {
-                operation,
-                dependencies,
-            } => write!(
-                f,
-                "{operation} requires {} native SIS prerequisite ports",
-                dependencies.len()
-            ),
+            Self::MissingSisPorts { operation } => {
+                write!(f, "{operation} is blocked by unported SIS dependencies")
+            }
             Self::MissingNode(node) => write!(f, "new weight graph references missing node {node}"),
             Self::InvalidTransformIndex(index) => {
                 write!(f, "selected transform index {index} has no candidate")
@@ -153,21 +64,15 @@ impl fmt::Display for NewWeightError {
 
 impl Error for NewWeightError {}
 
-pub fn required_port_beads() -> &'static [PortDependency] {
-    REQUIRED_PORT_BEADS
-}
-
 pub fn compute_weight_from_sis_network() -> Result<(), NewWeightError> {
     Err(NewWeightError::MissingSisPorts {
         operation: "new_speed_compute_weight",
-        dependencies: REQUIRED_PORT_BEADS,
     })
 }
 
 pub fn select_xform_from_sis_network() -> Result<(), NewWeightError> {
     Err(NewWeightError::MissingSisPorts {
         operation: "new_speed_select_xform",
-        dependencies: REQUIRED_PORT_BEADS,
     })
 }
 
@@ -1240,28 +1145,16 @@ mod tests {
 
     #[test]
     fn sis_backed_entry_points_report_explicit_dependencies() {
-        assert!(
-            required_port_beads()
-                .iter()
-                .any(|dependency| dependency.bead == "LogicFriday1-8j8.2.6.467")
-        );
-        assert!(
-            required_port_beads()
-                .iter()
-                .any(|dependency| dependency.bead == "LogicFriday1-8j8.2.6.93")
-        );
         assert_eq!(
             compute_weight_from_sis_network(),
             Err(NewWeightError::MissingSisPorts {
                 operation: "new_speed_compute_weight",
-                dependencies: REQUIRED_PORT_BEADS,
             })
         );
         assert_eq!(
             select_xform_from_sis_network(),
             Err(NewWeightError::MissingSisPorts {
                 operation: "new_speed_select_xform",
-                dependencies: REQUIRED_PORT_BEADS,
             })
         );
     }

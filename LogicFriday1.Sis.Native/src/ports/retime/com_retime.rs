@@ -32,101 +32,6 @@ pub const RETIME_USAGE: &str = concat!(
 pub const PRINT_STATS_UNKNOWN_OPTION: &str = "Unknown option";
 pub const CHECK_TR_UNKNOWN_OPTION: &str = "Unknown option";
 
-pub const REQUIRED_PORT_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.112",
-        source_file: "LogicSynthesis/sis/command/addcom.c",
-        reason: "command registration through com_add_command",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.115",
-        source_file: "LogicSynthesis/sis/command/command.c",
-        reason: "debug _check_tr command dispatches legacy print commands through com_execute",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.110",
-        source_file: "LogicSynthesis/sis/clock/clock.c",
-        reason: "cycle-time specification, working clock setting, and clock duplication",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.133",
-        source_file: "LogicSynthesis/sis/delay/delay.c",
-        reason: "delay_trace, delay model selection, and delay-network duplication",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.230",
-        source_file: "LogicSynthesis/sis/latch/latch.c",
-        reason: "latch count, latch traversal, synchronization type, control, and initial states",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.257",
-        source_file: "LogicSynthesis/sis/map/library.c",
-        reason: "mapped-network validation and library presence checks",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.305",
-        source_file: "LogicSynthesis/sis/network/network_util.c",
-        reason: "network emptiness checks, sweep, names, replacement, and latch counts",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-        reason: "debug latch input names and graph/network reconstruction metadata",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.415",
-        source_file: "LogicSynthesis/sis/retime/re_graph.c",
-        reason: "retime_graph top-level optimization and graph-to-network handoff",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.416",
-        source_file: "LogicSynthesis/sis/retime/re_initial.c",
-        reason: "initial-state preservation and can-initialize decisions",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.417",
-        source_file: "LogicSynthesis/sis/retime/re_milp.c",
-        reason: "optional MILP retiming formulation selected by -f",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.418",
-        source_file: "LogicSynthesis/sis/retime/re_minreg.c",
-        reason: "register-minimization mode selected by -m",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.419",
-        source_file: "LogicSynthesis/sis/retime/re_nanni.c",
-        reason: "default Saxe/Nanni retiming routine",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.420",
-        source_file: "LogicSynthesis/sis/retime/re_net.c",
-        reason: "network-to-retime-graph and graph-to-network conversion",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.422",
-        source_file: "LogicSynthesis/sis/retime/re_util.c",
-        reason: "clock data, graph checks, dump, cycle delay, lower bound, area, and temp-node cleanup",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.423",
-        source_file: "LogicSynthesis/sis/retime/retime_util.c",
-        reason: "retime graph allocation, edge/node utilities, and graph lifetime",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.492",
-        source_file: "LogicSynthesis/sis/stg/stg.c",
-        reason: "_print_stats reports STG input/output/state/product counts for empty networks",
-    },
-];
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead: &'static str,
-    pub source_file: &'static str,
-    pub reason: &'static str,
-}
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DelayModel {
     Mapped,
@@ -317,27 +222,14 @@ impl Error for CommandParseError {}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum RetimeCommandError {
-    MissingSisPorts {
-        command: RetimeCommandKind,
-        dependencies: &'static [PortDependency],
-    },
+    MissingSisPorts { command: RetimeCommandKind },
 }
 
 impl fmt::Display for RetimeCommandError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingSisPorts {
-                command,
-                dependencies,
-            } => {
-                write!(f, "{command:?} requires native Rust ports for ")?;
-                for (index, dependency) in dependencies.iter().enumerate() {
-                    if index > 0 {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "{} ({})", dependency.bead, dependency.source_file)?;
-                }
-                Ok(())
+            Self::MissingSisPorts { command } => {
+                write!(f, "{command:?} requires native Rust prerequisite ports")
             }
         }
     }
@@ -364,10 +256,6 @@ pub enum RetimePreflightDecision {
     DelayThroughRegisterExceedsDesiredCycle,
     SpecificationAlreadyMet,
     ReadyToBuildGraph,
-}
-
-pub fn required_port_dependencies() -> &'static [PortDependency] {
-    REQUIRED_PORT_DEPENDENCIES
 }
 
 pub fn retime_command_registrations() -> &'static [CommandRegistration] {
@@ -572,10 +460,7 @@ pub fn execute_command<Network>(
         RetimeCommand::PrintStats(_) => RetimeCommandKind::PrintStats,
     };
 
-    Err(RetimeCommandError::MissingSisPorts {
-        command: kind,
-        dependencies: REQUIRED_PORT_DEPENDENCIES,
-    })
+    Err(RetimeCommandError::MissingSisPorts { command: kind })
 }
 
 fn parse_options<F>(
@@ -904,35 +789,6 @@ mod tests {
             RetimePreflightDecision::ReadyToBuildGraph
         );
     }
-
-    #[test]
-    fn dispatch_reports_dependency_beads_and_source_files() {
-        let mut network = ();
-        let command = RetimeCommand::Retime(parse_retime_args(["-f"]).unwrap());
-        let error = execute_command(&mut network, &command).unwrap_err();
-
-        assert_eq!(
-            error,
-            RetimeCommandError::MissingSisPorts {
-                command: RetimeCommandKind::Retime,
-                dependencies: REQUIRED_PORT_DEPENDENCIES,
-            }
-        );
-        assert!(required_port_dependencies().iter().any(|dependency| {
-            dependency.bead == "LogicFriday1-8j8.2.6.417"
-                && dependency.source_file == "LogicSynthesis/sis/retime/re_milp.c"
-        }));
-        assert!(required_port_dependencies().iter().any(|dependency| {
-            dependency.bead == "LogicFriday1-8j8.2.6.420"
-                && dependency.source_file == "LogicSynthesis/sis/retime/re_net.c"
-        }));
-        assert!(
-            error
-                .to_string()
-                .contains("LogicSynthesis/sis/retime/re_graph.c")
-        );
-    }
-
     #[test]
     fn command_dispatch_selects_all_three_c_commands() {
         assert!(matches!(

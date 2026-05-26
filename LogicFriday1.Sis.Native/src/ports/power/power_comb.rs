@@ -16,71 +16,6 @@ use std::fmt;
 
 pub const CAPACITANCE: f64 = 0.01;
 pub const POWER_SCALE: f64 = 250.0;
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_PORT_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.398",
-        source_file: "LogicSynthesis/sis/power/power_comp.c",
-        reason: "power_calc_func_prob evaluates BDD probability from PI probabilities",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.400",
-        source_file: "LogicSynthesis/sis/power/power_main.c",
-        reason: "provides node_info_t probability records and power_info_table entries",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.406",
-        source_file: "LogicSynthesis/sis/power/power_sim.c",
-        reason: "power_comb_static_arbit consumes the symbolic transition network",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.329",
-        source_file: "LogicSynthesis/sis/ntbdd/manager.c",
-        reason: "ntbdd_start_manager and ntbdd_end_manager lifetime",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.330",
-        source_file: "LogicSynthesis/sis/ntbdd/node_to_bdd.c",
-        reason: "ntbdd_node_to_bdd and ntbdd_at_node provide per-node BDD roots",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.442",
-        source_file: "LogicSynthesis/sis/seqbdd/verif_util.c",
-        reason: "order_nodes supplies the PI order used by the BDD manager",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.305",
-        source_file: "LogicSynthesis/sis/network/network_util.c",
-        reason: "primary-output, primary-input, and node iteration over network_t",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-        reason: "node function classification, PO fanin access, and node names",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.485",
-        source_file: "LogicSynthesis/sis/st/st.c",
-        reason: "info_table, leaves, and power_info_table are st_table instances",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.2",
-        source_file: "LogicSynthesis/sis/array/array.c",
-        reason: "poArray and piOrder are legacy array_t values",
-    },
-];
-
-pub fn required_port_dependencies() -> &'static [PortDependency] {
-    REQUIRED_PORT_DEPENDENCIES
-}
-
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct NodeId(pub usize);
 
@@ -259,10 +194,7 @@ impl CombPowerModel {
             let probability = self
                 .node_info
                 .get(input)
-                .ok_or(PowerCombError::MissingNodeInfo {
-                    node: *input,
-                    dependencies: REQUIRED_PORT_DEPENDENCIES,
-                })?
+                .ok_or(PowerCombError::MissingNodeInfo { node: *input })?
                 .probability_one;
             validate_probability(probability)?;
             input_probabilities.insert(*input, probability);
@@ -292,10 +224,7 @@ impl CombPowerModel {
                 NodeKind::PrimaryInput => {
                     self.node_info
                         .get(&node.id)
-                        .ok_or(PowerCombError::MissingNodeInfo {
-                            node: node.id,
-                            dependencies: REQUIRED_PORT_DEPENDENCIES,
-                        })?
+                        .ok_or(PowerCombError::MissingNodeInfo { node: node.id })?
                         .probability_one
                 }
                 NodeKind::Internal => node
@@ -399,7 +328,6 @@ impl SymbolicCombPowerModel {
             let power_info = self.power_info.get_mut(&output.original_node).ok_or(
                 PowerCombError::MissingPowerInfo {
                     node: output.original_node,
-                    dependencies: REQUIRED_PORT_DEPENDENCIES,
                 },
             )?;
             let unscaled_power = power_info.cap_factor * probability_one * CAPACITANCE;
@@ -441,17 +369,14 @@ pub struct PowerInfo {
 pub enum PowerCombError {
     MissingNativePorts {
         operation: &'static str,
-        dependencies: &'static [PortDependency],
     },
     DuplicateNode(NodeId),
     MissingNode(NodeId),
     MissingNodeInfo {
         node: NodeId,
-        dependencies: &'static [PortDependency],
     },
     MissingPowerInfo {
         node: NodeId,
-        dependencies: &'static [PortDependency],
     },
     MissingInputProbability(NodeId),
     MissingNodeFunction(NodeId),
@@ -466,19 +391,11 @@ pub enum PowerCombError {
 impl fmt::Display for PowerCombError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingNativePorts {
-                operation,
-                dependencies,
-            } => {
-                write!(f, "{operation} requires native SIS prerequisite ports: ")?;
-                for (index, dependency) in dependencies.iter().enumerate() {
-                    if index > 0 {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "{} ({})", dependency.bead_id, dependency.source_file)?;
-                }
-                Ok(())
-            }
+            Self::MissingNativePorts { operation } => write!(
+                f,
+                "operation {:?} requires native SIS prerequisite ports",
+                operation
+            ),
             Self::DuplicateNode(node) => {
                 write!(f, "combinational power model has duplicate node {:?}", node)
             }
@@ -533,7 +450,6 @@ pub fn power_comb_static_zero_from_sis_network<Network, InfoTable>(
 ) -> Result<CombPowerReport, PowerCombError> {
     Err(PowerCombError::MissingNativePorts {
         operation: "power_comb_static_zero",
-        dependencies: REQUIRED_PORT_DEPENDENCIES,
     })
 }
 
@@ -543,7 +459,6 @@ pub fn power_comb_static_arbitrary_from_sis_network<Network, InfoTable>(
 ) -> Result<CombPowerReport, PowerCombError> {
     Err(PowerCombError::MissingNativePorts {
         operation: "power_comb_static_arbit",
-        dependencies: REQUIRED_PORT_DEPENDENCIES,
     })
 }
 
@@ -675,31 +590,6 @@ mod tests {
     }
 
     #[test]
-    fn missing_node_info_reports_dependency_beads_and_sources() {
-        let (a, _) = input(0, 0.25);
-        let mut model = CombPowerModel::new(vec![a], []).unwrap();
-
-        let error = model.evaluate_static_zero().unwrap_err();
-
-        assert_eq!(
-            error,
-            PowerCombError::MissingNodeInfo {
-                node: NodeId(0),
-                dependencies: REQUIRED_PORT_DEPENDENCIES,
-            }
-        );
-        assert!(error.to_string().contains("node_info_t"));
-        assert!(required_port_dependencies().iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.400"
-                && dependency.source_file == "LogicSynthesis/sis/power/power_main.c"
-        }));
-        assert!(required_port_dependencies().iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.406"
-                && dependency.source_file == "LogicSynthesis/sis/power/power_sim.c"
-        }));
-    }
-
-    #[test]
     fn sis_bound_entries_report_explicit_missing_dependencies() {
         let zero_error = power_comb_static_zero_from_sis_network(&(), &()).unwrap_err();
         let arbitrary_error = power_comb_static_arbitrary_from_sis_network(&(), &()).unwrap_err();
@@ -708,21 +598,23 @@ mod tests {
             zero_error,
             PowerCombError::MissingNativePorts {
                 operation: "power_comb_static_zero",
-                dependencies: REQUIRED_PORT_DEPENDENCIES,
             }
         );
         assert_eq!(
             arbitrary_error,
             PowerCombError::MissingNativePorts {
                 operation: "power_comb_static_arbit",
-                dependencies: REQUIRED_PORT_DEPENDENCIES,
             }
         );
-        assert!(zero_error.to_string().contains("LogicFriday1-8j8.2.6.398"));
+        assert!(
+            zero_error
+                .to_string()
+                .contains("requires native SIS prerequisite ports")
+        );
         assert!(
             arbitrary_error
                 .to_string()
-                .contains("LogicSynthesis/sis/power/power_sim.c")
+                .contains("requires native SIS prerequisite ports")
         );
     }
 

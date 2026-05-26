@@ -19,17 +19,6 @@ pub const UNBALANCED_MASK: u8 = 1 << 1;
 pub const BALANCED_MASK: u8 = 1 << 2;
 pub const DEFAULT_BUFFER_MODE: u8 = REPOWER_MASK | UNBALANCED_MASK | BALANCED_MASK;
 
-pub const REQUIRED_PORT_BEADS: &[&str] = &[
-    "LogicFriday1-8j8.2.6.460", // speed/buf_delay.c: delay and required-time helpers
-    "LogicFriday1-8j8.2.6.462", // speed/buf_replace.c: cell-strength replacement
-    "LogicFriday1-8j8.2.6.463", // speed/buf_trans2.c: balanced decomposition
-    "LogicFriday1-8j8.2.6.464", // speed/buf_util.c: buffer library and annotation helpers
-    "LogicFriday1-8j8.2.6.258", // map/libutil.c: mapped gate library traversal
-    "LogicFriday1-8j8.2.6.313", // node/fan.c: fanin/fanout rewiring
-    "LogicFriday1-8j8.2.6.318", // node/node.c: node creation and literals
-    "LogicFriday1-8j8.2.6.297", // network/dfs.c and network mutation helpers
-];
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Phase {
     NotGiven,
@@ -762,7 +751,6 @@ pub fn sp_buffer_recur_network_bound<Network>(
 ) -> Result<BufferRecurPlan, BufRecurError> {
     Err(BufRecurError::MissingSisDependency {
         operation: "sp_buffer_recur",
-        missing: REQUIRED_PORT_BEADS,
     })
 }
 
@@ -883,7 +871,6 @@ pub enum BufRecurError {
     NonFiniteDelayData,
     MissingSisDependency {
         operation: &'static str,
-        missing: &'static [&'static str],
     },
 }
 
@@ -920,10 +907,9 @@ impl fmt::Display for BufRecurError {
                 f,
                 "buffer recursion delay, load, and area data must be finite"
             ),
-            Self::MissingSisDependency { operation, missing } => write!(
+            Self::MissingSisDependency { operation } => write!(
                 f,
-                "{operation} requires native Rust SIS node/network/delay/library ports: {}",
-                missing.join(", ")
+                "{operation} requires native Rust SIS node/network/delay/library ports"
             ),
         }
     }
@@ -1166,7 +1152,6 @@ mod tests {
             sp_buffer_recur_network_bound(&mut network),
             Err(BufRecurError::MissingSisDependency {
                 operation: "sp_buffer_recur",
-                missing: REQUIRED_PORT_BEADS,
             })
         );
     }

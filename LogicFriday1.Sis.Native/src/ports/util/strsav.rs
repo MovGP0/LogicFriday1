@@ -14,8 +14,8 @@ pub fn strsav_bytes(source: &[u8]) -> Result<CString, NulError> {
     CString::new(source)
 }
 
-// TODO(LogicFriday1-8j8.2.6.513): expose this module through the crate module
-// tree once translated Rust callers need it.
+// TODO: expose this module through the crate module tree once translated Rust
+// callers need it.
 
 #[cfg(test)]
 mod tests {

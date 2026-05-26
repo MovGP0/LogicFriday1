@@ -20,96 +20,6 @@ pub const CLP: i32 = 0;
 pub const FAN: i32 = 1;
 pub const DUAL: i32 = 2;
 
-pub const REQUIRED_PORT_BEADS: &[PortDependency] = &[
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.133",
-        c_file: "LogicSynthesis/sis/delay/delay.c",
-        reason: "delay_slack_time and speed_delay_trace",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.297",
-        c_file: "LogicSynthesis/sis/network/dfs.c",
-        reason: "network_dfs and network_tfi",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.299",
-        c_file: "LogicSynthesis/sis/network/net_seq.c",
-        reason: "network graph duplication/traversal substrate",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.305",
-        c_file: "LogicSynthesis/sis/network/network_util.c",
-        reason: "network traversal, add, delete, cleanup, and primary outputs",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.309",
-        c_file: "LogicSynthesis/sis/node/collapse.c",
-        reason: "node_collapse",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.313",
-        c_file: "LogicSynthesis/sis/node/fan.c",
-        reason: "fanin/fanout traversal and patching",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.318",
-        c_file: "LogicSynthesis/sis/node/node.c",
-        reason: "node type, function, literal, cube, and fanin/fanout counts",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.321",
-        c_file: "LogicSynthesis/sis/node/nodemisc.c",
-        reason: "node_replace",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.325",
-        c_file: "LogicSynthesis/sis/node/substitute.c",
-        reason: "node_substitute",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.455",
-        c_file: "LogicSynthesis/sis/simplify/simp.c",
-        reason: "node_simplify and redundancy cleanup",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.474",
-        c_file: "LogicSynthesis/sis/speed/speed_delay.c",
-        reason: "speed delay data, trace, arrival, and single-level updates",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.476",
-        c_file: "LogicSynthesis/sis/speed/speed_net.c",
-        reason: "speed decomposition network conversion",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.477",
-        c_file: "LogicSynthesis/sis/speed/speed_no.c",
-        reason: "speed_decomp",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.480",
-        c_file: "LogicSynthesis/sis/speed/speed_util.c",
-        reason: "speed threshold setup, delete helpers, and delay stats",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.482",
-        c_file: "LogicSynthesis/sis/speed/weight_util.c",
-        reason: "speed_compute_weight",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.483",
-        c_file: "LogicSynthesis/sis/speed/weight.c",
-        reason: "cutset",
-    },
-];
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead: &'static str,
-    pub c_file: &'static str,
-    pub reason: &'static str,
-}
-
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct DelayTime {
     pub rise: f64,
@@ -315,10 +225,7 @@ pub enum SpeedUpError {
     UnknownNode(String),
     MissingWeight(String),
     MissingTransform(usize),
-    MissingSisPorts {
-        operation: &'static str,
-        dependencies: &'static [PortDependency],
-    },
+    MissingSisPorts { operation: &'static str },
 }
 
 impl fmt::Display for SpeedUpError {
@@ -327,23 +234,14 @@ impl fmt::Display for SpeedUpError {
             Self::UnknownNode(node) => write!(f, "unknown speedup node {node}"),
             Self::MissingWeight(node) => write!(f, "missing cutset weight for node {node}"),
             Self::MissingTransform(index) => write!(f, "missing local transform index {index}"),
-            Self::MissingSisPorts {
-                operation,
-                dependencies,
-            } => write!(
-                f,
-                "{operation} is blocked by {} unported SIS C-file dependencies",
-                dependencies.len()
-            ),
+            Self::MissingSisPorts { operation } => {
+                write!(f, "{operation} is blocked by unported SIS dependencies")
+            }
         }
     }
 }
 
 impl Error for SpeedUpError {}
-
-pub fn required_port_beads() -> &'static [PortDependency] {
-    REQUIRED_PORT_BEADS
-}
 
 pub fn plan_initial_decomp<N: Clone>(
     internal_dfs_nodes: &[N],
@@ -746,7 +644,6 @@ pub fn speed_up_network_bound<Network>(
 ) -> Result<(), SpeedUpError> {
     Err(SpeedUpError::MissingSisPorts {
         operation: "speed_up_network",
-        dependencies: REQUIRED_PORT_BEADS,
     })
 }
 
@@ -758,7 +655,6 @@ pub fn speed_node_interface_bound<Network, Node>(
 ) -> Result<(), SpeedUpError> {
     Err(SpeedUpError::MissingSisPorts {
         operation: "speed_node_interface",
-        dependencies: REQUIRED_PORT_BEADS,
     })
 }
 
@@ -768,14 +664,12 @@ pub fn speed_init_decomp_bound<Network>(
 ) -> Result<(), SpeedUpError> {
     Err(SpeedUpError::MissingSisPorts {
         operation: "speed_init_decomp",
-        dependencies: REQUIRED_PORT_BEADS,
     })
 }
 
 pub fn speed_resub_alge_network_bound<Network>(_network: &mut Network) -> Result<(), SpeedUpError> {
     Err(SpeedUpError::MissingSisPorts {
         operation: "speed_resub_alge_network",
-        dependencies: REQUIRED_PORT_BEADS,
     })
 }
 
@@ -1132,23 +1026,16 @@ mod tests {
     #[test]
     fn network_bound_entry_points_report_missing_dependencies() {
         let mut network = ();
-        assert!(
-            required_port_beads()
-                .iter()
-                .any(|dependency| dependency.bead == "LogicFriday1-8j8.2.6.477")
-        );
         assert_eq!(
             speed_up_network_bound(&mut network, &SpeedParameters::default()),
             Err(SpeedUpError::MissingSisPorts {
                 operation: "speed_up_network",
-                dependencies: REQUIRED_PORT_BEADS,
             })
         );
         assert_eq!(
             speed_init_decomp_bound(&mut network, &SpeedParameters::default()),
             Err(SpeedUpError::MissingSisPorts {
                 operation: "speed_init_decomp",
-                dependencies: REQUIRED_PORT_BEADS,
             })
         );
     }

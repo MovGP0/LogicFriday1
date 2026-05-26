@@ -678,9 +678,9 @@ impl fmt::Display for FanoutEstimateError {
                     "owned fanout estimate supports only local leaf 0, got {leaf}"
                 )
             }
-            Self::MissingPortDependencies {
-                operation,
-            } => write!(f, "{operation} requires unavailable native SIS integration"),
+            Self::MissingPortDependencies { operation } => {
+                write!(f, "{operation} requires unavailable native SIS integration")
+            }
         }
     }
 }

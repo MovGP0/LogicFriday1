@@ -11,56 +11,6 @@ use std::error::Error;
 use std::fmt;
 use std::hash::Hash;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct MissingPortDependency {
-    pub bead: &'static str,
-    pub source_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_PORT_DEPENDENCIES: &[MissingPortDependency] = &[
-    MissingPortDependency {
-        bead: "LogicFriday1-8j8.2.6.426",
-        source_file: "LogicSynthesis/sis/seqbdd/com_verify.c",
-        reason: "bdd_range_fill_options and verification option wiring",
-    },
-    MissingPortDependency {
-        bead: "LogicFriday1-8j8.2.6.429",
-        source_file: "LogicSynthesis/sis/seqbdd/network_info.c",
-        reason: "extract_network_info and initial-state node discovery",
-    },
-    MissingPortDependency {
-        bead: "LogicFriday1-8j8.2.6.440",
-        source_file: "LogicSynthesis/sis/seqbdd/product.c",
-        reason: "product-method next-state and reverse-image callbacks",
-    },
-    MissingPortDependency {
-        bead: "LogicFriday1-8j8.2.6.442",
-        source_file: "LogicSynthesis/sis/seqbdd/verif_util.c",
-        reason: "shared seqbdd minterm and BDD variable utilities",
-    },
-    MissingPortDependency {
-        bead: "LogicFriday1-8j8.2.6.299",
-        source_file: "LogicSynthesis/sis/network/net_seq.c",
-        reason: "latch and real-primary-input network traversal",
-    },
-    MissingPortDependency {
-        bead: "LogicFriday1-8j8.2.6.326",
-        source_file: "LogicSynthesis/sis/ntbdd/bdd_at_node.c",
-        reason: "ntbdd_at_node BDD lookup for SIS nodes",
-    },
-    MissingPortDependency {
-        bead: "LogicFriday1-8j8.2.6.83",
-        source_file: "LogicSynthesis/sis/bdd_ucb/bdd_iter.c",
-        reason: "bdd_first_cube minterm extraction",
-    },
-    MissingPortDependency {
-        bead: "LogicFriday1-8j8.2.6.91",
-        source_file: "LogicSynthesis/sis/bdd_ucb/bdd_tovar.c",
-        reason: "bdd_get_varids variable-id extraction",
-    },
-];
-
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct StateId(pub usize);
 
@@ -214,7 +164,7 @@ pub enum SeqBddCycleError {
     InitialStateNotReachableFromItself,
     NoReverseEdge { target_depth: usize },
     InvalidBinaryValue(u8),
-    MissingDependency(MissingPortDependency),
+    MissingNativePorts { operation: &'static str },
 }
 
 impl fmt::Display for SeqBddCycleError {
@@ -234,20 +184,14 @@ impl fmt::Display for SeqBddCycleError {
                     "seqbdd input and latch values must be 0 or 1, got {value}"
                 )
             }
-            Self::MissingDependency(dependency) => write!(
-                f,
-                "missing Rust port dependency {} ({}): {}",
-                dependency.bead, dependency.source_file, dependency.reason
-            ),
+            Self::MissingNativePorts { operation } => {
+                write!(f, "{operation} is blocked by missing native SIS ports")
+            }
         }
     }
 }
 
 impl Error for SeqBddCycleError {}
-
-pub fn required_port_dependencies() -> &'static [MissingPortDependency] {
-    REQUIRED_PORT_DEPENDENCIES
-}
 
 pub fn extract_input_sequence<T>(
     system: &T,
@@ -369,9 +313,9 @@ pub fn extract_input_sequence_from_sis_network<Network>(
     _network: &Network,
     _n_shift: usize,
 ) -> Result<(), SeqBddCycleError> {
-    Err(SeqBddCycleError::MissingDependency(
-        REQUIRED_PORT_DEPENDENCIES[0],
-    ))
+    Err(SeqBddCycleError::MissingNativePorts {
+        operation: "extract_input_sequence_from_sis_network",
+    })
 }
 
 fn compute_next_states<T>(system: &T, current_set: &BTreeSet<T::State>) -> BTreeSet<T::State>
@@ -485,29 +429,6 @@ mod tests {
             BTreeMap::from([(0, 1), (2, 0), (3, 0)])
         );
     }
-
-    #[test]
-    fn network_bound_entry_reports_explicit_dependency_bead_and_source() {
-        let err = extract_input_sequence_from_sis_network(&(), 1).unwrap_err();
-
-        assert_eq!(
-            err,
-            SeqBddCycleError::MissingDependency(MissingPortDependency {
-                bead: "LogicFriday1-8j8.2.6.426",
-                source_file: "LogicSynthesis/sis/seqbdd/com_verify.c",
-                reason: "bdd_range_fill_options and verification option wiring",
-            })
-        );
-        assert!(err.to_string().contains("LogicFriday1-8j8.2.6.426"));
-        assert!(err.to_string().contains("seqbdd/com_verify.c"));
-        assert!(
-            required_port_dependencies()
-                .iter()
-                .any(|dependency| dependency.bead == "LogicFriday1-8j8.2.6.442"
-                    && dependency.source_file == "LogicSynthesis/sis/seqbdd/verif_util.c")
-        );
-    }
-
     #[test]
     fn no_legacy_c_abi_tokens_are_present_in_this_port() {
         let source = include_str!("seqbdd_cycle.rs");

@@ -4,8 +4,8 @@
 //! plus timing package command registration. The graph construction,
 //! verification, optimal-clock computation, clock settings, mapped-network
 //! checks, and command registry live in other SIS modules that are still being
-//! ported, so this module exposes the parsed command intent and dependency
-//! metadata without recreating per-file legacy C ABI exports.
+//! ported, so this module exposes the parsed command intent without recreating
+//! per-file legacy C ABI exports.
 
 pub const C_OPT_USAGE: &str = concat!(
     "Usage: c_opt -[nBI] -[dSHmM]# \n",
@@ -31,18 +31,6 @@ pub const C_CHECK_USAGE: &str = concat!(
     "\t -H: Hold time \n",
     "defaults: no debug, mapped, S = 0, H = 0\n",
 );
-
-pub const REQUIRED_PORT_BEADS: &[&str] = &[
-    "LogicFriday1-8j8.2.6.112", // command/addcom.c: com_add_command
-    "LogicFriday1-8j8.2.6.115", // command/command.c: native command registry
-    "LogicFriday1-8j8.2.6.110", // clock/clock.c: clock_set_current_setting
-    "LogicFriday1-8j8.2.6.257", // map/library.c: lib_network_is_mapped
-    "LogicFriday1-8j8.2.6.305", // network/network_util.c: network counts/helpers
-    "LogicFriday1-8j8.2.6.497", // timing/timing_comp.c: tmg_compute_optimal_clock
-    "LogicFriday1-8j8.2.6.499", // timing/timing_graph.c: tmg_network_to_graph
-    "LogicFriday1-8j8.2.6.501", // timing/timing_util.c: timing option state
-    "LogicFriday1-8j8.2.6.502", // timing/timing_verify.c: tmg_check_clocking_scheme
-];
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DebugType {
@@ -156,10 +144,6 @@ pub fn timing_port_is_blocked() -> bool {
 
 pub fn timing_command_registrations() -> &'static [TimingCommandRegistration] {
     TIMING_COMMANDS
-}
-
-pub fn required_port_beads() -> &'static [&'static str] {
-    REQUIRED_PORT_BEADS
 }
 
 pub fn parse_clock_optimize_args<I, S>(args: I) -> Result<ClockOptimizeOptions, TimingCommandError>
@@ -356,7 +340,6 @@ mod tests {
         );
         assert_eq!(timing_command_registrations().len(), 2);
         assert!(timing_port_is_blocked());
-        assert!(required_port_beads().contains(&"LogicFriday1-8j8.2.6.499"));
-        assert!(required_port_beads().contains(&"LogicFriday1-8j8.2.6.502"));
+        assert!(timing_port_is_blocked());
     }
 }

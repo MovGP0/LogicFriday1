@@ -1,9 +1,9 @@
-//! Native Rust model for `LogicSynthesis/sis/simplify/compute_dc.c`.
+﻿//! Native Rust model for `LogicSynthesis/sis/simplify/compute_dc.c`.
 //!
 //! The original SIS module computes CSPF/ODC metadata through `network_t`,
 //! `node_t`, `array_t`, `st_table`, and BDD APIs. This file ports the
 //! deterministic Boolean and ordering behavior onto an owned Rust graph. Direct
-//! SIS-bound entry points report explicit missing dependency beads until the
+//! SIS-bound entry points report generic missing-port diagnostics until the
 //! native node, network, BDD, and simplify integration ports are available.
 
 use std::cmp::Ordering;
@@ -12,71 +12,6 @@ use std::error::Error;
 use std::fmt;
 
 pub const INFINITY_VALUE: usize = usize::MAX;
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub note: &'static str,
-}
-
-pub const REQUIRED_PORT_BEADS: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.2",
-        source_file: "LogicSynthesis/sis/array/array.c",
-        note: "array_t ownership for DFS, fanin, fanout, and MSPF lists",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.71",
-        source_file: "LogicSynthesis/sis/bdd_cmu/bdd_port/bddport.c",
-        note: "bdd_t constants, boolean operators, duplication, lifetime, and tautology checks",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.195",
-        source_file: "LogicSynthesis/sis/factor/factor.c",
-        note: "factor_num_used for ODC value scoring",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.297",
-        source_file: "LogicSynthesis/sis/network/dfs.c",
-        note: "network_dfs and network_dfs_from_input traversal order",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.305",
-        source_file: "LogicSynthesis/sis/network/network_util.c",
-        note: "network_tfi, network_tfo, primary input iteration, and fanout walks",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.313",
-        source_file: "LogicSynthesis/sis/node/fan.c",
-        note: "fanin/fanout access and node_get_fanin_index",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-        note: "node constants, literals, covers, cofactors, collapse, and Boolean construction",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.326",
-        source_file: "LogicSynthesis/sis/ntbdd/bdd_at_node.c",
-        note: "ntbdd_node_to_bdd and ntbdd_free_at_node for CSPF conversion",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.448",
-        source_file: "LogicSynthesis/sis/simplify/dc_filter.c",
-        note: "simp_obsdc_filter used while making edge CSPFs compatible",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.455",
-        source_file: "LogicSynthesis/sis/simplify/simp.c",
-        note: "simplify_cspf_node integration after CSPF construction",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.485",
-        source_file: "LogicSynthesis/sis/st/st.c",
-        note: "st_table membership for transitive cone filtering",
-    },
-];
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct ComputeNodeId(pub usize);
@@ -365,7 +300,6 @@ pub enum ComputeDcError {
     MissingOdc(ComputeNodeId),
     MissingSisPorts {
         operation: &'static str,
-        dependencies: &'static [PortDependency],
     },
 }
 
@@ -387,23 +321,15 @@ impl fmt::Display for ComputeDcError {
             ),
             Self::MissingCspf(node) => write!(f, "CSPF slot does not exist for {node:?}"),
             Self::MissingOdc(node) => write!(f, "ODC slot does not exist for {node:?}"),
-            Self::MissingSisPorts {
-                operation,
-                dependencies,
-            } => write!(
+            Self::MissingSisPorts { operation } => write!(
                 f,
-                "{operation} is blocked by {} unported SIS C-file dependencies",
-                dependencies.len(),
+                "{operation} requires native Rust SIS ports that are not available yet"
             ),
         }
     }
 }
 
 impl Error for ComputeDcError {}
-
-pub fn required_port_beads() -> &'static [PortDependency] {
-    REQUIRED_PORT_BEADS
-}
 
 pub fn cspf_alloc(network: &mut ComputeNetwork, node: ComputeNodeId) -> Result<(), ComputeDcError> {
     network.node_mut(node)?.cspf = Some(CspfSlot::allocated());
@@ -698,21 +624,18 @@ pub fn transitive_fanout(
 pub fn simplify_without_odc_native() -> Result<(), ComputeDcError> {
     Err(ComputeDcError::MissingSisPorts {
         operation: "simplify_without_odc",
-        dependencies: REQUIRED_PORT_BEADS,
     })
 }
 
 pub fn simplify_with_odc_native() -> Result<(), ComputeDcError> {
     Err(ComputeDcError::MissingSisPorts {
         operation: "simplify_with_odc",
-        dependencies: REQUIRED_PORT_BEADS,
     })
 }
 
 pub fn compute_dc_in_sis_network() -> Result<(), ComputeDcError> {
     Err(ComputeDcError::MissingSisPorts {
         operation: "compute_dc SIS integration",
-        dependencies: REQUIRED_PORT_BEADS,
     })
 }
 
@@ -1001,28 +924,17 @@ mod tests {
     }
 
     #[test]
-    fn sis_bound_entries_report_dependency_beads_and_sources() {
-        assert!(required_port_beads().iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.71"
-                && dependency.source_file == "LogicSynthesis/sis/bdd_cmu/bdd_port/bddport.c"
-        }));
-        assert!(required_port_beads().iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.455"
-                && dependency.source_file == "LogicSynthesis/sis/simplify/simp.c"
-        }));
-
+    fn sis_bound_entries_report_missing_sis_ports() {
         assert_eq!(
             simplify_without_odc_native(),
             Err(ComputeDcError::MissingSisPorts {
                 operation: "simplify_without_odc",
-                dependencies: REQUIRED_PORT_BEADS,
             })
         );
         assert_eq!(
             compute_dc_in_sis_network(),
             Err(ComputeDcError::MissingSisPorts {
                 operation: "compute_dc SIS integration",
-                dependencies: REQUIRED_PORT_BEADS,
             })
         );
     }

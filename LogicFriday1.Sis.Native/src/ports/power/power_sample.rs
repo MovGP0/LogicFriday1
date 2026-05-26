@@ -1,4 +1,4 @@
-//! Native Rust model for `LogicSynthesis/sis/power/power_sample.c`.
+﻿//! Native Rust model for `LogicSynthesis/sis/power/power_sample.c`.
 //!
 //! The C file estimates power by generating packed random PI words, simulating
 //! a symbolic network one machine word at a time, counting PO one bits, and
@@ -18,66 +18,6 @@ pub const DEFAULT_PS_MAX_ALLOWED_ERROR: f64 = 0.01;
 pub const CAP_IN_LATCH: f64 = 4.0;
 pub const CAP_OUT_LATCH: f64 = 4.0;
 pub const WORD_BITS: usize = usize::BITS as usize;
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_SIS_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.400",
-        source_file: "LogicSynthesis/sis/power/power_main.c",
-        reason: "provides power_get_node_info, power_get_mapped_delay, and command defaults",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.406",
-        source_file: "LogicSynthesis/sis/power/power_sim.c",
-        reason: "builds the symbolic simulation network consumed by sampling",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.401",
-        source_file: "LogicSynthesis/sis/power/power_pipe.c",
-        reason: "adds pipeline state logic before sample-mode simulation",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.405",
-        source_file: "LogicSynthesis/sis/power/power_seq.c",
-        reason: "adds FSM state logic before sample-mode simulation",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.402",
-        source_file: "LogicSynthesis/sis/power/power_psAppr.c",
-        reason: "updates present-state line probabilities for sequential sampling",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.133",
-        source_file: "LogicSynthesis/sis/delay/delay.c",
-        reason: "runs delay_trace when mapped delays are requested",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.305",
-        source_file: "LogicSynthesis/sis/network/network_util.c",
-        reason: "iterates primary inputs, primary outputs, and network nodes",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.313",
-        source_file: "LogicSynthesis/sis/node/fan.c",
-        reason: "reads node fanins while recursively simulating the legacy network",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-        reason: "reads node cubes and literals while recursively simulating the legacy network",
-    },
-];
-
-pub fn required_sis_dependencies() -> &'static [PortDependency] {
-    REQUIRED_SIS_DEPENDENCIES
-}
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PowerCircuitType {
     Combinational,
@@ -157,42 +97,25 @@ pub enum PowerSampleOperation {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum PowerSampleError {
-    MissingSisDependencies {
-        operation: PowerSampleOperation,
-        dependencies: &'static [PortDependency],
-    },
+    MissingSisDependencies { operation: PowerSampleOperation },
     MissingNode,
     MissingFanin,
     MissingOutputDriver,
     DuplicateNode,
-    CubeArityMismatch {
-        expected: usize,
-        actual: usize,
-    },
+    CubeArityMismatch { expected: usize, actual: usize },
     ProbabilityOutOfRange(f64),
-    OutputOneCountMismatch {
-        outputs: usize,
-        counts: usize,
-    },
+    OutputOneCountMismatch { outputs: usize, counts: usize },
     EmptySampleCount,
 }
 
 impl fmt::Display for PowerSampleError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingSisDependencies {
-                operation,
-                dependencies,
-            } => {
-                write!(f, "{operation:?} requires native SIS prerequisite ports: ")?;
-                for (index, dependency) in dependencies.iter().enumerate() {
-                    if index > 0 {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "{} ({})", dependency.bead_id, dependency.source_file)?;
-                }
-                Ok(())
-            }
+            Self::MissingSisDependencies { operation } => write!(
+                f,
+                "operation {:?} requires native SIS prerequisite ports",
+                operation
+            ),
             Self::MissingNode => write!(f, "sample network references a missing node"),
             Self::MissingFanin => write!(f, "sample network node references a missing fanin"),
             Self::MissingOutputDriver => write!(f, "sample network output has no driver"),
@@ -468,7 +391,6 @@ pub fn legacy_power_sample_estimate_blocked(
 ) -> Result<f64, PowerSampleError> {
     Err(PowerSampleError::MissingSisDependencies {
         operation: PowerSampleOperation::LegacySampleEstimate,
-        dependencies: REQUIRED_SIS_DEPENDENCIES,
     })
 }
 
@@ -477,7 +399,6 @@ pub fn legacy_power_simulation_estimate_blocked(
 ) -> Result<f64, PowerSampleError> {
     Err(PowerSampleError::MissingSisDependencies {
         operation: PowerSampleOperation::LegacySimulationEstimate,
-        dependencies: REQUIRED_SIS_DEPENDENCIES,
     })
 }
 
@@ -729,39 +650,5 @@ mod tests {
                 actual: 1,
             })
         );
-    }
-
-    #[test]
-    fn legacy_entry_scaffold_reports_beads_and_sources() {
-        let options =
-            PowerSimulationOptions::simple(PowerCircuitType::Sequential, DelaySelection::Mapped, 4);
-
-        let Err(PowerSampleError::MissingSisDependencies {
-            operation,
-            dependencies,
-        }) = legacy_power_simulation_estimate_blocked(options)
-        else {
-            panic!("expected missing SIS dependency error");
-        };
-
-        assert_eq!(operation, PowerSampleOperation::LegacySimulationEstimate);
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.406"
-                && dependency.source_file == "LogicSynthesis/sis/power/power_sim.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.402"
-                && dependency.source_file == "LogicSynthesis/sis/power/power_psAppr.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.133"
-                && dependency.source_file == "LogicSynthesis/sis/delay/delay.c"
-        }));
-
-        let message = legacy_power_sample_estimate_blocked(options)
-            .unwrap_err()
-            .to_string();
-        assert!(message.contains("LogicFriday1-8j8.2.6.400"));
-        assert!(message.contains("LogicSynthesis/sis/power/power_main.c"));
     }
 }

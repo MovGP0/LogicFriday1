@@ -16,71 +16,6 @@ pub const SET_STATE_USAGE: &str = "usage: set_state [-s] [-i] [state_name]\n";
 pub const PRINT_STATE_USAGE: &str = "usage:  print_state\n";
 pub const SIM_VERIFY_USAGE: &str = "usage: sim_verify [-n n_patterns] network2.blif\n";
 
-pub const REQUIRED_PORTS: &[PortDependency] = &[
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.112",
-        source: "LogicSynthesis/sis/command/addcom.c",
-        reason: "registers commands from init_sim",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.115",
-        source: "LogicSynthesis/sis/command/command.c",
-        reason: "executes read_blif during sim_verify",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.217",
-        source: "LogicSynthesis/sis/io/read_blif.c",
-        reason: "loads the comparison network for sim_verify",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.230",
-        source: "LogicSynthesis/sis/latch/latch.c",
-        reason: "reads and updates latch current and initial values",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.297",
-        source: "LogicSynthesis/sis/network/dfs.c",
-        reason: "provides DFS node order for network simulation",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.299",
-        source: "LogicSynthesis/sis/network/net_seq.c",
-        reason: "provides latch counts and network STG attachment",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.305",
-        source: "LogicSynthesis/sis/network/network_util.c",
-        reason: "provides PI/PO counts and traversal",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.318",
-        source: "LogicSynthesis/sis/node/node.c",
-        reason: "provides PI/PO node identity, fanin, and control-node lookup",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.445",
-        source: "LogicSynthesis/sis/sim/interpret.c",
-        reason: "implements simulate_network, simulate_stg, and sim_verify",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.213",
-        source: "LogicSynthesis/sis/graph/graph.c",
-        reason: "backs legacy graph_t STG traversal",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.492",
-        source: "LogicSynthesis/sis/stg/stg.c",
-        reason: "owns STG current state, names, encodings, and transition strings",
-    },
-];
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead: &'static str,
-    pub source: &'static str,
-    pub reason: &'static str,
-}
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SimCommandKind {
     Simulate,
@@ -121,10 +56,6 @@ pub const SIS_SIM_COMMANDS: &[CommandRegistration] = &[
 
 pub fn sim_command_registrations() -> &'static [CommandRegistration] {
     SIS_SIM_COMMANDS
-}
-
-pub fn required_ports() -> &'static [PortDependency] {
-    REQUIRED_PORTS
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -252,7 +183,6 @@ pub enum ComSimError {
     PrintStateTakesNoArguments,
     Blocked {
         command: SimCommandKind,
-        dependencies: &'static [PortDependency],
     },
 }
 
@@ -297,22 +227,10 @@ impl fmt::Display for ComSimError {
             }
             Self::SimVerifyNeedsNetwork => write!(f, "sim_verify requires one network filename"),
             Self::PrintStateTakesNoArguments => write!(f, "print_state takes no arguments"),
-            Self::Blocked {
-                command,
-                dependencies,
-            } => {
-                write!(
-                    f,
-                    "{command:?} requires native Rust ports for SIS dependencies: "
-                )?;
-                for (index, dependency) in dependencies.iter().enumerate() {
-                    if index > 0 {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "{} ({})", dependency.bead, dependency.source)?;
-                }
-                Ok(())
-            }
+            Self::Blocked { command } => write!(
+                f,
+                "{command:?} requires native Rust ports for SIS dependencies"
+            ),
         }
     }
 }
@@ -677,10 +595,7 @@ fn push_masked_pattern(output: &mut String, values: &[u32], mask: u32) {
 }
 
 fn blocked(command: SimCommandKind) -> ComSimError {
-    ComSimError::Blocked {
-        command,
-        dependencies: REQUIRED_PORTS,
-    }
+    ComSimError::Blocked { command }
 }
 
 #[cfg(test)]
@@ -863,7 +778,7 @@ mod tests {
     }
 
     #[test]
-    fn dispatch_reports_dependency_blockers_with_beads_and_sources() {
+    fn dispatch_reports_missing_native_prerequisites() {
         let mut network = ();
         let command = SimCommand::SimVerify(SimVerifyPlan {
             patterns: 32,
@@ -875,18 +790,12 @@ mod tests {
             error,
             ComSimError::Blocked {
                 command: SimCommandKind::SimVerify,
-                dependencies: REQUIRED_PORTS,
             }
         );
-        assert!(required_ports().iter().any(|dependency| {
-            dependency.bead == "LogicFriday1-8j8.2.6.445"
-                && dependency.source == "LogicSynthesis/sis/sim/interpret.c"
-        }));
-        assert!(error.to_string().contains("LogicFriday1-8j8.2.6.217"));
         assert!(
             error
                 .to_string()
-                .contains("LogicSynthesis/sis/io/read_blif.c")
+                .contains("requires native Rust ports for SIS dependencies")
         );
     }
 }

@@ -14,15 +14,6 @@ pub const MAXWEIGHT: i32 = 1_000;
 pub const AVOID_WEIGHT: i32 = MAXWEIGHT * 100;
 pub const DEFAULT_SPEED_COEFF: f64 = 0.0;
 
-pub const REQUIRED_PORT_BEADS: &[&str] = &[
-    "LogicFriday1-8j8.2.6.483", // speed/weight.c: speed_weight
-    "LogicFriday1-8j8.2.6.481", // speed/speedup.c: speed_critical
-    "LogicFriday1-8j8.2.6.480", // speed/speed_util.c: speed_levelize_crit
-    "LogicFriday1-8j8.2.6.297", // network/dfs.c: network_dfs_from_input ordering
-    "LogicFriday1-8j8.2.6.318", // node/node.c: node type/function data
-    "LogicFriday1-8j8.2.6.133", // delay/delay.c: delay arrival/slack/required APIs
-];
-
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct SpeedParameters {
     pub coeff: f64,
@@ -172,10 +163,6 @@ impl fmt::Display for SpeedWeightError {
 }
 
 impl Error for SpeedWeightError {}
-
-pub fn required_port_beads() -> &'static [&'static str] {
-    REQUIRED_PORT_BEADS
-}
 
 pub fn critical_level_counts<N>(nodes: &[WeightNode<N>]) -> Vec<usize> {
     let max_level = nodes.iter().filter_map(|node| node.critical_level).max();
@@ -486,8 +473,6 @@ mod tests {
 
     #[test]
     fn sis_backed_path_is_blocked_on_explicit_dependencies() {
-        assert!(required_port_beads().contains(&"LogicFriday1-8j8.2.6.483"));
-        assert!(required_port_beads().contains(&"LogicFriday1-8j8.2.6.480"));
         assert_eq!(
             compute_weight_from_unported_sis_network::<&str>(),
             Err(SpeedWeightError::MissingDependency(

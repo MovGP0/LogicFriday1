@@ -10,77 +10,14 @@ use std::collections::HashSet;
 use std::error::Error;
 use std::fmt;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_PORT_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.2",
-        source_file: "LogicSynthesis/sis/array/array.c",
-        reason: "network_dfs returns the C node traversal as array_t",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.297",
-        source_file: "LogicSynthesis/sis/network/dfs.c",
-        reason: "act_ite_mux_network walks internal nodes in network_dfs order",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-        reason: "node type, node_function, and node_num_literal drive the mux pass",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.198",
-        source_file: "LogicSynthesis/sis/factor/ft_value.c",
-        reason: "factor_num_literal selects factored-form ITE construction",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.365",
-        source_file: "LogicSynthesis/sis/pld/ite_factor.c",
-        reason: "act_ite_create_from_factored_form builds the factored-form ITE",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.372",
-        source_file: "LogicSynthesis/sis/pld/ite_new_urp.c",
-        reason: "act_ite_intermediate_new_make_ite builds the SOP-derived ITE",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.363",
-        source_file: "LogicSynthesis/sis/pld/ite_break.c",
-        reason: "act_ite_break_node maps eligible initialized ITE nodes",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.375",
-        source_file: "LogicSynthesis/sis/pld/ite_util.c",
-        reason: "act_free_ite_network releases temporary ACT/ITE/match state",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.485",
-        source_file: "LogicSynthesis/sis/st/st.c",
-        reason: "the C initializer uses an st_table as a pointer visited set",
-    },
-];
-
-pub fn required_port_dependencies() -> &'static [PortDependency] {
-    REQUIRED_PORT_DEPENDENCIES
-}
-
 pub fn sis_bound_operation_unavailable(operation: &'static str) -> Result<(), IteMuxNetError> {
-    Err(IteMuxNetError::MissingNativePorts {
-        operation,
-        dependencies: REQUIRED_PORT_DEPENDENCIES,
-    })
+    Err(IteMuxNetError::MissingNativePorts { operation })
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum IteMuxNetError {
     MissingNativePorts {
         operation: &'static str,
-        dependencies: &'static [PortDependency],
     },
     MissingIteVertex(IteVertexId),
     MissingChild {
@@ -92,14 +29,9 @@ pub enum IteMuxNetError {
 impl fmt::Display for IteMuxNetError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingNativePorts {
-                operation,
-                dependencies,
-            } => write!(
-                f,
-                "{operation} requires {} native SIS prerequisite ports",
-                dependencies.len()
-            ),
+            Self::MissingNativePorts { operation } => {
+                write!(f, "{operation} requires native SIS prerequisite ports")
+            }
             Self::MissingIteVertex(vertex) => write!(f, "missing ITE vertex {}", vertex.0),
             Self::MissingChild { parent, branch } => {
                 write!(f, "ITE vertex {} is missing its {branch:?} child", parent.0)
@@ -519,30 +451,5 @@ mod tests {
         assert!(!should_break_after_initialization(NodeFunction::One));
         assert!(!should_break_after_initialization(NodeFunction::Buffer));
         assert!(should_break_after_initialization(NodeFunction::Other));
-    }
-
-    #[test]
-    fn missing_dependency_error_lists_blocking_beads_and_sources() {
-        let Err(IteMuxNetError::MissingNativePorts {
-            operation,
-            dependencies,
-        }) = act_ite_mux_network_blocked()
-        else {
-            panic!("expected missing dependency error");
-        };
-
-        assert_eq!(operation, "act_ite_mux_network");
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.365"
-                && dependency.source_file == "LogicSynthesis/sis/pld/ite_factor.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.372"
-                && dependency.source_file == "LogicSynthesis/sis/pld/ite_new_urp.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.363"
-                && dependency.source_file == "LogicSynthesis/sis/pld/ite_break.c"
-        }));
     }
 }

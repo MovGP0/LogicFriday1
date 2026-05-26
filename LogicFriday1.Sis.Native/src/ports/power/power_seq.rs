@@ -1,4 +1,4 @@
-//! Native Rust scaffold for `LogicSynthesis/sis/power/power_seq.c`.
+﻿//! Native Rust scaffold for `LogicSynthesis/sis/power/power_seq.c`.
 //!
 //! The C file builds a symbolic sequential power network, appends next-state
 //! logic, orders present-state inputs before normal inputs for exact state
@@ -14,77 +14,6 @@ use std::fmt;
 
 pub const CAPACITANCE: f64 = 0.01;
 pub const POWER_SCALE: f64 = 250.0;
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_PORT_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.406",
-        source_file: "LogicSynthesis/sis/power/power_sim.c",
-        reason: "power_symbolic_simulate symbolic network construction",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.403",
-        source_file: "LogicSynthesis/sis/power/power_psExact.c",
-        reason: "power_exact_state_prob and power_PS_lines_from_state",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.402",
-        source_file: "LogicSynthesis/sis/power/power_psAppr.c",
-        reason: "power_direct_PS_lines_prob and power_place_PIs_last",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.398",
-        source_file: "LogicSynthesis/sis/power/power_comp.c",
-        reason: "BDD function probability evaluation",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.407",
-        source_file: "LogicSynthesis/sis/power/power_util.c",
-        reason: "power_network_dfs used by network concatenation",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.330",
-        source_file: "LogicSynthesis/sis/ntbdd/node_to_bdd.c",
-        reason: "ntbdd_node_to_bdd conversion for symbolic nodes",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.329",
-        source_file: "LogicSynthesis/sis/ntbdd/manager.c",
-        reason: "ntbdd_start_manager and BDD manager lifetime",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.442",
-        source_file: "LogicSynthesis/sis/seqbdd/verif_util.c",
-        reason: "order_nodes PI ordering utility",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.299",
-        source_file: "LogicSynthesis/sis/network/net_seq.c",
-        reason: "network_latch_end sequential boundary discovery",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.305",
-        source_file: "LogicSynthesis/sis/network/network_util.c",
-        reason: "network_dup, network_delete_node, network_csweep, and network_check",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.313",
-        source_file: "LogicSynthesis/sis/node/fan.c",
-        reason: "node_patch_fanin and fanout traversal",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-        reason: "node_dup and node_function classification",
-    },
-];
-
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct NodeId(pub usize);
 
@@ -460,7 +389,9 @@ pub enum PowerSeqError {
         expected: NodeKind,
         actual: NodeKind,
     },
-    MissingDependency(PortDependency),
+    MissingNativePorts {
+        operation: &'static str,
+    },
 }
 
 impl fmt::Display for PowerSeqError {
@@ -482,10 +413,10 @@ impl fmt::Display for PowerSeqError {
                 "node {:?} has kind {:?}, expected {:?}",
                 node, actual, expected
             ),
-            Self::MissingDependency(dependency) => write!(
+            Self::MissingNativePorts { operation } => write!(
                 f,
-                "missing Rust port dependency {} ({}): {}",
-                dependency.bead_id, dependency.source_file, dependency.reason
+                "operation {:?} requires native SIS prerequisite ports",
+                operation
             ),
         }
     }
@@ -493,25 +424,21 @@ impl fmt::Display for PowerSeqError {
 
 impl Error for PowerSeqError {}
 
-pub fn required_port_dependencies() -> &'static [PortDependency] {
-    REQUIRED_PORT_DEPENDENCIES
-}
-
 pub fn evaluate_sis_sequential_power<Network>(
     _network: &Network,
     _option: PsLineOption,
 ) -> Result<SequentialPowerReport, PowerSeqError> {
-    Err(PowerSeqError::MissingDependency(
-        REQUIRED_PORT_DEPENDENCIES[0],
-    ))
+    Err(PowerSeqError::MissingNativePorts {
+        operation: "evaluate_sis_sequential_power",
+    })
 }
 
 pub fn add_fsm_state_logic_to_sis_network<Network>(
     _network: &mut Network,
 ) -> Result<(), PowerSeqError> {
-    Err(PowerSeqError::MissingDependency(
-        REQUIRED_PORT_DEPENDENCIES[9],
-    ))
+    Err(PowerSeqError::MissingNativePorts {
+        operation: "add_fsm_state_logic_to_sis_network",
+    })
 }
 
 #[cfg(test)]
@@ -663,38 +590,6 @@ mod tests {
             vec![copied_state]
         );
         assert!(symbolic.node(NodeId(1)).is_err());
-    }
-
-    #[test]
-    fn sis_bound_operations_report_dependency_beads_and_sources() {
-        let err = evaluate_sis_sequential_power(&(), PsLineOption::Uniform).unwrap_err();
-
-        assert_eq!(
-            err,
-            PowerSeqError::MissingDependency(PortDependency {
-                bead_id: "LogicFriday1-8j8.2.6.406",
-                source_file: "LogicSynthesis/sis/power/power_sim.c",
-                reason: "power_symbolic_simulate symbolic network construction",
-            })
-        );
-        assert!(err.to_string().contains("LogicFriday1-8j8.2.6.406"));
-        assert!(err.to_string().contains("power/power_sim.c"));
-        assert!(
-            required_port_dependencies()
-                .iter()
-                .any(
-                    |dependency| dependency.bead_id == "LogicFriday1-8j8.2.6.398"
-                        && dependency.source_file == "LogicSynthesis/sis/power/power_comp.c"
-                )
-        );
-        assert!(
-            required_port_dependencies()
-                .iter()
-                .any(
-                    |dependency| dependency.bead_id == "LogicFriday1-8j8.2.6.330"
-                        && dependency.source_file == "LogicSynthesis/sis/ntbdd/node_to_bdd.c"
-                )
-        );
     }
 
     #[test]

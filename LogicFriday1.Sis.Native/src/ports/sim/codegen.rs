@@ -14,51 +14,6 @@ use std::fmt;
 use std::hash::Hash;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub note: &'static str,
-}
-
-pub const REQUIRED_PORT_BEADS: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.297",
-        source_file: "LogicSynthesis/sis/network/dfs.c",
-        note: "network_dfs ordering used before emitting node assignments",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.305",
-        source_file: "LogicSynthesis/sis/network/network_util.c",
-        note: "network_num_pi, network_num_po, network_num_internal, and PI/PO iteration",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.313",
-        source_file: "LogicSynthesis/sis/node/fan.c",
-        note: "fanin traversal and primary-output fanin lookup",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-        note: "node names, node functions, cubes, literals, and node types",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.2",
-        source_file: "LogicSynthesis/sis/array/array.c",
-        note: "array_t returned by network_dfs in the C implementation",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.444",
-        source_file: "LogicSynthesis/sis/sim/com_sim.c",
-        note: "command-level equivalence simulation orchestration around generated code",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.445",
-        source_file: "LogicSynthesis/sis/sim/interpret.c",
-        note: "native packed-word network simulation should replace generated-C driver execution",
-    },
-];
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SimNodeKind {
     PrimaryInput,
     PrimaryOutput,
@@ -205,33 +160,15 @@ impl CodegenPlan {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum CodegenError {
-    InputCountMismatch {
-        left: usize,
-        right: usize,
-    },
-    OutputCountMismatch {
-        left: usize,
-        right: usize,
-    },
-    MissingInputMatch {
-        name: String,
-    },
-    MissingOutputMatch {
-        name: String,
-    },
+    InputCountMismatch { left: usize, right: usize },
+    OutputCountMismatch { left: usize, right: usize },
+    MissingInputMatch { name: String },
+    MissingOutputMatch { name: String },
     DuplicateNodeId,
     MissingNodeInDfsOrder,
-    MissingFanin {
-        node: String,
-        fanin_index: usize,
-    },
-    MissingOutputFanin {
-        node: String,
-    },
-    MissingSisPorts {
-        operation: &'static str,
-        dependencies: &'static [PortDependency],
-    },
+    MissingFanin { node: String, fanin_index: usize },
+    MissingOutputFanin { node: String },
+    MissingSisPorts { operation: &'static str },
 }
 
 impl fmt::Display for CodegenError {
@@ -257,23 +194,15 @@ impl fmt::Display for CodegenError {
             Self::MissingOutputFanin { node } => {
                 write!(f, "primary output {node} has no fanin")
             }
-            Self::MissingSisPorts {
-                operation,
-                dependencies,
-            } => write!(
+            Self::MissingSisPorts { operation } => write!(
                 f,
-                "{operation} requires {} native SIS prerequisite ports",
-                dependencies.len()
+                "{operation} requires native SIS prerequisite ports that are not available yet"
             ),
         }
     }
 }
 
 impl Error for CodegenError {}
-
-pub fn required_port_beads() -> &'static [PortDependency] {
-    REQUIRED_PORT_BEADS
-}
 
 pub fn build_codegen_plan<N>(
     network1: &SimNetwork<N>,
@@ -377,7 +306,6 @@ where
 pub fn verify_codegen_in_sis_networks() -> Result<(), CodegenError> {
     Err(CodegenError::MissingSisPorts {
         operation: "sim_verify_codegen",
-        dependencies: REQUIRED_PORT_BEADS,
     })
 }
 
@@ -653,21 +581,11 @@ mod tests {
     }
 
     #[test]
-    fn sis_entry_reports_dependency_beads_and_sources_without_c_abi() {
-        assert!(required_port_beads().iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.297"
-                && dependency.source_file == "LogicSynthesis/sis/network/dfs.c"
-        }));
-        assert!(required_port_beads().iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.318"
-                && dependency.source_file == "LogicSynthesis/sis/node/node.c"
-        }));
-
+    fn sis_entry_reports_missing_native_prerequisites_without_c_abi() {
         assert_eq!(
             verify_codegen_in_sis_networks(),
             Err(CodegenError::MissingSisPorts {
                 operation: "sim_verify_codegen",
-                dependencies: REQUIRED_PORT_BEADS,
             })
         );
     }

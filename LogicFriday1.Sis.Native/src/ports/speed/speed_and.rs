@@ -1,4 +1,4 @@
-//! Native Rust port scaffold for `sis/speed/speed_and.c`.
+﻿//! Native Rust port scaffold for `sis/speed/speed_and.c`.
 //!
 //! The C routine repeatedly chooses the two earliest literals of a single-cube
 //! node, creates an AND node for them, substitutes it back into the original
@@ -10,13 +10,6 @@ use std::error::Error;
 use std::fmt;
 
 pub const POS_LARGE: f64 = 10_000.0;
-
-pub const REQUIRED_PORT_BEADS: &[&str] = &[
-    "LogicFriday1-8j8.2.6.318", // node/node.c: node literals, replace, dup, not, and
-    "LogicFriday1-8j8.2.6.313", // node/fan.c: fanin traversal
-    "LogicFriday1-8j8.2.6.474", // speed/speed_delay.c: arrival-time lookup and updates
-    "LogicFriday1-8j8.2.6.476", // speed/speed_net.c: network mutation helpers
-];
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum LiteralValue {

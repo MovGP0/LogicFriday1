@@ -11,46 +11,6 @@ use std::error::Error;
 use std::fmt;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_PORT_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.2",
-        source_file: "LogicSynthesis/sis/array/array.c",
-        reason: "balanced_tree returns nodes and leaves through array_t vectors",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.128",
-        source_file: "LogicSynthesis/sis/decomp/dec_util.c",
-        reason: "dec_node_cube converts each complex-node cube into an AND term",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.305",
-        source_file: "LogicSynthesis/sis/network/network_util.c",
-        reason: "network_add_node installs generated cube and tree nodes",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.313",
-        source_file: "LogicSynthesis/sis/node/fan.c",
-        reason: "node_num_fanin, node_get_fanin, and node_input_phase drive leaf wiring",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.317",
-        source_file: "LogicSynthesis/sis/node/names.c",
-        reason: "debug paths print nodes through SIS node naming/printing helpers",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-        reason: "node_constant, node_literal, node_and, node_or, node_replace, node_d1merge, and node_free perform the rewrite",
-    },
-];
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AoOperation {
     PldDecompAndOr,
     DecompAnd,
@@ -264,7 +224,6 @@ pub enum XlnAoDecompError {
     },
     MissingNativePorts {
         operation: AoOperation,
-        dependencies: &'static [PortDependency],
     },
 }
 
@@ -310,31 +269,15 @@ impl fmt::Display for XlnAoDecompError {
                     "{gate:?} decomposition cannot wire fanin {fanin} with phase {phase:?}"
                 )
             }
-            Self::MissingNativePorts {
-                operation,
-                dependencies,
-            } => {
-                write!(
-                    f,
-                    "{operation:?} requires native Rust ports for SIS dependencies: "
-                )?;
-                for (index, dependency) in dependencies.iter().enumerate() {
-                    if index > 0 {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "{} ({})", dependency.bead_id, dependency.source_file)?;
-                }
-                Ok(())
-            }
+            Self::MissingNativePorts { operation } => write!(
+                f,
+                "{operation:?} requires native Rust ports for SIS dependencies"
+            ),
         }
     }
 }
 
 impl Error for XlnAoDecompError {}
-
-pub fn required_port_dependencies() -> &'static [PortDependency] {
-    REQUIRED_PORT_DEPENDENCIES
-}
 
 pub fn pld_decomp_and_or_blocked<Network, Node>(
     _network: &mut Network,
@@ -361,10 +304,7 @@ pub fn decomp_or_blocked<Network, Node>(
 }
 
 fn missing_native_ports<T>(operation: AoOperation) -> Result<T, XlnAoDecompError> {
-    Err(XlnAoDecompError::MissingNativePorts {
-        operation,
-        dependencies: REQUIRED_PORT_DEPENDENCIES,
-    })
+    Err(XlnAoDecompError::MissingNativePorts { operation })
 }
 
 pub fn pld_decomp_and_or_plan(
@@ -739,33 +679,6 @@ mod tests {
                 literals: 1,
             })
         );
-    }
-
-    #[test]
-    fn sis_bound_entries_report_dependency_beads_and_source_files() {
-        let mut network = ();
-        let mut node = ();
-        let Err(XlnAoDecompError::MissingNativePorts {
-            operation,
-            dependencies,
-        }) = pld_decomp_and_or_blocked(&mut network, &mut node, 5)
-        else {
-            panic!("expected missing native ports");
-        };
-
-        assert_eq!(operation, AoOperation::PldDecompAndOr);
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.128"
-                && dependency.source_file == "LogicSynthesis/sis/decomp/dec_util.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.305"
-                && dependency.source_file == "LogicSynthesis/sis/network/network_util.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.318"
-                && dependency.source_file == "LogicSynthesis/sis/node/node.c"
-        }));
     }
 
     #[test]

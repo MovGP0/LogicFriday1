@@ -13,7 +13,7 @@ pub enum EndTestDisposition {
 pub const END_TEST_DISPOSITION: EndTestDisposition = EndTestDisposition::NoOp;
 
 pub const END_TEST_RATIONALE: &str =
-    "LogicSynthesis/sis/test/end_test.c is an empty shutdown hook.";
+    "The empty shutdown hook intentionally preserves test package teardown behavior.";
 
 pub fn end_test() -> EndTestDisposition {
     END_TEST_DISPOSITION
@@ -34,8 +34,7 @@ mod tests {
     }
 
     #[test]
-    fn rationale_names_source_file() {
-        assert!(END_TEST_RATIONALE.contains("end_test.c"));
+    fn rationale_documents_runtime_behavior() {
         assert!(END_TEST_RATIONALE.contains("empty shutdown hook"));
     }
 }

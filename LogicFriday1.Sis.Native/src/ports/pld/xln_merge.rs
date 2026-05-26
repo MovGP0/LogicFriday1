@@ -12,85 +12,6 @@ use std::collections::HashSet;
 use std::error::Error;
 use std::fmt;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_PORT_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.2",
-        source_file: "LogicSynthesis/sis/array/array.c",
-        reason: "merge_node stores candidate nodes, fanin vectors, and match arrays in array_t",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.228",
-        source_file: "LogicSynthesis/sis/io/write_util.c",
-        reason: "merge output substitutes a single primary-output fanout via io_po_fanout_count",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.305",
-        source_file: "LogicSynthesis/sis/network/network_util.c",
-        reason: "network node iteration, network_num_internal, and network_delete_node are required",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.313",
-        source_file: "LogicSynthesis/sis/node/fan.c",
-        reason: "fanin and fanout traversal provide merge candidates and collapse checks",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.317",
-        source_file: "LogicSynthesis/sis/node/names.c",
-        reason: "node_long_name is used in merge diagnostics",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-        reason: "node type and fanin count are needed to filter merge candidates",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.376",
-        source_file: "LogicSynthesis/sis/pld/pld_util.c",
-        reason: "post-merge collapse uses pld_insert_intermediate_nodes_in_table and sparse row/column deletion helpers",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.388",
-        source_file: "LogicSynthesis/sis/pld/xln_lindo.c",
-        reason: "the exact LINDO matching path calls formulate_Lindo and get_Lindo_result",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.392",
-        source_file: "LogicSynthesis/sis/pld/xln_new_part.c",
-        reason: "post-merge cleanup calls xln_do_trivial_collapse_node_without_moving",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.457",
-        source_file: "LogicSynthesis/sis/sparse/matrix.c",
-        reason: "merge_node represents candidate pairs in sm_matrix",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.458",
-        source_file: "LogicSynthesis/sis/sparse/rows.c",
-        reason: "sm_shortest_row and row element traversal drive the greedy heuristic",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.456",
-        source_file: "LogicSynthesis/sis/sparse/cols.c",
-        reason: "candidate columns are removed after a selected row is matched",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.485",
-        source_file: "LogicSynthesis/sis/st/st.c",
-        reason: "post-merge cleanup tracks remaining internal nodes in st_table",
-    },
-];
-
-pub fn required_port_dependencies() -> &'static [PortDependency] {
-    REQUIRED_PORT_DEPENDENCIES
-}
-
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct NodeId(pub usize);
 
@@ -260,17 +181,9 @@ pub struct CollapseAfterMergeReport {
 pub enum XlnMergeError {
     UnknownNode(NodeId),
     DeletedNode(NodeId),
-    NotAFanin {
-        out: NodeId,
-        input: NodeId,
-    },
-    LindoUnavailable {
-        dependencies: &'static [PortDependency],
-    },
-    MissingNativePorts {
-        operation: &'static str,
-        dependencies: &'static [PortDependency],
-    },
+    NotAFanin { out: NodeId, input: NodeId },
+    LindoUnavailable,
+    MissingNativePorts { operation: &'static str },
 }
 
 impl fmt::Display for XlnMergeError {
@@ -281,18 +194,13 @@ impl fmt::Display for XlnMergeError {
             Self::NotAFanin { out, input } => {
                 write!(f, "node {:?} is not a fanin of {:?}", input, out)
             }
-            Self::LindoUnavailable { dependencies } => write!(
+            Self::LindoUnavailable => write!(
                 f,
-                "LINDO matching is blocked by {} unported SIS C-file dependencies",
-                dependencies.len()
+                "LINDO matching is blocked by unported SIS C-file dependencies"
             ),
-            Self::MissingNativePorts {
-                operation,
-                dependencies,
-            } => write!(
+            Self::MissingNativePorts { operation } => write!(
                 f,
-                "{operation} is blocked by {} unported SIS C-file dependencies",
-                dependencies.len()
+                "{operation} is blocked by unported SIS C-file dependencies"
             ),
         }
     }
@@ -306,7 +214,6 @@ pub fn merge_sis_network_blocked<Network>(
 ) -> Result<MergeReport, XlnMergeError> {
     Err(XlnMergeError::MissingNativePorts {
         operation: "merge_node against SIS network_t",
-        dependencies: REQUIRED_PORT_DEPENDENCIES,
     })
 }
 
@@ -315,9 +222,7 @@ pub fn merge_network(
     options: MergeOptions,
 ) -> Result<MergeReport, XlnMergeError> {
     if options.use_lindo {
-        return Err(XlnMergeError::LindoUnavailable {
-            dependencies: REQUIRED_PORT_DEPENDENCIES,
-        });
+        return Err(XlnMergeError::LindoUnavailable);
     }
 
     let candidates = collect_merge_candidates(network, options)?;
@@ -770,53 +675,6 @@ mod tests {
                 .deleted_nodes,
             Vec::<NodeId>::new()
         );
-    }
-
-    #[test]
-    fn lindo_path_reports_explicit_dependency_bead_and_source_file() {
-        let network = MergeNetwork::new();
-        let mut options = default_options();
-        options.use_lindo = true;
-
-        let error = merge_network(&network, options).unwrap_err();
-
-        assert_eq!(
-            error,
-            XlnMergeError::LindoUnavailable {
-                dependencies: REQUIRED_PORT_DEPENDENCIES,
-            }
-        );
-        assert!(required_port_dependencies().iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.388"
-                && dependency.source_file == "LogicSynthesis/sis/pld/xln_lindo.c"
-        }));
-    }
-
-    #[test]
-    fn sis_bound_entry_reports_dependency_beads_and_sources() {
-        let mut network = ();
-        let error = merge_sis_network_blocked(&mut network, default_options()).unwrap_err();
-
-        assert_eq!(
-            error,
-            XlnMergeError::MissingNativePorts {
-                operation: "merge_node against SIS network_t",
-                dependencies: REQUIRED_PORT_DEPENDENCIES,
-            }
-        );
-        assert!(
-            error
-                .to_string()
-                .contains("unported SIS C-file dependencies")
-        );
-        assert!(required_port_dependencies().iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.376"
-                && dependency.source_file == "LogicSynthesis/sis/pld/pld_util.c"
-        }));
-        assert!(required_port_dependencies().iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.457"
-                && dependency.source_file == "LogicSynthesis/sis/sparse/matrix.c"
-        }));
     }
 
     #[test]

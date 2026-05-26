@@ -12,80 +12,6 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::error::Error;
 use std::fmt;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub note: &'static str,
-}
-
-pub const REQUIRED_PORT_BEADS: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.2",
-        source_file: "LogicSynthesis/sis/array/array.c",
-        note: "array_t storage for BDD variable, node, and latch collections",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.71",
-        source_file: "LogicSynthesis/sis/bdd_cmu/bdd_port/bddport.c",
-        note: "BDD boolean operations, smoothing, consensus, cofactor, support, and variable creation",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.230",
-        source_file: "LogicSynthesis/sis/latch/latch.c",
-        note: "latch lookup, deletion, creation, and initial/current value mutation",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.299",
-        source_file: "LogicSynthesis/sis/network/net_seq.c",
-        note: "real PI/PO classification, latch counting, and sequential network traversal",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.305",
-        source_file: "LogicSynthesis/sis/network/network_util.c",
-        note: "network duplication, sweeping, node lookup, latch rewiring, and DC-network removal",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.313",
-        source_file: "LogicSynthesis/sis/node/fan.c",
-        note: "fanin/fanout traversal and fanin patching",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-        note: "node constants, literals, simulation values, and node type/function checks",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.326",
-        source_file: "LogicSynthesis/sis/ntbdd/bdd_at_node.c",
-        note: "BDD-to-network extraction used to synthesize latch recoding logic",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.329",
-        source_file: "LogicSynthesis/sis/ntbdd/manager.c",
-        note: "native BDD manager ownership for seqbdd state variables",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.429",
-        source_file: "LogicSynthesis/sis/seqbdd/network_info.c",
-        note: "Prl_SeqInitNetwork, seq_info_t layout, and network input-name extraction",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.442",
-        source_file: "LogicSynthesis/sis/seqbdd/verif_util.c",
-        note: "Prl_GetSimpleDc, Prl_GetOneEdge, PI-to-var maps, and copy helpers",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.485",
-        source_file: "LogicSynthesis/sis/st/st.c",
-        note: "pointer-keyed node, latch, and BDD variable maps",
-    },
-];
-
-pub fn required_port_beads() -> &'static [PortDependency] {
-    REQUIRED_PORT_BEADS
-}
-
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct NodeId(pub usize);
 
@@ -232,14 +158,8 @@ pub enum PrlRemLatchError {
     UnknownNode(NodeId),
     UnknownLatch(LatchId),
     EmptyStateSpace,
-    StateOutsideUniverse {
-        state: u64,
-        state_bits: usize,
-    },
-    MissingNativePorts {
-        operation: &'static str,
-        dependencies: &'static [PortDependency],
-    },
+    StateOutsideUniverse { state: u64, state_bits: usize },
+    MissingNativePorts { operation: &'static str },
 }
 
 impl fmt::Display for PrlRemLatchError {
@@ -255,14 +175,9 @@ impl fmt::Display for PrlRemLatchError {
                 f,
                 "state {state} cannot be represented with {state_bits} state bits"
             ),
-            Self::MissingNativePorts {
-                operation,
-                dependencies,
-            } => write!(
-                f,
-                "{operation} requires native Rust ports for {} SIS dependencies",
-                dependencies.len()
-            ),
+            Self::MissingNativePorts { operation } => {
+                write!(f, "{operation} is blocked by missing native SIS ports")
+            }
         }
     }
 }
@@ -652,7 +567,6 @@ pub fn remove_latches_from_sis_network<Network>(
 ) -> Result<(), PrlRemLatchError> {
     Err(PrlRemLatchError::MissingNativePorts {
         operation: "Prl_RemoveLatches",
-        dependencies: REQUIRED_PORT_BEADS,
     })
 }
 
@@ -662,7 +576,6 @@ pub fn latch_output_in_sis_network<Network, Node>(
 ) -> Result<(), PrlRemLatchError> {
     Err(PrlRemLatchError::MissingNativePorts {
         operation: "Prl_LatchOutput",
-        dependencies: REQUIRED_PORT_BEADS,
     })
 }
 
@@ -875,30 +788,6 @@ mod tests {
         );
         assert_eq!(merged, "((ab)c)");
     }
-
-    #[test]
-    fn blocked_sis_entries_report_dependency_beads_and_source_files() {
-        let error = remove_latches_from_sis_network(&mut ()).unwrap_err();
-
-        match error {
-            PrlRemLatchError::MissingNativePorts {
-                operation,
-                dependencies,
-            } => {
-                assert_eq!(operation, "Prl_RemoveLatches");
-                assert!(dependencies.iter().any(|dependency| {
-                    dependency.bead_id == "LogicFriday1-8j8.2.6.429"
-                        && dependency.source_file == "LogicSynthesis/sis/seqbdd/network_info.c"
-                }));
-                assert!(dependencies.iter().any(|dependency| {
-                    dependency.bead_id == "LogicFriday1-8j8.2.6.442"
-                        && dependency.source_file == "LogicSynthesis/sis/seqbdd/verif_util.c"
-                }));
-            }
-            other => panic!("unexpected error: {other:?}"),
-        }
-    }
-
     #[test]
     fn no_legacy_c_abi_tokens_are_present_in_this_port() {
         let source = include_str!("prl_remlatch.rs");

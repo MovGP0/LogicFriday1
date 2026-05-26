@@ -8,16 +8,6 @@
 use std::error::Error;
 use std::fmt;
 
-pub const REQUIRED_PORT_BEADS: &[&str] = &[
-    "LogicFriday1-8j8.2.6.473", // speed/speed_and.c: speed_and_decomp
-    "LogicFriday1-8j8.2.6.480", // speed/speed_util.c: speed_dec_node_cube
-    "LogicFriday1-8j8.2.6.305", // network/network_util.c: network_add_node, network_delete_node
-    "LogicFriday1-8j8.2.6.309", // node/collapse.c: node_collapse
-    "LogicFriday1-8j8.2.6.313", // node/fan.c: fanin/fanout traversal
-    "LogicFriday1-8j8.2.6.318", // node/node.c: node_and, node_literal, node_constant, node_num_cube
-    "LogicFriday1-8j8.2.6.321", // node/nodemisc.c: node_replace
-];
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct SpeedOrOptions {
     pub add_inv: bool,
@@ -144,29 +134,20 @@ pub fn decompose_node_in_network<Network, Node>(
 ) -> Result<(), SpeedOrError> {
     Err(SpeedOrError::MissingNativePorts {
         operation: "speed_and_or_decomp",
-        dependencies: REQUIRED_PORT_BEADS,
     })
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum SpeedOrError {
-    MissingNativePorts {
-        operation: &'static str,
-        dependencies: &'static [&'static str],
-    },
+    MissingNativePorts { operation: &'static str },
 }
 
 impl fmt::Display for SpeedOrError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingNativePorts {
-                operation,
-                dependencies,
-            } => write!(
-                f,
-                "{operation} requires native Rust ports for SIS speed/node/network APIs: {}",
-                dependencies.join(", ")
-            ),
+            Self::MissingNativePorts { operation } => {
+                write!(f, "{operation} is blocked by unported SIS dependencies")
+            }
         }
     }
 }
@@ -269,7 +250,6 @@ mod tests {
             decompose_node_in_network(&mut network, &mut node, SpeedOrOptions::new(false)),
             Err(SpeedOrError::MissingNativePorts {
                 operation: "speed_and_or_decomp",
-                dependencies: REQUIRED_PORT_BEADS,
             })
         );
     }

@@ -6,7 +6,7 @@
 //! and DC-network cleanup. This port keeps the deterministic command table,
 //! option parsing, status mapping, and early-exit behavior in Rust. Operations
 //! that still require SIS command execution, `network_t`, `array_t`, BDDs, or
-//! PRL mutation routines return explicit missing dependency errors with bead
+//! PRL mutation routines return explicit missing missing-port errors with bead
 //! IDs and source files.
 
 use std::error::Error;
@@ -14,120 +14,6 @@ use std::fmt;
 
 const INFINITY: u32 = u32::MAX;
 const MAX_TIMEOUT_SECONDS: u32 = 3600 * 24 * 365;
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_PORT_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.112",
-        source_file: "LogicSynthesis/sis/command/addcom.c",
-        reason: "com_add_command command registration",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.115",
-        source_file: "LogicSynthesis/sis/command/command.c",
-        reason: "com_execute command dispatch and command status semantics",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.118",
-        source_file: "LogicSynthesis/sis/command/get_nodes.c",
-        reason: "com_get_true_nodes for latch_output and remove_dep node lists",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.217",
-        source_file: "LogicSynthesis/sis/io/read_blif.c",
-        reason: "read_optional_network uses read_blif for verification inputs",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.230",
-        source_file: "LogicSynthesis/sis/latch/latch.c",
-        reason: "latch counts and latch mutation performed by PRL routines",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.299",
-        source_file: "LogicSynthesis/sis/network/net_seq.c",
-        reason: "network latch and sequential I/O classification",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.305",
-        source_file: "LogicSynthesis/sis/network/network_util.c",
-        reason: "network allocation, duplication, freeing, counts, and mutation",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.307",
-        source_file: "LogicSynthesis/sis/network/sweep.c",
-        reason: "network_sweep after equivalent-net merging",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.313",
-        source_file: "LogicSynthesis/sis/node/fan.c",
-        reason: "fan traversal and rewiring used by latch/dependency commands",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-        reason: "node allocation, type data, constants, and Boolean construction",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.425",
-        source_file: "LogicSynthesis/sis/seqbdd/bull.c",
-        reason: "BULL range callbacks selected by -m bull",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.427",
-        source_file: "LogicSynthesis/sis/seqbdd/consistency.c",
-        reason: "consistency range callbacks selected by -m consistency",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.428",
-        source_file: "LogicSynthesis/sis/seqbdd/manual_order.c",
-        reason: "manual ordering network loaded by -O",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.432",
-        source_file: "LogicSynthesis/sis/seqbdd/prl_dep.c",
-        reason: "Prl_RemoveDependencies implementation",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.433",
-        source_file: "LogicSynthesis/sis/seqbdd/prl_equiv.c",
-        reason: "Prl_EquivNets implementation",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.434",
-        source_file: "LogicSynthesis/sis/seqbdd/prl_extract.c",
-        reason: "Prl_ExtractEnvDc and Prl_VerifyEnvFsm implementation",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.437",
-        source_file: "LogicSynthesis/sis/seqbdd/prl_remlatch.c",
-        reason: "Prl_RemoveLatches and Prl_LatchOutput implementation",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.440",
-        source_file: "LogicSynthesis/sis/seqbdd/product.c",
-        reason: "product range callbacks and PRL product method",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.442",
-        source_file: "LogicSynthesis/sis/seqbdd/verif_util.c",
-        reason: "seq_verify_interface, range_computation_interface, and DC storage helpers",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.505",
-        source_file: "LogicSynthesis/sis/util/getopt.c",
-        reason: "util_getopt command option parsing",
-    },
-];
-
-pub fn required_port_dependencies() -> &'static [PortDependency] {
-    REQUIRED_PORT_DEPENDENCIES
-}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SeqBddCommand {
@@ -200,7 +86,6 @@ pub const COMMAND_TABLE: &[CommandRegistration] = &[
 pub fn init_seqbdd_registry() -> Result<&'static [CommandRegistration], ComVerifyError> {
     Err(ComVerifyError::MissingNativePorts {
         operation: "init_seqbdd",
-        dependencies: &REQUIRED_PORT_DEPENDENCIES[0..2],
     })
 }
 
@@ -607,7 +492,6 @@ pub enum CommandPlan {
     },
     ExecuteSisBound {
         operation: &'static str,
-        dependencies: &'static [PortDependency],
     },
     Delegate {
         command_line: &'static str,
@@ -643,7 +527,6 @@ pub fn plan_extract_seq_dc(
     }
     Ok(CommandPlan::ExecuteSisBound {
         operation: "range_computation_interface",
-        dependencies: missing_for_range_method(parsed.options.method),
     })
 }
 
@@ -697,7 +580,6 @@ pub fn plan_remove_latches(
     }
     Ok(CommandPlan::ExecuteSisBound {
         operation: "Prl_RemoveLatches",
-        dependencies: REQUIRED_PORT_DEPENDENCIES,
     })
 }
 
@@ -712,7 +594,6 @@ pub fn plan_equiv_nets(
     }
     Ok(CommandPlan::ExecuteSisBound {
         operation: "Prl_EquivNets",
-        dependencies: REQUIRED_PORT_DEPENDENCIES,
     })
 }
 
@@ -727,7 +608,6 @@ pub fn plan_latch_output(args: &[&str]) -> Result<CommandPlan, ComVerifyError> {
     }
     Ok(CommandPlan::ExecuteSisBound {
         operation: "Prl_LatchOutput",
-        dependencies: REQUIRED_PORT_DEPENDENCIES,
     })
 }
 
@@ -742,22 +622,17 @@ pub fn plan_remove_dependencies(args: &[&str]) -> Result<CommandPlan, ComVerifyE
     }
     Ok(CommandPlan::ExecuteSisBound {
         operation: "Prl_RemoveDependencies",
-        dependencies: REQUIRED_PORT_DEPENDENCIES,
     })
 }
 
 pub fn plan_free_dc() -> CommandPlan {
     CommandPlan::ExecuteSisBound {
         operation: "Prl_RemoveDcNetwork",
-        dependencies: REQUIRED_PORT_DEPENDENCIES,
     }
 }
 
 pub fn sis_bound_result<T>(operation: &'static str) -> Result<T, ComVerifyError> {
-    Err(ComVerifyError::MissingNativePorts {
-        operation,
-        dependencies: REQUIRED_PORT_DEPENDENCIES,
-    })
+    Err(ComVerifyError::MissingNativePorts { operation })
 }
 
 pub fn read_optional_network_plan(filename: &str) -> Result<CommandPlan, ComVerifyError> {
@@ -814,19 +689,10 @@ fn require_operand_count(
     }
 }
 
-fn missing_for_range_method(method: RangeMethod) -> &'static [PortDependency] {
-    match method {
-        RangeMethod::Consistency => &REQUIRED_PORT_DEPENDENCIES[11..20],
-        RangeMethod::Bull => &REQUIRED_PORT_DEPENDENCIES[10..20],
-        RangeMethod::Product => &REQUIRED_PORT_DEPENDENCIES[17..20],
-    }
-}
-
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ComVerifyError {
     MissingNativePorts {
         operation: &'static str,
-        dependencies: &'static [PortDependency],
     },
     MissingOptionValue(char),
     InvalidOptionValue {
@@ -850,14 +716,9 @@ pub enum ComVerifyError {
 impl fmt::Display for ComVerifyError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingNativePorts {
-                operation,
-                dependencies,
-            } => write!(
-                f,
-                "{operation} requires native Rust ports for {} SIS dependencies",
-                dependencies.len()
-            ),
+            Self::MissingNativePorts { operation } => {
+                write!(f, "{operation} is blocked by missing native SIS ports")
+            }
             Self::MissingOptionValue(option) => write!(f, "-{option} requires an argument"),
             Self::InvalidOptionValue { option, value } => {
                 write!(f, "invalid value \"{value}\" for -{option}")
@@ -1065,36 +926,6 @@ mod tests {
         assert!(!map_stop_if_verify_status(true, true));
         assert!(map_stop_if_verify_status(false, true));
     }
-
-    #[test]
-    fn sis_bound_entry_points_report_dependency_beads_and_sources() {
-        let error = init_seqbdd_registry().unwrap_err();
-        match error {
-            ComVerifyError::MissingNativePorts {
-                operation,
-                dependencies,
-            } => {
-                assert_eq!(operation, "init_seqbdd");
-                assert!(dependencies.iter().any(|dependency| {
-                    dependency.bead_id == "LogicFriday1-8j8.2.6.112"
-                        && dependency.source_file == "LogicSynthesis/sis/command/addcom.c"
-                }));
-            }
-            other => panic!("unexpected error: {other:?}"),
-        }
-
-        let error = sis_bound_result::<()>("seq_verify_interface").unwrap_err();
-        assert!(error.to_string().contains("seq_verify_interface"));
-        assert!(required_port_dependencies().iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.442"
-                && dependency.source_file == "LogicSynthesis/sis/seqbdd/verif_util.c"
-        }));
-        assert!(required_port_dependencies().iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.434"
-                && dependency.source_file == "LogicSynthesis/sis/seqbdd/prl_extract.c"
-        }));
-    }
-
     #[test]
     fn usage_text_keeps_c_method_listing_and_prl_banner_shape() {
         assert!(range_usage("verify_fsm", "network2.blif").contains("consistency bull product"));

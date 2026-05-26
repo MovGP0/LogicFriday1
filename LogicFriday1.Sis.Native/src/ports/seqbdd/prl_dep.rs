@@ -1,4 +1,4 @@
-//! Native Rust model and dependency scaffold for
+//! Native Rust model for
 //! `LogicSynthesis/sis/seqbdd/prl_dep.c`.
 //!
 //! The C routine removes structural dependencies between one external PI and a
@@ -6,60 +6,11 @@
 //! duplicates split internal nodes, redirects root-side fanouts through those
 //! duplicates, and replaces root-side PI fanouts with an inserted constant.
 //! Direct SIS `network_t`, `node_t`, `array_t`, and `st_table` integration is
-//! still blocked by the ports listed in `required_port_dependencies`.
+//! still blocked by the missing native SIS ports.
 
 use std::collections::BTreeSet;
 use std::error::Error;
 use std::fmt;
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub note: &'static str,
-}
-
-pub const REQUIRED_PORT_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.2",
-        source_file: "LogicSynthesis/sis/array/array.c",
-        note: "array_t node-vector allocation, fetch, insertion, and cleanup",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.297",
-        source_file: "LogicSynthesis/sis/network/dfs.c",
-        note: "network_dfs topological ordering used to extract the PI TFO",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.299",
-        source_file: "LogicSynthesis/sis/network/net_seq.c",
-        note: "network_is_real_pi and network_is_real_po validation",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.305",
-        source_file: "LogicSynthesis/sis/network/network_util.c",
-        note: "network_add_node and network_sweep mutation semantics",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.313",
-        source_file: "LogicSynthesis/sis/node/fan.c",
-        note: "fanin/fanout traversal and node_patch_fanin",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-        note: "node duplication, constants, names, fanout counts, and node_scc",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.485",
-        source_file: "LogicSynthesis/sis/st/st.c",
-        note: "pointer-keyed root set used while walking dependencies",
-    },
-];
-
-pub fn required_port_dependencies() -> &'static [PortDependency] {
-    REQUIRED_PORT_DEPENDENCIES
-}
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct NodeId(pub usize);
@@ -237,7 +188,6 @@ pub struct RemoveDependencyReport {
 pub enum PrlDepError {
     MissingNativePorts {
         operation: &'static str,
-        dependencies: &'static [PortDependency],
     },
     EmptyNodeVector,
     UnknownNode(NodeId),
@@ -254,14 +204,9 @@ pub enum PrlDepError {
 impl fmt::Display for PrlDepError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingNativePorts {
-                operation,
-                dependencies,
-            } => write!(
-                f,
-                "{operation} requires native Rust ports for {} SIS dependencies",
-                dependencies.len()
-            ),
+            Self::MissingNativePorts { operation } => {
+                write!(f, "{operation} is blocked by missing native SIS ports")
+            }
             Self::EmptyNodeVector => write!(f, "Prl_RemoveDependencies requires at least one node"),
             Self::UnknownNode(node) => write!(f, "unknown dependency node {:?}", node),
             Self::FirstNodeIsNotRealPi(node) => {
@@ -289,7 +234,6 @@ pub fn remove_dependencies_from_sis_network<Network, Options>(
 ) -> Result<RemoveDependencyReport, PrlDepError> {
     Err(PrlDepError::MissingNativePorts {
         operation: "Prl_RemoveDependencies SIS network_t entry",
-        dependencies: REQUIRED_PORT_DEPENDENCIES,
     })
 }
 
@@ -632,36 +576,6 @@ mod tests {
         assert_eq!(fanins(&network, NodeId(1)), vec![constant]);
         assert_eq!(fanins(&network, NodeId(2)), vec![NodeId(1)]);
     }
-
-    #[test]
-    fn sis_entry_reports_dependency_beads_and_source_files() {
-        let error = remove_dependencies_from_sis_network(&mut (), &[NodeId(0)], &()).unwrap_err();
-
-        match error {
-            PrlDepError::MissingNativePorts {
-                operation,
-                dependencies,
-            } => {
-                assert_eq!(operation, "Prl_RemoveDependencies SIS network_t entry");
-                assert!(dependencies.iter().any(|dependency| {
-                    dependency.bead_id == "LogicFriday1-8j8.2.6.297"
-                        && dependency.source_file == "LogicSynthesis/sis/network/dfs.c"
-                }));
-                assert!(dependencies.iter().any(|dependency| {
-                    dependency.bead_id == "LogicFriday1-8j8.2.6.313"
-                        && dependency.source_file == "LogicSynthesis/sis/node/fan.c"
-                }));
-                assert!(dependencies.iter().any(|dependency| {
-                    dependency.bead_id == "LogicFriday1-8j8.2.6.485"
-                        && dependency.source_file == "LogicSynthesis/sis/st/st.c"
-                }));
-            }
-            other => panic!("unexpected error: {other:?}"),
-        }
-
-        assert_eq!(required_port_dependencies(), REQUIRED_PORT_DEPENDENCIES);
-    }
-
     #[test]
     fn no_legacy_c_abi_tokens_are_present_in_this_port() {
         let source = include_str!("prl_dep.rs");

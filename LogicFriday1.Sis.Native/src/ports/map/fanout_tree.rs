@@ -827,7 +827,9 @@ impl fmt::Display for FanoutTreeError {
                     "fanout tree area mismatch: expected {expected}, actual {actual}"
                 )
             }
-            Self::MissingSisPorts { operation } => write!(f, "{operation} requires unavailable native SIS integration"),
+            Self::MissingSisPorts { operation } => {
+                write!(f, "{operation} requires unavailable native SIS integration")
+            }
         }
     }
 }

@@ -290,7 +290,9 @@ impl fmt::Display for FanoutOptError {
                 write!(f, "no fanout tree candidate was available for {source:?}")
             }
             Self::VirtualNetwork(error) => write!(f, "{error}"),
-            Self::MissingSisPorts { operation } => write!(f, "{operation} requires unavailable native SIS integration"),
+            Self::MissingSisPorts { operation } => {
+                write!(f, "{operation} requires unavailable native SIS integration")
+            }
         }
     }
 }
@@ -839,11 +841,7 @@ fn is_external_source(node: &super::virtual_net::VirtualMappedNode) -> bool {
 }
 
 fn mapped_gate_area(node: &super::virtual_net::VirtualMappedNode) -> f64 {
-    if node.gate.is_some() {
-        1.0
-    } else {
-        0.0
-    }
+    if node.gate.is_some() { 1.0 } else { 0.0 }
 }
 
 fn fanout_count(problem: &FanoutProblem, polarity: Polarity) -> usize {
@@ -885,11 +883,7 @@ fn normalized_min_slack(slack: DelayTime) -> f64 {
 }
 
 fn normalize_zero(value: f64) -> f64 {
-    if value.abs() <= 1.0e-9 {
-        0.0
-    } else {
-        value
-    }
+    if value.abs() <= 1.0e-9 { 0.0 } else { value }
 }
 
 #[cfg(test)]

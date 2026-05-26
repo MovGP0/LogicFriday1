@@ -15,59 +15,9 @@ pub const RETIME_TEST_NOT_SET: f64 = -50_000.0;
 const SCALE: f64 = 10_000.0;
 const EPSILON: f64 = 1.0e-9;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_PORT_BEADS: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.2",
-        source_file: "LogicSynthesis/sis/array/array.c",
-        reason: "legacy retime graphs store nodes, edges, fanins, and fanouts in array_t",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.313",
-        source_file: "LogicSynthesis/sis/node/fan.c",
-        reason: "native fanin and fanout traversal for SIS-backed retime graphs",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-        reason: "native node identity and names used when reporting and applying retiming",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.415",
-        source_file: "LogicSynthesis/sis/retime/re_graph.c",
-        reason: "retime command flow and graph-level retiming orchestration",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.422",
-        source_file: "LogicSynthesis/sis/retime/re_util.c",
-        reason: "retime_single_node and native mutation of edge weights after solving",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.423",
-        source_file: "LogicSynthesis/sis/retime/retime_util.c",
-        reason: "native retime graph allocation, node indexing, and edge accessor helpers",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.485",
-        source_file: "LogicSynthesis/sis/st/st.c",
-        reason: "legacy re_milp.c maps re_node pointers to integer MILP indices with st_table",
-    },
-];
-
-pub fn required_port_beads() -> &'static [PortDependency] {
-    REQUIRED_PORT_BEADS
-}
-
 pub fn retime_lies_routine_for_sis_graph() -> Result<RetimeSolution, RetimeMilpError> {
     Err(RetimeMilpError::MissingNativeDependencies {
         operation: "retime_lies_routine over SIS re_graph",
-        dependencies: REQUIRED_PORT_BEADS,
     })
 }
 
@@ -175,33 +125,19 @@ pub struct RetimeSolution {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum RetimeMilpError {
-    MissingNativeDependencies {
-        operation: &'static str,
-        dependencies: &'static [PortDependency],
-    },
-    MissingNode {
-        node_id: usize,
-    },
-    NonFiniteCycleTime {
-        cycle_time: f64,
-    },
+    MissingNativeDependencies { operation: &'static str },
+    MissingNode { node_id: usize },
+    NonFiniteCycleTime { cycle_time: f64 },
     EmptyGraph,
-    EdgeEndpointMustBeInternalOrIo {
-        edge_id: usize,
-    },
+    EdgeEndpointMustBeInternalOrIo { edge_id: usize },
 }
 
 impl fmt::Display for RetimeMilpError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingNativeDependencies {
-                operation,
-                dependencies,
-            } => write!(
-                f,
-                "{operation} requires {} native SIS prerequisite ports",
-                dependencies.len()
-            ),
+            Self::MissingNativeDependencies { operation } => {
+                write!(f, "{operation} requires native prerequisite ports")
+            }
             Self::MissingNode { node_id } => {
                 write!(f, "retime graph references missing node {node_id}")
             }
@@ -697,27 +633,6 @@ mod tests {
         assert_eq!(graph.edges[0].weight, 0);
         assert_eq!(graph.edges[1].weight, 1);
     }
-
-    #[test]
-    fn sis_bound_entry_reports_dependency_beads_and_sources() {
-        let error = retime_lies_routine_for_sis_graph().unwrap_err();
-        let RetimeMilpError::MissingNativeDependencies { dependencies, .. } = error else {
-            panic!("expected missing native dependency error");
-        };
-
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.422"
-                && dependency.source_file == "LogicSynthesis/sis/retime/re_util.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.485"
-                && dependency.source_file == "LogicSynthesis/sis/st/st.c"
-        }));
-        assert!(
-            format!("{}", retime_lies_routine_for_sis_graph().unwrap_err()).contains("requires")
-        );
-    }
-
     #[test]
     fn validation_rejects_bad_cycle_time_and_ignored_edges() {
         let graph = simple_graph();

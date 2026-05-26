@@ -1,4 +1,4 @@
-//! Native Rust model for `LogicSynthesis/sis/power/power_util.c`.
+﻿//! Native Rust model for `LogicSynthesis/sis/power/power_util.c`.
 //!
 //! The C file owns auxiliary power-estimation helpers: clearing the global
 //! `power_info_table`, printing per-node power data, producing the power package
@@ -13,56 +13,6 @@ use std::fmt;
 
 pub const CAPACITANCE: f64 = 0.01;
 pub const POWER_SCALE: f64 = 250.0 * CAPACITANCE;
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_SIS_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.400",
-        source_file: "LogicSynthesis/sis/power/power_main.c",
-        reason: "allocates and populates power_info_table with cap_factor and switching_prob",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.297",
-        source_file: "LogicSynthesis/sis/network/dfs.c",
-        reason: "legacy power_network_dfs uses network_dfs for internal topological order",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.305",
-        source_file: "LogicSynthesis/sis/network/network_util.c",
-        reason: "primary-input, primary-output, and node iteration over network_t",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-        reason: "node function classification and node names",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.323",
-        source_file: "LogicSynthesis/sis/node/print.c",
-        reason: "legacy power_network_print delegates each node to node_print",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.485",
-        source_file: "LogicSynthesis/sis/st/st.c",
-        reason: "pointer-keyed power_info_table lookup and cleanup",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.165",
-        source_file: "LogicSynthesis/sis/espresso/set.c",
-        reason: "legacy power_lines_in_set consumes and returns Espresso pset values",
-    },
-];
-
-pub fn required_sis_dependencies() -> &'static [PortDependency] {
-    REQUIRED_SIS_DEPENDENCIES
-}
-
 pub fn sis_power_info_table_blocked() -> Result<(), PowerUtilError> {
     missing_sis_dependencies("SIS power_info_table access")
 }
@@ -76,10 +26,7 @@ pub fn sis_power_lines_in_set_blocked() -> Result<(), PowerUtilError> {
 }
 
 fn missing_sis_dependencies(operation: &'static str) -> Result<(), PowerUtilError> {
-    Err(PowerUtilError::MissingSisDependencies {
-        operation,
-        dependencies: REQUIRED_SIS_DEPENDENCIES,
-    })
+    Err(PowerUtilError::MissingSisDependencies { operation })
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -460,47 +407,23 @@ pub fn power_lines_in_set(
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum PowerUtilError {
-    MissingSisDependencies {
-        operation: &'static str,
-        dependencies: &'static [PortDependency],
-    },
+    MissingSisDependencies { operation: &'static str },
     PowerNotEstimated,
-    DuplicateNode {
-        node_id: NodeId,
-    },
-    MissingNode {
-        node_id: NodeId,
-    },
-    MissingFanin {
-        node_id: NodeId,
-        fanin_id: NodeId,
-    },
-    InsufficientLineSet {
-        expected: usize,
-        actual: usize,
-    },
+    DuplicateNode { node_id: NodeId },
+    MissingNode { node_id: NodeId },
+    MissingFanin { node_id: NodeId, fanin_id: NodeId },
+    InsufficientLineSet { expected: usize, actual: usize },
     SetSizeOverflow,
 }
 
 impl fmt::Display for PowerUtilError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingSisDependencies {
-                operation,
-                dependencies,
-            } => {
-                write!(
-                    f,
-                    "{operation} requires native Rust ports for SIS dependencies: "
-                )?;
-                for (index, dependency) in dependencies.iter().enumerate() {
-                    if index > 0 {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "{} ({})", dependency.bead_id, dependency.source_file)?;
-                }
-                Ok(())
-            }
+            Self::MissingSisDependencies { operation } => write!(
+                f,
+                "operation {:?} requires native SIS prerequisite ports",
+                operation
+            ),
             Self::PowerNotEstimated => write!(f, "Power for this network not estimated yet!"),
             Self::DuplicateNode { node_id } => {
                 write!(f, "duplicate power network node {}", node_id.0)
@@ -640,28 +563,5 @@ mod tests {
         let included = power_lines_in_set(&line_set, 8, 3).unwrap();
 
         assert_eq!(included.included_indices(), vec![4, 6]);
-    }
-
-    #[test]
-    fn blocked_sis_entries_report_dependency_beads_and_sources() {
-        let error = sis_power_network_print_blocked().unwrap_err();
-        let PowerUtilError::MissingSisDependencies {
-            operation,
-            dependencies,
-        } = error
-        else {
-            panic!("expected missing SIS dependency error");
-        };
-
-        assert_eq!(operation, "SIS power_network_print");
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.297"
-                && dependency.source_file == "LogicSynthesis/sis/network/dfs.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.165"
-                && dependency.source_file == "LogicSynthesis/sis/espresso/set.c"
-        }));
-        assert!(format!("{error}").contains("SIS power_network_print"));
     }
 }

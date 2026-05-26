@@ -5,71 +5,11 @@
 //! for outputs and don't-cares, compute the initial-state cube, free resources,
 //! and run the reachability fixed point. This Rust port keeps those deterministic
 //! pieces in owned data. Calls that still need SIS network pointers, ntbdd, or a
-//! real BDD manager return explicit dependency errors.
+//! real BDD manager return generic missing-port diagnostics.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::error::Error;
 use std::fmt;
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_PORT_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.2",
-        source_file: "LogicSynthesis/sis/array/array.c",
-        reason: "seq_info array fields and ordered BDD vectors",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.71",
-        source_file: "LogicSynthesis/sis/bdd_cmu/bdd_port/bddport.c",
-        reason: "BDD constants, boolean operations, cofactors, duplication, and onset counts",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.230",
-        source_file: "LogicSynthesis/sis/latch/latch.c",
-        reason: "latch input/output traversal and initial values",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.299",
-        source_file: "LogicSynthesis/sis/network/net_seq.c",
-        reason: "real PO classification and latch/PI counts",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.305",
-        source_file: "LogicSynthesis/sis/network/network_util.c",
-        reason: "attach_dcnetwork_to_network and dc_network access",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.329",
-        source_file: "LogicSynthesis/sis/ntbdd/manager.c",
-        reason: "ntbdd manager lifetime",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.330",
-        source_file: "LogicSynthesis/sis/ntbdd/node_to_bdd.c",
-        reason: "ntbdd_node_to_bdd for network and don't-care outputs",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.436",
-        source_file: "LogicSynthesis/sis/seqbdd/prl_product.c",
-        reason: "method-specific bdd_order, init_seq_info, free_seq_info, and next-state callbacks",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.439",
-        source_file: "LogicSynthesis/sis/seqbdd/prl_util.c",
-        reason: "shared seq_info helpers and elapsed-time reporting",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.485",
-        source_file: "LogicSynthesis/sis/st/st.c",
-        reason: "dc_map and leaves pointer tables",
-    },
-];
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct NodeId(pub usize);
@@ -221,7 +161,6 @@ pub struct ReachabilityStep {
 pub enum PrlSeqInfoError {
     MissingNativePorts {
         operation: &'static str,
-        dependencies: &'static [PortDependency],
     },
     MissingNodeBdd {
         node: NodeId,
@@ -248,14 +187,9 @@ pub enum PrlSeqInfoError {
 impl fmt::Display for PrlSeqInfoError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingNativePorts {
-                operation,
-                dependencies,
-            } => write!(
-                f,
-                "{operation} requires native Rust ports for {} SIS dependencies",
-                dependencies.len()
-            ),
+            Self::MissingNativePorts { operation } => {
+                write!(f, "{operation} is blocked by missing native SIS ports")
+            }
             Self::MissingNodeBdd { node } => {
                 write!(f, "missing native BDD for seqbdd node {:?}", node)
             }
@@ -291,10 +225,6 @@ impl fmt::Display for PrlSeqInfoError {
 }
 
 impl Error for PrlSeqInfoError {}
-
-pub fn required_port_dependencies() -> &'static [PortDependency] {
-    REQUIRED_PORT_DEPENDENCIES
-}
 
 pub fn init_seq_info_from_seed(seed: SeqInfoSeed) -> Result<SeqInfo, PrlSeqInfoError> {
     let output_partition =
@@ -480,14 +410,12 @@ pub fn init_seq_info_from_sis_network<Network>(
 ) -> Result<SeqInfo, PrlSeqInfoError> {
     Err(PrlSeqInfoError::MissingNativePorts {
         operation: "init_seq_info_from_sis_network",
-        dependencies: REQUIRED_PORT_DEPENDENCIES,
     })
 }
 
 pub fn free_sis_seq_info<Network>(_seq_info: &mut Network) -> Result<(), PrlSeqInfoError> {
     Err(PrlSeqInfoError::MissingNativePorts {
         operation: "free_sis_seq_info",
-        dependencies: REQUIRED_PORT_DEPENDENCIES,
     })
 }
 
@@ -496,7 +424,6 @@ pub fn extract_reachable_states_from_sis_seq_info<SeqInfoRef>(
 ) -> Result<(), PrlSeqInfoError> {
     Err(PrlSeqInfoError::MissingNativePorts {
         operation: "extract_reachable_states_from_sis_seq_info",
-        dependencies: REQUIRED_PORT_DEPENDENCIES,
     })
 }
 
@@ -668,34 +595,6 @@ mod tests {
             ]
         );
     }
-
-    #[test]
-    fn sis_bound_operations_report_dependency_beads_and_sources() {
-        let error = init_seq_info_from_sis_network(&()).unwrap_err();
-
-        match error {
-            PrlSeqInfoError::MissingNativePorts {
-                operation,
-                dependencies,
-            } => {
-                assert_eq!(operation, "init_seq_info_from_sis_network");
-                assert!(dependencies.iter().any(|dependency| {
-                    dependency.bead_id == "LogicFriday1-8j8.2.6.305"
-                        && dependency.source_file == "LogicSynthesis/sis/network/network_util.c"
-                }));
-                assert!(dependencies.iter().any(|dependency| {
-                    dependency.bead_id == "LogicFriday1-8j8.2.6.330"
-                        && dependency.source_file == "LogicSynthesis/sis/ntbdd/node_to_bdd.c"
-                }));
-                assert!(dependencies.iter().any(|dependency| {
-                    dependency.bead_id == "LogicFriday1-8j8.2.6.439"
-                        && dependency.source_file == "LogicSynthesis/sis/seqbdd/prl_util.c"
-                }));
-            }
-            other => panic!("unexpected error: {other:?}"),
-        }
-    }
-
     #[test]
     fn no_legacy_c_abi_tokens_are_present_in_this_port() {
         let source = include_str!("prl_seqinfo.rs");

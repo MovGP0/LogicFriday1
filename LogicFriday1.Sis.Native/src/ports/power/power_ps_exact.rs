@@ -1,4 +1,4 @@
-//! Native Rust model for `LogicSynthesis/sis/power/power_psExact.c`.
+﻿//! Native Rust model for `LogicSynthesis/sis/power/power_psExact.c`.
 //!
 //! The C file extracts an STG, builds the stationary-state linear system from
 //! transition input probabilities, solves it exactly, and projects state
@@ -12,71 +12,6 @@ use std::error::Error;
 use std::fmt;
 
 const SINGULAR_TOLERANCE: f64 = 1.0e-12;
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_PORT_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.489",
-        source_file: "LogicSynthesis/sis/stg/senum_main.c",
-        reason: "stg_extract builds the state-transition graph consumed by power_psExact.c",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.492",
-        source_file: "LogicSynthesis/sis/stg/stg.c",
-        reason: "state encodings and transition input strings are STG data",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.213",
-        source_file: "LogicSynthesis/sis/graph/graph.c",
-        reason: "graph_t, vertex_t, and edge_t traversal for STG states and inedges",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.230",
-        source_file: "LogicSynthesis/sis/latch/latch.c",
-        reason: "foreach_latch and latch_get_output define present-state line order",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.305",
-        source_file: "LogicSynthesis/sis/network/network_util.c",
-        reason: "network primary-input and latch traversal plus real-PI classification",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.485",
-        source_file: "LogicSynthesis/sis/st/st.c",
-        reason: "info_table and C state/state-line index tables are st_table instances",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.231",
-        source_file: "LogicSynthesis/sis/linsolv/spAllocate.c",
-        reason: "spCreate/spDestroy sparse-matrix allocation used by the exact solver",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.232",
-        source_file: "LogicSynthesis/sis/linsolv/spBuild.c",
-        reason: "spGetElement and matrix assembly used by the exact solver",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.233",
-        source_file: "LogicSynthesis/sis/linsolv/spFactor.c",
-        reason: "spOrderAndFactor factorizes the stationary-state system",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.235",
-        source_file: "LogicSynthesis/sis/linsolv/spSolve.c",
-        reason: "spSolve computes the stationary-state probability vector",
-    },
-];
-
-pub fn required_port_dependencies() -> &'static [PortDependency] {
-    REQUIRED_PORT_DEPENDENCIES
-}
-
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct NodeId(pub usize);
 
@@ -213,7 +148,6 @@ pub enum PowerPsExactError {
     },
     MissingNativePorts {
         operation: &'static str,
-        dependencies: &'static [PortDependency],
     },
 }
 
@@ -259,13 +193,10 @@ impl fmt::Display for PowerPsExactError {
                 "non-real primary input {:?} is not present in the latch-output index",
                 node
             ),
-            Self::MissingNativePorts {
-                operation,
-                dependencies,
-            } => write!(
+            Self::MissingNativePorts { operation } => write!(
                 f,
-                "{operation} requires native SIS prerequisite ports: {}",
-                format_dependencies(dependencies)
+                "operation {:?} requires native SIS prerequisite ports",
+                operation
             ),
         }
     }
@@ -429,7 +360,6 @@ pub fn power_present_state_lines_from_sis_network<Network, InfoTable>(
 ) -> Result<PresentStateLineReport, PowerPsExactError> {
     Err(PowerPsExactError::MissingNativePorts {
         operation: "power_PS_lines_from_state",
-        dependencies: REQUIRED_PORT_DEPENDENCIES,
     })
 }
 
@@ -439,7 +369,6 @@ pub fn power_exact_state_prob_from_sis_network<Network, InfoTable>(
 ) -> Result<ExactStateProbabilityReport, PowerPsExactError> {
     Err(PowerPsExactError::MissingNativePorts {
         operation: "power_exact_state_prob",
-        dependencies: REQUIRED_PORT_DEPENDENCIES,
     })
 }
 
@@ -542,14 +471,6 @@ fn solve_linear_system(
     }
 
     Ok(solution)
-}
-
-fn format_dependencies(dependencies: &[PortDependency]) -> String {
-    dependencies
-        .iter()
-        .map(|dependency| format!("{} ({})", dependency.bead_id, dependency.source_file))
-        .collect::<Vec<_>>()
-        .join(", ")
 }
 
 #[cfg(test)]
@@ -679,42 +600,6 @@ mod tests {
             update_present_state_line_probabilities(&mut network, &[0.5], &state_line_index),
             Err(PowerPsExactError::MissingPresentStateLine { node: NodeId(99) })
         );
-    }
-
-    #[test]
-    fn sis_bound_entry_points_report_dependency_beads_and_sources() {
-        let error = power_exact_state_prob_from_sis_network(&(), &()).unwrap_err();
-
-        assert_eq!(
-            error,
-            PowerPsExactError::MissingNativePorts {
-                operation: "power_exact_state_prob",
-                dependencies: REQUIRED_PORT_DEPENDENCIES,
-            }
-        );
-        assert!(error.to_string().contains("LogicFriday1-8j8.2.6.489"));
-        assert!(
-            required_port_dependencies()
-                .iter()
-                .any(
-                    |dependency| dependency.bead_id == "LogicFriday1-8j8.2.6.230"
-                        && dependency.source_file == "LogicSynthesis/sis/latch/latch.c"
-                )
-        );
-        assert!(
-            required_port_dependencies()
-                .iter()
-                .any(
-                    |dependency| dependency.bead_id == "LogicFriday1-8j8.2.6.235"
-                        && dependency.source_file == "LogicSynthesis/sis/linsolv/spSolve.c"
-                )
-        );
-
-        let message = power_present_state_lines_from_sis_network(&mut (), &mut ())
-            .unwrap_err()
-            .to_string();
-        assert!(message.contains("LogicSynthesis/sis/st/st.c"));
-        assert!(message.contains("LogicSynthesis/sis/linsolv/spFactor.c"));
     }
 
     #[test]

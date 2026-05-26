@@ -9,50 +9,6 @@
 use std::error::Error;
 use std::fmt;
 
-pub const REQUIRED_NETWORK_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.129",
-        source_file: "LogicSynthesis/sis/decomp/dec_tech.c",
-        reason: "provides decomp_tech_network used by estimate_clb_no and and_or_map",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.392",
-        source_file: "LogicSynthesis/sis/pld/xln_new_part.c",
-        reason: "provides imp_part_network used after technology decomposition",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.305",
-        source_file: "LogicSynthesis/sis/network/network_util.c",
-        reason: "provides network_dup, network_free, and network_num_internal",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.297",
-        source_file: "LogicSynthesis/sis/network/dfs.c",
-        reason: "provides network_dfs traversal for estimate_net_no",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-        reason: "provides node_function for primary-input/output filtering",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.313",
-        source_file: "LogicSynthesis/sis/node/fan.c",
-        reason: "provides node_num_fanin for estimate_net_no",
-    },
-];
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub fn required_network_dependencies() -> &'static [PortDependency] {
-    REQUIRED_NETWORK_DEPENDENCIES
-}
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum XlnUfindOperation {
     EstimateClbNo,
@@ -62,17 +18,9 @@ pub enum XlnUfindOperation {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum XlnUfindError {
-    MissingNode {
-        index: usize,
-    },
-    NodeHasParent {
-        index: usize,
-        parent: usize,
-    },
-    MissingNativePorts {
-        operation: XlnUfindOperation,
-        dependencies: &'static [PortDependency],
-    },
+    MissingNode { index: usize },
+    NodeHasParent { index: usize, parent: usize },
+    MissingNativePorts { operation: XlnUfindOperation },
     Backend(String),
 }
 
@@ -83,22 +31,10 @@ impl fmt::Display for XlnUfindError {
             Self::NodeHasParent { index, parent } => {
                 write!(f, "Node {index} has a parent {parent}")
             }
-            Self::MissingNativePorts {
-                operation,
-                dependencies,
-            } => {
-                write!(
-                    f,
-                    "{operation:?} requires native Rust ports for SIS dependencies: "
-                )?;
-                for (position, dependency) in dependencies.iter().enumerate() {
-                    if position > 0 {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "{} ({})", dependency.bead_id, dependency.source_file)?;
-                }
-                Ok(())
-            }
+            Self::MissingNativePorts { operation } => write!(
+                f,
+                "{operation:?} requires native Rust ports for SIS dependencies"
+            ),
             Self::Backend(message) => f.write_str(message),
         }
     }
@@ -422,10 +358,7 @@ pub fn estimate_net_no_with_missing_dependencies() -> XlnUfindResult<usize> {
 }
 
 fn missing(operation: XlnUfindOperation) -> XlnUfindError {
-    XlnUfindError::MissingNativePorts {
-        operation,
-        dependencies: REQUIRED_NETWORK_DEPENDENCIES,
-    }
+    XlnUfindError::MissingNativePorts { operation }
 }
 
 #[cfg(test)]
@@ -595,30 +528,5 @@ mod tests {
         };
 
         assert_eq!(estimate_net_no(&mut backend, &0).unwrap(), 6);
-    }
-
-    #[test]
-    fn missing_dependency_errors_include_blocker_beads_and_source_files() {
-        let Err(XlnUfindError::MissingNativePorts {
-            operation,
-            dependencies,
-        }) = estimate_net_no_with_missing_dependencies()
-        else {
-            panic!("expected missing native ports");
-        };
-
-        assert_eq!(operation, XlnUfindOperation::EstimateNetNo);
-        assert!(dependencies.iter().any(|dependency| dependency.bead_id
-            == "LogicFriday1-8j8.2.6.297"
-            && dependency.source_file == "LogicSynthesis/sis/network/dfs.c"));
-        assert!(dependencies.iter().any(|dependency| dependency.bead_id
-            == "LogicFriday1-8j8.2.6.392"
-            && dependency.source_file == "LogicSynthesis/sis/pld/xln_new_part.c"));
-
-        let message = estimate_clb_no_with_missing_dependencies(4)
-            .unwrap_err()
-            .to_string();
-        assert!(message.contains("LogicFriday1-8j8.2.6.129"));
-        assert!(message.contains("LogicSynthesis/sis/decomp/dec_tech.c"));
     }
 }

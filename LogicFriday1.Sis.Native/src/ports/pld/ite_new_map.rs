@@ -12,50 +12,6 @@ use std::error::Error;
 use std::fmt;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_PORT_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.304",
-        source_file: "LogicSynthesis/sis/network/netmake.c",
-        reason: "network_create_from_node() builds the temporary single-node network",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.305",
-        source_file: "LogicSynthesis/sis/network/network_util.c",
-        reason: "foreach_node-style network traversal is required for network cost counting",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-        reason: "node_function() classifies PI/PO, constants, buffers, AND, and OR nodes",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.368",
-        source_file: "LogicSynthesis/sis/pld/ite_map.c",
-        reason: "act_ite_map_network_with_iter() performs the mapped network pass",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.372",
-        source_file: "LogicSynthesis/sis/pld/ite_new_urp.c",
-        reason: "forcing MAP_METHOD=NEW delegates node mapping to act_ite_new_map_node()",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.375",
-        source_file: "LogicSynthesis/sis/pld/ite_util.c",
-        reason: "act_free_ite_network() clears ITE, ACT, and match state after each pass",
-    },
-];
-
-pub fn required_port_dependencies() -> &'static [PortDependency] {
-    REQUIRED_PORT_DEPENDENCIES
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MapMethod {
     Old,
     New,
@@ -201,24 +157,16 @@ pub trait IteNewMapHooks {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum IteNewMapError {
-    MissingNativePorts {
-        operation: &'static str,
-        dependencies: &'static [PortDependency],
-    },
+    MissingNativePorts { operation: &'static str },
     MappingFailed(String),
 }
 
 impl fmt::Display for IteNewMapError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingNativePorts {
-                operation,
-                dependencies,
-            } => write!(
-                f,
-                "{operation} is blocked by {} unported SIS dependencies",
-                dependencies.len()
-            ),
+            Self::MissingNativePorts { operation } => {
+                write!(f, "{operation} is blocked by unported SIS dependencies")
+            }
             Self::MappingFailed(message) => write!(f, "ITE new-map operation failed: {message}"),
         }
     }
@@ -299,10 +247,7 @@ pub fn network_num_nonzero_cost_nodes(network: &MappedNetwork) -> i32 {
 }
 
 fn missing_native_ports(operation: &'static str) -> IteNewMapError {
-    IteNewMapError::MissingNativePorts {
-        operation,
-        dependencies: REQUIRED_PORT_DEPENDENCIES,
-    }
+    IteNewMapError::MissingNativePorts { operation }
 }
 
 #[cfg(test)]
@@ -490,39 +435,5 @@ mod tests {
         );
 
         assert_eq!(hooks.map_snapshots.len(), 1);
-    }
-
-    #[test]
-    fn blocked_sis_entries_report_dependency_beads_and_sources() {
-        let mut node = MappedNode::internal("f", NodeFunction::Other);
-        let mut params = ActInitParams::new(MapMethod::WithIter);
-        let Err(IteNewMapError::MissingNativePorts {
-            operation,
-            dependencies,
-        }) = act_ite_map_node_with_iter_imp_blocked(&mut node, &mut params)
-        else {
-            panic!("expected missing dependency error");
-        };
-
-        assert_eq!(
-            operation,
-            "act_ite_map_node_with_iter_imp SIS node/network integration"
-        );
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.304"
-                && dependency.source_file == "LogicSynthesis/sis/network/netmake.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.368"
-                && dependency.source_file == "LogicSynthesis/sis/pld/ite_map.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.372"
-                && dependency.source_file == "LogicSynthesis/sis/pld/ite_new_urp.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.375"
-                && dependency.source_file == "LogicSynthesis/sis/pld/ite_util.c"
-        }));
     }
 }

@@ -5,7 +5,7 @@
 //! fanout cross-links. This module models that behavior with owned Rust
 //! indices instead of raw `re_node *`/`re_edge *` pointers. Direct conversion to
 //! and from SIS `node_t`/`latch_t` objects remains blocked on the native node,
-//! latch, and sibling retime ports listed in `REQUIRED_PORT_BEADS`.
+//! latch, and sibling retime ports that are not available in this Rust port yet.
 
 use std::collections::HashMap;
 use std::error::Error;
@@ -44,42 +44,9 @@ pub enum RetimeNodeType {
     Ignore,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead: &'static str,
-    pub c_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_PORT_BEADS: &[PortDependency] = &[
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.230",
-        c_file: "LogicSynthesis/sis/latch/latch.c",
-        reason: "native latch_t identity and latch metadata carried by retime edges",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.313",
-        c_file: "LogicSynthesis/sis/node/fan.c",
-        reason: "native fanin/fanout traversal when building retime graphs from SIS nodes",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.318",
-        c_file: "LogicSynthesis/sis/node/node.c",
-        reason: "native node_t identity stored on retime nodes",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.422",
-        c_file: "LogicSynthesis/sis/retime/re_util.c",
-        reason: "graph construction from SIS networks and retime graph traversal helpers",
-    },
-];
-
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum RetimeUtilError {
-    MissingSisPorts {
-        operation: &'static str,
-        dependencies: &'static [PortDependency],
-    },
+    MissingSisPorts { operation: &'static str },
     MissingNode(NodeId),
     MissingEdge(EdgeId),
     NegativeWeight(i32),
@@ -88,14 +55,9 @@ pub enum RetimeUtilError {
 impl fmt::Display for RetimeUtilError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingSisPorts {
-                operation,
-                dependencies,
-            } => write!(
-                f,
-                "{operation} requires {} native SIS prerequisite ports",
-                dependencies.len()
-            ),
+            Self::MissingSisPorts { operation } => {
+                write!(f, "{operation} requires native prerequisite ports")
+            }
             Self::MissingNode(node) => write!(f, "retime graph references missing node {}", node.0),
             Self::MissingEdge(edge) => write!(f, "retime graph references missing edge {}", edge.0),
             Self::NegativeWeight(weight) => {
@@ -450,21 +412,15 @@ impl<N, L> RetimeGraph<N, L> {
     }
 }
 
-pub fn required_port_beads() -> &'static [PortDependency] {
-    REQUIRED_PORT_BEADS
-}
-
 pub fn graph_from_sis_network<N, L>() -> Result<RetimeGraph<N, L>, RetimeUtilError> {
     Err(RetimeUtilError::MissingSisPorts {
         operation: "retime_network_to_graph/re_graph_add_node/re_graph_add_edge",
-        dependencies: REQUIRED_PORT_BEADS,
     })
 }
 
 pub fn attach_sis_latches_to_edge<L>(_edge: &mut RetimeEdge<L>) -> Result<(), RetimeUtilError> {
     Err(RetimeUtilError::MissingSisPorts {
         operation: "retime edge latch attachment",
-        dependencies: REQUIRED_PORT_BEADS,
     })
 }
 
@@ -605,26 +561,6 @@ mod tests {
         assert_eq!(copy.initial_values, vec![3]);
         assert_eq!(copy.num_val_alloc, 2);
     }
-
-    #[test]
-    fn dependency_scaffolds_report_bead_ids_and_sources() {
-        assert!(required_port_beads().iter().any(|dependency| {
-            dependency.bead == "LogicFriday1-8j8.2.6.318"
-                && dependency.c_file == "LogicSynthesis/sis/node/node.c"
-        }));
-        assert!(required_port_beads().iter().any(|dependency| {
-            dependency.bead == "LogicFriday1-8j8.2.6.230"
-                && dependency.c_file == "LogicSynthesis/sis/latch/latch.c"
-        }));
-        assert_eq!(
-            graph_from_sis_network::<usize, usize>(),
-            Err(RetimeUtilError::MissingSisPorts {
-                operation: "retime_network_to_graph/re_graph_add_node/re_graph_add_edge",
-                dependencies: REQUIRED_PORT_BEADS,
-            })
-        );
-    }
-
     #[test]
     fn c_weight_conversion_rejects_negative_values() {
         assert_eq!(c_weight_to_usize(0), Ok(0));

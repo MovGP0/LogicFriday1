@@ -416,9 +416,7 @@ pub enum FanoutSource<T> {
     PrimaryInput(PrimaryInputSource),
     Internal(InternalSource),
     Pwl(PwlSource<T>),
-    MissingNativeSource {
-        name: String,
-    },
+    MissingNativeSource { name: String },
 }
 
 impl<T> FanoutSource<T> {
@@ -894,11 +892,9 @@ impl<T> FanoutDelayModel<T> {
                     })?,
                 ))
             }
-            FanoutSource::MissingNativeSource { .. } => {
-                Err(FanoutDelayError::MissingSisPorts {
-                    operation: "fanout-delay native source load-dependent timing",
-                })
-            }
+            FanoutSource::MissingNativeSource { .. } => Err(FanoutDelayError::MissingSisPorts {
+                operation: "fanout-delay native source load-dependent timing",
+            }),
         }
     }
 
@@ -1085,7 +1081,9 @@ impl fmt::Display for FanoutDelayError {
                 f,
                 "inverter-count search window [{from}, {to}] is invalid for max {max_n}"
             ),
-            Self::MissingSisPorts { operation } => write!(f, "{operation} requires unavailable native SIS integration"),
+            Self::MissingSisPorts { operation } => {
+                write!(f, "{operation} requires unavailable native SIS integration")
+            }
         }
     }
 }
@@ -1093,9 +1091,7 @@ impl fmt::Display for FanoutDelayError {
 impl Error for FanoutDelayError {}
 
 pub fn sis_bound_source_unavailable(operation: &'static str) -> Result<(), FanoutDelayError> {
-    Err(FanoutDelayError::MissingSisPorts {
-        operation,
-    })
+    Err(FanoutDelayError::MissingSisPorts { operation })
 }
 
 fn simulate_internal_source(

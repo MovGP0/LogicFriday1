@@ -16,20 +16,6 @@ pub const DEFAULT_SPEED_COEFF: f64 = 0.0;
 pub const DEFAULT_SPEED_DIST: i32 = 3;
 pub const NSP_EPSILON: f64 = 1.0e-6;
 
-pub const REQUIRED_PORT_BEADS: &[&str] = &[
-    "LogicFriday1-8j8.2.6.133", // delay/delay.c: delay_trace and delay_latest_output
-    "LogicFriday1-8j8.2.6.258", // map/libutil.c: lib_network_is_mapped
-    "LogicFriday1-8j8.2.6.299", // network/net_seq.c: network duplication/free traversal substrate
-    "LogicFriday1-8j8.2.6.305", // network/network_util.c: network_num_pi, network_name
-    "LogicFriday1-8j8.2.6.455", // simplify/simp.c: com_redundancy_removal
-    "LogicFriday1-8j8.2.6.465", // speed/com_speed.c: speed_fill_options
-    "LogicFriday1-8j8.2.6.467", // speed/new_speed.c: new_speed loop body
-    "LogicFriday1-8j8.2.6.468", // speed/new_wght_util.c: new-speed local transform setup
-    "LogicFriday1-8j8.2.6.474", // speed/speed_delay.c: speed_set_delay_data
-    "LogicFriday1-8j8.2.6.480", // speed/speed_util.c: SP_GET_PERFORMANCE helpers
-    "LogicFriday1-8j8.2.6.481", // speed/speedup.c: speed_up_network
-];
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DelayModel {
     Unit,
@@ -301,10 +287,6 @@ impl fmt::Display for SpeedLoopError {
 }
 
 impl Error for SpeedLoopError {}
-
-pub fn required_port_beads() -> &'static [&'static str] {
-    REQUIRED_PORT_BEADS
-}
 
 pub fn speed_loop_interface_setup(
     threshold: f64,
@@ -745,7 +727,6 @@ mod tests {
     #[test]
     fn blocked_network_entries_report_explicit_missing_dependencies() {
         let mut network = ();
-        assert!(required_port_beads().contains(&"LogicFriday1-8j8.2.6.481"));
         assert_eq!(
             speed_up_loop_network_bound(&mut network, &SpeedLoopOptions::default()),
             Err(SpeedLoopError::MissingDependency(

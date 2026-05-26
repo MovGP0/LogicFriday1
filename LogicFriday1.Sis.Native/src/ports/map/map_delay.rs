@@ -19,8 +19,8 @@ use super::virtual_del::{
     VirtualDelayOutput, VirtualDelayPinTiming, VirtualDelayState, ZERO_DELAY,
 };
 use super::virtual_net::{
-    DelayTime, GateKind, NodeId, NodeKind, VirtualMappedNetwork, VirtualNetworkError,
-    MINUS_INFINITY,
+    DelayTime, GateKind, MINUS_INFINITY, NodeId, NodeKind, VirtualMappedNetwork,
+    VirtualNetworkError,
 };
 
 pub const MAX_PRECOMPUTED_FANOUT_LOADS: usize = 20;
@@ -236,7 +236,9 @@ impl fmt::Display for MapDelayError {
             Self::VirtualNetwork(error) => write!(f, "{error}"),
             Self::VirtualDelay(error) => write!(f, "{error}"),
             Self::LibUtil(error) => write!(f, "{error}"),
-            Self::MissingSisPorts { operation } => write!(f, "{operation} requires unavailable native SIS integration"),
+            Self::MissingSisPorts { operation } => {
+                write!(f, "{operation} requires unavailable native SIS integration")
+            }
         }
     }
 }

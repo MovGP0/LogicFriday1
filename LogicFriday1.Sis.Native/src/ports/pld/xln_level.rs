@@ -13,76 +13,6 @@ use std::collections::HashSet;
 use std::error::Error;
 use std::fmt;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_PORT_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.2",
-        source_file: "LogicSynthesis/sis/array/array.c",
-        reason: "xln_level.c stores per-level node vectors and fanout lists in array_t",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.297",
-        source_file: "LogicSynthesis/sis/network/dfs.c",
-        reason: "xln_one_pass_topol and cofactor delay decomposition require network_dfs order",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.305",
-        source_file: "LogicSynthesis/sis/network/network_util.c",
-        reason: "network node iteration, duplication, internal counts, cleanup, and delete-node operations",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.309",
-        source_file: "LogicSynthesis/sis/node/collapse.c",
-        reason: "node_collapse performs the core fanin-to-fanout logic rewrite",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.313",
-        source_file: "LogicSynthesis/sis/node/fan.c",
-        reason: "fanin/fanout traversal and node_get_fanin_index drive composite-fanin decisions",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-        reason: "node constructors, Boolean operators, node_free, and node_replace are needed for mux decomposition",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.321",
-        source_file: "LogicSynthesis/sis/node/nodemisc.c",
-        reason: "node_algebraic_cofactor is used by xln_mux_decomp",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.376",
-        source_file: "LogicSynthesis/sis/pld/pld_util.c",
-        reason: "pld_simplify_network_without_dc prepares collapsed delay networks",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.377",
-        source_file: "LogicSynthesis/sis/pld/xln_aodecomp.c",
-        reason: "xln_cofactor_decomp_node delegates infeasible-node decomposition",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.389",
-        source_file: "LogicSynthesis/sis/pld/xln_map.c",
-        reason: "karp_decomp_network is used when evaluating collapsed delay networks",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.391",
-        source_file: "LogicSynthesis/sis/pld/xln_move_d.c",
-        reason: "MOVE_FANINS calls xln_network_move_fanins_for_delay and xln_node_move_fanins_for_delay",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.454",
-        source_file: "LogicSynthesis/sis/speed/delay.c",
-        reason: "delay_trace, delay_arrival_time, delay_slack_time, and delay_latest_output drive criticality",
-    },
-];
-
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct NodeId(pub usize);
 
@@ -354,21 +284,10 @@ pub struct JustOneCriticalFanin {
 pub enum XlnLevelError {
     UnknownNode(NodeId),
     DeletedNode(NodeId),
-    NotAFanin {
-        fanout: NodeId,
-        fanin: NodeId,
-    },
-    InvalidSupport {
-        support: usize,
-    },
-    UnequalRiseFallSlack {
-        node: NodeId,
-        slack: DelayTime,
-    },
-    MissingNativePorts {
-        operation: &'static str,
-        dependencies: &'static [PortDependency],
-    },
+    NotAFanin { fanout: NodeId, fanin: NodeId },
+    InvalidSupport { support: usize },
+    UnequalRiseFallSlack { node: NodeId, slack: DelayTime },
+    MissingNativePorts { operation: &'static str },
 }
 
 impl fmt::Display for XlnLevelError {
@@ -387,13 +306,9 @@ impl fmt::Display for XlnLevelError {
                 "xln_level node {:?} has unequal rise/fall slack ({}, {})",
                 node, slack.rise, slack.fall
             ),
-            Self::MissingNativePorts {
-                operation,
-                dependencies,
-            } => write!(
+            Self::MissingNativePorts { operation } => write!(
                 f,
-                "{operation} is blocked by {} unported SIS C-file dependencies",
-                dependencies.len()
+                "{operation} is blocked by unported SIS C-file dependencies"
             ),
         }
     }
@@ -401,17 +316,12 @@ impl fmt::Display for XlnLevelError {
 
 impl Error for XlnLevelError {}
 
-pub fn required_port_dependencies() -> &'static [PortDependency] {
-    REQUIRED_PORT_DEPENDENCIES
-}
-
 pub fn reduce_levels_sis_network_blocked<Network>(
     _network: &mut Network,
     _options: XlnLevelOptions,
 ) -> Result<ReduceLevelStats, XlnLevelError> {
     Err(XlnLevelError::MissingNativePorts {
         operation: "xln_reduce_levels SIS network delay reduction",
-        dependencies: REQUIRED_PORT_DEPENDENCIES,
     })
 }
 
@@ -421,7 +331,6 @@ pub fn check_network_for_collapsing_delay_blocked<Network>(
 ) -> Result<Network, XlnLevelError> {
     Err(XlnLevelError::MissingNativePorts {
         operation: "xln_check_network_for_collapsing_delay",
-        dependencies: REQUIRED_PORT_DEPENDENCIES,
     })
 }
 
@@ -431,7 +340,6 @@ pub fn cofactor_decomp_network_blocked<Network>(
 ) -> Result<(), XlnLevelError> {
     Err(XlnLevelError::MissingNativePorts {
         operation: "xln_cofactor_decomp_network",
-        dependencies: REQUIRED_PORT_DEPENDENCIES,
     })
 }
 
@@ -620,7 +528,6 @@ pub fn node_collapse_if_critical(
     if options.move_fanins.enabled && !infeasible_fanouts.is_empty() && max_diff > 0 {
         return Err(XlnLevelError::MissingNativePorts {
             operation: "xln_node_move_fanins_for_delay and xln_try_collapsing_node",
-            dependencies: REQUIRED_PORT_DEPENDENCIES,
         });
     }
 
@@ -672,7 +579,6 @@ pub fn reduce_levels(
         if options.move_fanins.enabled {
             return Err(XlnLevelError::MissingNativePorts {
                 operation: "xln_network_move_fanins_for_delay",
-                dependencies: REQUIRED_PORT_DEPENDENCIES,
             });
         }
     }
@@ -959,37 +865,6 @@ mod tests {
         assert_eq!(stats.collapsed_pairs, vec![(x, y)]);
         assert_eq!(stats.deleted_nodes, vec![x]);
         assert!(network.node(x).unwrap().is_deleted());
-    }
-
-    #[test]
-    fn blocked_sis_entries_report_dependency_beads_and_sources() {
-        let mut network = ();
-        let error = reduce_levels_sis_network_blocked(
-            &mut network,
-            level_options(CollapseHeuristic::PartialCriticalFanouts),
-        )
-        .unwrap_err();
-
-        let XlnLevelError::MissingNativePorts {
-            operation,
-            dependencies,
-        } = error
-        else {
-            panic!("expected dependency error");
-        };
-        assert_eq!(operation, "xln_reduce_levels SIS network delay reduction");
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.454"
-                && dependency.source_file == "LogicSynthesis/sis/speed/delay.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.391"
-                && dependency.source_file == "LogicSynthesis/sis/pld/xln_move_d.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.309"
-                && dependency.source_file == "LogicSynthesis/sis/node/collapse.c"
-        }));
     }
 
     #[test]

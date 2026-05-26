@@ -12,71 +12,6 @@ use std::collections::HashSet;
 use std::error::Error;
 use std::fmt;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_PORT_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.2",
-        source_file: "LogicSynthesis/sis/array/array.c",
-        reason: "xln_feasible.c stores DFS nodes, fanin snapshots, bound sets, and decomposition nodes in array_t",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.297",
-        source_file: "LogicSynthesis/sis/network/dfs.c",
-        reason: "xln_network_reduce_infeasibility_by_moving_fanins visits network_dfs order",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.305",
-        source_file: "LogicSynthesis/sis/network/network_util.c",
-        reason: "network_add_node and network_delete_node manage temporary decomposition nodes",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.309",
-        source_file: "LogicSynthesis/sis/node/collapse.c",
-        reason: "node_collapse builds the temporary node used for the Roth-Karp test",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.313",
-        source_file: "LogicSynthesis/sis/node/fan.c",
-        reason: "fanin traversal, fanout counts, fanin lookup, and node_patch_fanin drive the move",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-        reason: "node type classification, node_dup, and node_free semantics are needed for SIS integration",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.321",
-        source_file: "LogicSynthesis/sis/node/nodemisc.c",
-        reason: "node_replace applies decomposed functions to the original node and selected fanin",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.455",
-        source_file: "LogicSynthesis/sis/simplify/simp.c",
-        reason: "node_simplify refreshes the collapsed temporary node before decomposition",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.378",
-        source_file: "LogicSynthesis/sis/pld/xln_aux.c",
-        reason: "xln_array_to_indices converts the bound-set nodes to lambda indices",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.386",
-        source_file: "LogicSynthesis/sis/pld/xln_k_decomp.c",
-        reason: "xln_k_decomp_node_with_array proves whether the candidate fanin move is legal",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.390",
-        source_file: "LogicSynthesis/sis/pld/xln_level.c",
-        reason: "DELAY mode filters out critical target fanins with xln_is_node_critical",
-    },
-];
-
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct NodeId(pub usize);
 
@@ -268,20 +203,10 @@ impl DecompositionBackend for AcceptingBackend {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum XlnFeasibleError {
     UnknownNode(NodeId),
-    NotAFanin {
-        node: NodeId,
-        fanin: NodeId,
-    },
-    InvalidBoundAlphas {
-        bound_alphas: usize,
-    },
-    MissingBoundSetNode {
-        bound_node: NodeId,
-    },
-    MissingNativePorts {
-        operation: &'static str,
-        dependencies: &'static [PortDependency],
-    },
+    NotAFanin { node: NodeId, fanin: NodeId },
+    InvalidBoundAlphas { bound_alphas: usize },
+    MissingBoundSetNode { bound_node: NodeId },
+    MissingNativePorts { operation: &'static str },
 }
 
 impl fmt::Display for XlnFeasibleError {
@@ -304,13 +229,9 @@ impl fmt::Display for XlnFeasibleError {
                     bound_node
                 )
             }
-            Self::MissingNativePorts {
-                operation,
-                dependencies,
-            } => write!(
+            Self::MissingNativePorts { operation } => write!(
                 f,
-                "{operation} is blocked by {} unported SIS C-file dependencies",
-                dependencies.len()
+                "{operation} is blocked by unported SIS C-file dependencies"
             ),
         }
     }
@@ -319,10 +240,6 @@ impl fmt::Display for XlnFeasibleError {
 impl Error for XlnFeasibleError {}
 
 pub type XlnFeasibleResult<T> = Result<T, XlnFeasibleError>;
-
-pub fn required_port_dependencies() -> &'static [PortDependency] {
-    REQUIRED_PORT_DEPENDENCIES
-}
 
 pub fn reduce_infeasibility_by_moving_fanins<B>(
     network: &mut FeasibleNetwork,
@@ -544,10 +461,7 @@ pub fn node_move_fanin_blocked<Node>(
 }
 
 fn missing_native_ports(operation: &'static str) -> XlnFeasibleError {
-    XlnFeasibleError::MissingNativePorts {
-        operation,
-        dependencies: REQUIRED_PORT_DEPENDENCIES,
-    }
+    XlnFeasibleError::MissingNativePorts { operation }
 }
 
 fn push_unique(values: &mut Vec<NodeId>, value: NodeId) {
@@ -691,37 +605,6 @@ mod tests {
             node_move_fanin(&mut network, n, a, 3, 2, MoveMode::Area, &mut backend).unwrap_err(),
             XlnFeasibleError::InvalidBoundAlphas { bound_alphas: 2 }
         );
-    }
-
-    #[test]
-    fn blocked_entries_report_dependency_beads_and_sources() {
-        let mut network = ();
-        let error = reduce_infeasibility_by_moving_fanins_blocked(&mut network, 5, 20).unwrap_err();
-
-        let XlnFeasibleError::MissingNativePorts {
-            operation,
-            dependencies,
-        } = error
-        else {
-            panic!("expected dependency error");
-        };
-
-        assert_eq!(
-            operation,
-            "xln_network_reduce_infeasibility_by_moving_fanins SIS integration"
-        );
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.386"
-                && dependency.source_file == "LogicSynthesis/sis/pld/xln_k_decomp.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.390"
-                && dependency.source_file == "LogicSynthesis/sis/pld/xln_level.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.455"
-                && dependency.source_file == "LogicSynthesis/sis/simplify/simp.c"
-        }));
     }
 
     #[test]

@@ -11,60 +11,6 @@ use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::fmt;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_PORT_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.2",
-        source_file: "LogicSynthesis/sis/array/array.c",
-        reason: "array_t stores infeasible node vectors, cube-node vectors, and affinity lists",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.305",
-        source_file: "LogicSynthesis/sis/network/network_util.c",
-        reason: "network_add_node, network_sweep, and network node iteration mutate SIS networks",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.302",
-        source_file: "LogicSynthesis/sis/network/netchk.c",
-        reason: "network_check guards the C extraction steps",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.313",
-        source_file: "LogicSynthesis/sis/node/fan.c",
-        reason: "fanin traversal, fanin indexes, fanin counts, and input phases drive pairing",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-        reason: "node_constant, node_literal, node_and, node_or, node_free, cube access, and node types are required",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.325",
-        source_file: "LogicSynthesis/sis/node/substitute.c",
-        reason: "node_substitute rewrites original network nodes after each extracted subfunction is added",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.376",
-        source_file: "LogicSynthesis/sis/pld/pld_util.c",
-        reason: "pld_make_node_from_cube, pld_get_non_common_fanins, pld_is_fanin_subset, and xln_num_composite_fanin are shared helpers",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.485",
-        source_file: "LogicSynthesis/sis/st/st.c",
-        reason: "st_table maps cube nodes to source nodes and tracks already matched cubes",
-    },
-];
-
-pub fn required_port_dependencies() -> &'static [PortDependency] {
-    REQUIRED_PORT_DEPENDENCIES
-}
-
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct NodeId(pub usize);
 
@@ -295,7 +241,6 @@ pub enum XlnDecMergeError {
     },
     MissingNativePorts {
         operation: &'static str,
-        dependencies: &'static [PortDependency],
     },
 }
 
@@ -333,13 +278,9 @@ impl fmt::Display for XlnDecMergeError {
                 f,
                 "sub-node fanin count {sub_node_fanins} cannot consume cube-node fanin count {cube_node_fanins}"
             ),
-            Self::MissingNativePorts {
-                operation,
-                dependencies,
-            } => write!(
+            Self::MissingNativePorts { operation } => write!(
                 f,
-                "{operation} is blocked by {} unported SIS C-file dependencies",
-                dependencies.len()
+                "{operation} is blocked by unported SIS C-file dependencies"
             ),
         }
     }
@@ -362,10 +303,7 @@ pub fn apply_merge_plan_to_sis_network_blocked<Network>(
 }
 
 fn missing_native_ports<T>(operation: &'static str) -> Result<T, XlnDecMergeError> {
-    Err(XlnDecMergeError::MissingNativePorts {
-        operation,
-        dependencies: REQUIRED_PORT_DEPENDENCIES,
-    })
+    Err(XlnDecMergeError::MissingNativePorts { operation })
 }
 
 pub fn plan_decomp_for_merging_network(
@@ -1059,35 +997,6 @@ mod tests {
             }]
         );
         assert_eq!(plan.extracted_pairs.len(), 1);
-    }
-
-    #[test]
-    fn blocked_sis_entries_report_dependency_beads_and_sources() {
-        let mut network = ();
-        let Err(XlnDecMergeError::MissingNativePorts {
-            operation,
-            dependencies,
-        }) = xln_decomp_for_merging_network_blocked(&mut network, opts(MergeHeuristic::AllCubes))
-        else {
-            panic!("expected dependency error");
-        };
-
-        assert_eq!(
-            operation,
-            "xln_decomp_for_merging_network against SIS network_t"
-        );
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.376"
-                && dependency.source_file == "LogicSynthesis/sis/pld/pld_util.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.325"
-                && dependency.source_file == "LogicSynthesis/sis/node/substitute.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.485"
-                && dependency.source_file == "LogicSynthesis/sis/st/st.c"
-        }));
     }
 
     #[test]

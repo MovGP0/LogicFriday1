@@ -3,7 +3,7 @@
 //! The C file is a collection of retiming graph utilities plus thin calls into
 //! SIS `network_t`, `node_t`, latch, delay, and mapped-library APIs. This module
 //! ports the graph behavior to owned Rust data structures. Direct SIS
-//! integration remains an explicit dependency error with bead IDs and source
+//! integration remains an explicit dependency error
 //! files; no legacy C ABI entry points are exposed here.
 
 use std::collections::HashMap;
@@ -17,70 +17,6 @@ pub const INFINITY_LEVEL: usize = usize::MAX;
 pub const UNIT_FANOUT_BASE_DELAY: f64 = 1.0;
 pub const UNIT_FANOUT_SLOPE: f64 = 0.2;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_SIS_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.2",
-        source_file: "LogicSynthesis/sis/array/array.c",
-        reason: "legacy re_graph stores nodes, edges, PI lists, PO lists, fanins, and fanouts in array_t",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.133",
-        source_file: "LogicSynthesis/sis/delay/delay.c",
-        reason: "delay_get_pi_arrival_time, delay_get_po_required_time, delay_get_po_load, and synchronization edge queries",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.134",
-        source_file: "LogicSynthesis/sis/delay/mapdelay.c",
-        reason: "delay_map_simulate is the mapped-gate delay simulator used by retime_simulate_gate",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.230",
-        source_file: "LogicSynthesis/sis/latch/latch.c",
-        reason: "latch type, control, and initial-value queries for retime_get_clock_data",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.257",
-        source_file: "LogicSynthesis/sis/map/library.c",
-        reason: "lib_gate lookup, latch selection, gate area, pin loads, and mapped-network checks",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.305",
-        source_file: "LogicSynthesis/sis/network/network_util.c",
-        reason: "network/latch iteration and mapped-network metadata",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.313",
-        source_file: "LogicSynthesis/sis/node/fan.c",
-        reason: "fanin/fanout traversal and fanout-pin load accounting",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-        reason: "node types, names, literal counts, primary IO metadata, and mapped gate association",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.420",
-        source_file: "LogicSynthesis/sis/retime/re_net.c",
-        reason: "retime_network_latch_end resolves latch fanout endpoints while building loads and fanout counts",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.423",
-        source_file: "LogicSynthesis/sis/retime/retime_util.c",
-        reason: "legacy graph allocation, edge creation, duplication, and accessor helpers used around re_util.c",
-    },
-];
-
-pub fn required_sis_dependencies() -> &'static [PortDependency] {
-    REQUIRED_SIS_DEPENDENCIES
-}
-
 pub fn sis_network_graph_build_blocked() -> Result<(), RetimeUtilError> {
     missing_sis_dependencies("retime SIS network graph build")
 }
@@ -90,10 +26,7 @@ pub fn sis_clock_data_blocked() -> Result<(), RetimeUtilError> {
 }
 
 fn missing_sis_dependencies(operation: &'static str) -> Result<(), RetimeUtilError> {
-    Err(RetimeUtilError::MissingSisDependencies {
-        operation,
-        dependencies: REQUIRED_SIS_DEPENDENCIES,
-    })
+    Err(RetimeUtilError::MissingSisDependencies { operation })
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -676,7 +609,6 @@ pub fn retime_is_modeled_network_retimable(latches: &[RetimeLatchInfo]) -> bool 
 pub enum RetimeUtilError {
     MissingSisDependencies {
         operation: &'static str,
-        dependencies: &'static [PortDependency],
     },
     MissingNode {
         node_id: usize,
@@ -713,14 +645,9 @@ pub enum RetimeUtilError {
 impl fmt::Display for RetimeUtilError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingSisDependencies {
-                operation,
-                dependencies,
-            } => write!(
-                f,
-                "{operation} is blocked by {} unported SIS dependencies",
-                dependencies.len()
-            ),
+            Self::MissingSisDependencies { operation } => {
+                write!(f, "{operation} requires native prerequisite ports")
+            }
             Self::MissingNode { node_id } => write!(f, "missing retime node {node_id}"),
             Self::MissingEdge { edge_id } => write!(f, "missing retime edge {edge_id}"),
             Self::MissingMappedGate { node_id } => {
@@ -953,25 +880,6 @@ mod tests {
             Err(RetimeUtilError::MixedSynchronizationTypes)
         );
     }
-
-    #[test]
-    fn blocked_sis_operations_report_dependency_beads_and_sources() {
-        let dependencies = required_sis_dependencies();
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.420"
-                && dependency.source_file == "LogicSynthesis/sis/retime/re_net.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.257"
-                && dependency.source_file == "LogicSynthesis/sis/map/library.c"
-        }));
-        assert!(matches!(
-            sis_network_graph_build_blocked(),
-            Err(RetimeUtilError::MissingSisDependencies { dependencies, .. })
-                if dependencies.iter().any(|dependency| dependency.bead_id == "LogicFriday1-8j8.2.6.318")
-        ));
-    }
-
     #[test]
     fn dump_graph_uses_c_style_sections() {
         let graph = small_graph();

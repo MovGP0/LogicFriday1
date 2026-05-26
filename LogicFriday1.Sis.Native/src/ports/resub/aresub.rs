@@ -4,54 +4,10 @@
 //! one-level transitive fanout of each of its fanins. The SIS `network_t` and
 //! `node_t` integration points are still native-port blockers, so this module
 //! ports the traversal/substitution orchestration behind a Rust trait and
-//! reports unresolved SIS dependencies explicitly.
+//! reports unavailable native support explicitly.
 
 use std::error::Error;
 use std::fmt;
-
-pub const REQUIRED_PORT_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.297",
-        source_file: "LogicSynthesis/sis/network/dfs.c",
-        reason: "network_tfo one-level transitive fanout traversal",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.305",
-        source_file: "LogicSynthesis/sis/network/network_util.c",
-        reason: "network node iteration used by foreach_node",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.313",
-        source_file: "LogicSynthesis/sis/node/fan.c",
-        reason: "fanin traversal used by foreach_fanin",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-        reason: "node_t identity and PRIMARY_INPUT/PRIMARY_OUTPUT node types",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.321",
-        source_file: "LogicSynthesis/sis/node/nodemisc.c",
-        reason: "node_compare_id ordering used before duplicate removal",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.325",
-        source_file: "LogicSynthesis/sis/node/substitute.c",
-        reason: "node_substitute algebraic division and graph mutation",
-    },
-];
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub fn required_port_dependencies() -> &'static [PortDependency] {
-    REQUIRED_PORT_DEPENDENCIES
-}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum NodeKind {
@@ -79,32 +35,17 @@ pub enum AresubOperation {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AresubError {
-    MissingNativePorts {
-        operation: AresubOperation,
-        dependencies: &'static [PortDependency],
-    },
+    MissingNativePorts { operation: AresubOperation },
     Backend(String),
 }
 
 impl fmt::Display for AresubError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingNativePorts {
-                operation,
-                dependencies,
-            } => {
-                write!(
-                    f,
-                    "{operation:?} requires native Rust ports for SIS dependencies: "
-                )?;
-                for (index, dependency) in dependencies.iter().enumerate() {
-                    if index > 0 {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "{} ({})", dependency.bead_id, dependency.source_file)?;
-                }
-                Ok(())
-            }
+            Self::MissingNativePorts { operation } => write!(
+                f,
+                "{operation:?} requires unavailable native Rust SIS support"
+            ),
             Self::Backend(message) => f.write_str(message),
         }
     }
@@ -268,10 +209,7 @@ pub fn resub_alge_network_bound<Network>(
 }
 
 fn missing(operation: AresubOperation) -> AresubError {
-    AresubError::MissingNativePorts {
-        operation,
-        dependencies: REQUIRED_PORT_DEPENDENCIES,
-    }
+    AresubError::MissingNativePorts { operation }
 }
 
 #[cfg(test)]
@@ -447,25 +385,17 @@ mod tests {
     }
 
     #[test]
-    fn missing_dependency_errors_include_blocker_beads_and_sources() {
+    fn missing_dependency_errors_identify_failed_operation() {
         let error = resub_alge_network_bound(&mut (), true).unwrap_err();
-        let AresubError::MissingNativePorts {
-            operation,
-            dependencies,
-        } = error
-        else {
+        let AresubError::MissingNativePorts { operation } = error else {
             panic!("expected missing native ports");
         };
 
         assert_eq!(operation, AresubOperation::AlgebraicNetwork);
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.297"
-                && dependency.source_file == "LogicSynthesis/sis/network/dfs.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.325"
-                && dependency.source_file == "LogicSynthesis/sis/node/substitute.c"
-        }));
+        assert_eq!(
+            error.to_string(),
+            "AlgebraicNetwork requires unavailable native Rust SIS support"
+        );
     }
 
     #[test]
@@ -475,7 +405,6 @@ mod tests {
             algebraic_resubstitution_targets(&graph, &"f".to_owned()),
             Err(AresubError::MissingNativePorts {
                 operation: AresubOperation::NodeKind,
-                dependencies: REQUIRED_PORT_DEPENDENCIES,
             })
         );
     }

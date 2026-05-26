@@ -14,66 +14,6 @@ use std::fmt;
 pub const BDD_NODE_LIMIT: usize = 480_000;
 pub const BDD_NODE_LOW: usize = 50_000;
 
-pub const REQUIRED_PORT_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.112",
-        source_file: "LogicSynthesis/sis/command/addcom.c",
-        reason: "command registration through com_add_command",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.118",
-        source_file: "LogicSynthesis/sis/command/get_nodes.c",
-        reason: "node-list parsing through com_get_nodes",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.297",
-        source_file: "LogicSynthesis/sis/network/dfs.c",
-        reason: "network_dfs and order_dfs traversal used by simplify ordering and full_simplify",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.305",
-        source_file: "LogicSynthesis/sis/network/network_util.c",
-        reason: "primary input/output iteration and network metadata",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.313",
-        source_file: "LogicSynthesis/sis/node/fan.c",
-        reason: "fanin and fanout iteration",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-        reason: "node type/function inspection and node lifetime",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.447",
-        source_file: "LogicSynthesis/sis/simplify/compute_dc.c",
-        reason: "external don't-care and CSPF computation",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.454",
-        source_file: "LogicSynthesis/sis/simplify/simp_util.c",
-        reason: "simp_order, copy_dcnetwork, attach_dcnetwork_to_network, and ODC helpers",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.455",
-        source_file: "LogicSynthesis/sis/simplify/simp.c",
-        reason: "simplify_node, simplify_with_odc, and simplify_without_odc",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.71",
-        source_file: "LogicSynthesis/sis/bdd_cmu/bdd_port/bddport.c",
-        reason: "BDD manager, BDD support sets, and node-to-BDD conversion used by full_simplify",
-    },
-];
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead: &'static str,
-    pub source_file: &'static str,
-    pub reason: &'static str,
-}
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SimplifyCommandKind {
     Simplify,
@@ -341,37 +281,21 @@ impl Error for CommandParseError {}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum SimplifyCommandError {
-    MissingSisPorts {
-        command: SimplifyCommandKind,
-        dependencies: &'static [PortDependency],
-    },
+    MissingSisPorts { command: SimplifyCommandKind },
 }
 
 impl fmt::Display for SimplifyCommandError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingSisPorts {
-                command,
-                dependencies,
-            } => {
-                write!(f, "{command:?} requires native Rust ports for ")?;
-                for (index, dependency) in dependencies.iter().enumerate() {
-                    if index > 0 {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "{} ({})", dependency.bead, dependency.source_file)?;
-                }
-                Ok(())
-            }
+            Self::MissingSisPorts { command } => write!(
+                f,
+                "{command:?} requires native Rust SIS ports that are not available yet"
+            ),
         }
     }
 }
 
 impl Error for SimplifyCommandError {}
-
-pub fn required_port_dependencies() -> &'static [PortDependency] {
-    REQUIRED_PORT_DEPENDENCIES
-}
 
 pub fn simplify_command_registrations() -> &'static [CommandRegistration] {
     SIMPLIFY_COMMANDS
@@ -550,10 +474,7 @@ pub fn execute_simplify_command<Network>(
         SimplifyCommand::FullSimplify(_) => SimplifyCommandKind::FullSimplify,
     };
 
-    Err(SimplifyCommandError::MissingSisPorts {
-        command: kind,
-        dependencies: REQUIRED_PORT_DEPENDENCIES,
-    })
+    Err(SimplifyCommandError::MissingSisPorts { command: kind })
 }
 
 pub fn get_cone_levels(value: &str) -> Option<(i32, i32)> {
@@ -1010,7 +931,7 @@ mod tests {
     }
 
     #[test]
-    fn dispatch_reports_dependency_beads_and_source_files() {
+    fn dispatch_reports_missing_sis_ports() {
         let mut network = ();
         let command = SimplifyCommand::Simplify(parse_simplify_args(["n"]).unwrap());
         let error = execute_simplify_command(&mut network, &command).unwrap_err();
@@ -1019,21 +940,8 @@ mod tests {
             error,
             SimplifyCommandError::MissingSisPorts {
                 command: SimplifyCommandKind::Simplify,
-                dependencies: REQUIRED_PORT_DEPENDENCIES,
             }
         );
-        assert!(required_port_dependencies().iter().any(|dependency| {
-            dependency.bead == "LogicFriday1-8j8.2.6.455"
-                && dependency.source_file == "LogicSynthesis/sis/simplify/simp.c"
-        }));
-        assert!(required_port_dependencies().iter().any(|dependency| {
-            dependency.bead == "LogicFriday1-8j8.2.6.118"
-                && dependency.source_file == "LogicSynthesis/sis/command/get_nodes.c"
-        }));
-        assert!(
-            error
-                .to_string()
-                .contains("LogicSynthesis/sis/simplify/simp.c")
-        );
+        assert!(error.to_string().contains("requires native Rust SIS ports"));
     }
 }

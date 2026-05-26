@@ -10,40 +10,6 @@ use std::collections::{BTreeMap, HashMap};
 use std::error::Error;
 use std::fmt;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub note: &'static str,
-}
-
-pub const REQUIRED_MANUAL_ORDER_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.305",
-        source_file: "LogicSynthesis/sis/network/network_util.c",
-        note: "order-network primary-input traversal and network ownership",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-        note: "node_t identity and node name storage used as order-table keys",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.426",
-        source_file: "LogicSynthesis/sis/seqbdd/com_verify.c",
-        note: "manual-order option parsing and order-network loading",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.485",
-        source_file: "LogicSynthesis/sis/st/st.c",
-        note: "st_table name lookup and node-to-rank mutation semantics",
-    },
-];
-
-pub fn required_manual_order_dependencies() -> &'static [PortDependency] {
-    REQUIRED_MANUAL_ORDER_DEPENDENCIES
-}
-
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct NodeId(pub usize);
 
@@ -121,10 +87,7 @@ pub enum ManualOrderError {
     ManualOrderDisabled,
     MissingOrderNetwork,
     UnknownOrderNode(NodeId),
-    MissingNativePorts {
-        operation: &'static str,
-        dependencies: &'static [PortDependency],
-    },
+    MissingNativePorts { operation: &'static str },
 }
 
 impl fmt::Display for ManualOrderError {
@@ -135,14 +98,9 @@ impl fmt::Display for ManualOrderError {
             Self::UnknownOrderNode(node) => {
                 write!(f, "manual order table references unknown node {:?}", node)
             }
-            Self::MissingNativePorts {
-                operation,
-                dependencies,
-            } => write!(
-                f,
-                "{operation} requires native Rust ports for {} SIS dependencies",
-                dependencies.len()
-            ),
+            Self::MissingNativePorts { operation } => {
+                write!(f, "{operation} is blocked by missing native SIS ports")
+            }
         }
     }
 }
@@ -245,7 +203,6 @@ pub fn replace_character(name: &str, old: char, new: char) -> String {
 pub fn get_manual_order_from_sis() -> Result<(), ManualOrderError> {
     Err(ManualOrderError::MissingNativePorts {
         operation: "get_manual_order SIS network_t/st_table entry",
-        dependencies: REQUIRED_MANUAL_ORDER_DEPENDENCIES,
     })
 }
 
@@ -357,34 +314,6 @@ mod tests {
         assert_eq!(
             order_table(&mut order, &nodes, &name_table),
             Err(ManualOrderError::UnknownOrderNode(NodeId(9)))
-        );
-    }
-
-    #[test]
-    fn sis_entry_reports_dependency_beads_and_sources() {
-        let error = get_manual_order_from_sis().unwrap_err();
-
-        match error {
-            ManualOrderError::MissingNativePorts {
-                operation,
-                dependencies,
-            } => {
-                assert_eq!(operation, "get_manual_order SIS network_t/st_table entry");
-                assert!(dependencies.iter().any(|dependency| {
-                    dependency.bead_id == "LogicFriday1-8j8.2.6.305"
-                        && dependency.source_file == "LogicSynthesis/sis/network/network_util.c"
-                }));
-                assert!(dependencies.iter().any(|dependency| {
-                    dependency.bead_id == "LogicFriday1-8j8.2.6.485"
-                        && dependency.source_file == "LogicSynthesis/sis/st/st.c"
-                }));
-            }
-            other => panic!("unexpected error: {other:?}"),
-        }
-
-        assert_eq!(
-            required_manual_order_dependencies(),
-            REQUIRED_MANUAL_ORDER_DEPENDENCIES
         );
     }
 }

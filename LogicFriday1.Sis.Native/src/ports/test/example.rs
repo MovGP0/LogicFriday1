@@ -13,15 +13,6 @@
 
 pub const USAGE: &str = "usage: test [-c] n1 n2\n    -c\t\tuse complement of n2 in division\n";
 
-pub const REQUIRED_PORT_BEADS: &[&str] = &[
-    "LogicFriday1-8j8.2.6.118", // command/get_nodes.c: com_get_nodes
-    "LogicFriday1-8j8.2.6.312", // node/divide.c: node_div
-    "LogicFriday1-8j8.2.6.314", // node/invert.c: node_not
-    "LogicFriday1-8j8.2.6.318", // node/node.c: node_and, node_or, node_literal
-    "LogicFriday1-8j8.2.6.321", // node/nodemisc.c: node_free
-    "LogicFriday1-8j8.2.6.322", // node/nodeutil.c and shared node helpers
-];
-
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ExampleCommand {
     pub target_node: String,
@@ -79,10 +70,6 @@ where
     }
 }
 
-pub fn required_port_beads() -> &'static [&'static str] {
-    REQUIRED_PORT_BEADS
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -124,7 +111,9 @@ mod tests {
     #[test]
     fn reports_blocked_native_port_dependencies() {
         assert!(example_port_is_blocked());
-        assert!(required_port_beads().contains(&"LogicFriday1-8j8.2.6.118"));
-        assert!(required_port_beads().contains(&"LogicFriday1-8j8.2.6.312"));
+        assert_eq!(
+            example_port_disposition(),
+            ExamplePortDisposition::BlockedByUnportedNodeAndCommandApis
+        );
     }
 }

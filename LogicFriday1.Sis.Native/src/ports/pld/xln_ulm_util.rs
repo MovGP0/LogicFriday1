@@ -13,67 +13,11 @@ use std::fmt;
 
 pub const SIS_MAXINT: i32 = 1 << 30;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_PORT_BEADS: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.279",
-        source_file: "LogicSynthesis/sis/maxflow/maxflow.c",
-        reason: "maxflow(), mf_get_node(), source-node access, and edge flow/head traversal",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.280",
-        source_file: "LogicSynthesis/sis/maxflow/mf_input.c",
-        reason: "mf_reread_edge() capacity updates used by change_edge_capacity",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.305",
-        source_file: "LogicSynthesis/sis/network/network_util.c",
-        reason: "network_find_node() lookup used by graph2network_node",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-        reason: "node_long_name() and node identity/name storage",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.313",
-        source_file: "LogicSynthesis/sis/node/fan.c",
-        reason: "foreach_fanin traversal used by print_fanin",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.320",
-        source_file: "LogicSynthesis/sis/node/nodeindex.c",
-        reason: "nodeindex_indexof() used by print_array",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.2",
-        source_file: "LogicSynthesis/sis/array/array.c",
-        reason: "array_t sorted pointer arrays used by count_intsec_union and print_array",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.485",
-        source_file: "LogicSynthesis/sis/st/st.c",
-        reason: "st_foreach() debug table traversal used by print_table",
-    },
-];
-
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum XlnUlmUtilError {
-    MissingSisPorts {
-        operation: &'static str,
-        dependencies: &'static [PortDependency],
-    },
+    MissingSisPorts { operation: &'static str },
     UnknownNode(String),
-    UnknownEdge {
-        from: String,
-        to: String,
-    },
+    UnknownEdge { from: String, to: String },
     MissingSourceNode,
     NegativeCapacity(i32),
     SelfLoop(String),
@@ -82,14 +26,9 @@ pub enum XlnUlmUtilError {
 impl fmt::Display for XlnUlmUtilError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingSisPorts {
-                operation,
-                dependencies,
-            } => write!(
-                f,
-                "{operation} requires {} native SIS prerequisite ports",
-                dependencies.len()
-            ),
+            Self::MissingSisPorts { operation } => {
+                write!(f, "{operation} requires native SIS prerequisite ports")
+            }
             Self::UnknownNode(name) => write!(f, "unknown maxflow node {name}"),
             Self::UnknownEdge { from, to } => write!(f, "unknown maxflow edge {from} -> {to}"),
             Self::MissingSourceNode => write!(f, "maxflow graph has no source node"),
@@ -103,15 +42,8 @@ impl fmt::Display for XlnUlmUtilError {
 
 impl Error for XlnUlmUtilError {}
 
-pub fn required_port_beads() -> &'static [PortDependency] {
-    REQUIRED_PORT_BEADS
-}
-
 pub fn sis_bound_operation_unavailable(operation: &'static str) -> Result<(), XlnUlmUtilError> {
-    Err(XlnUlmUtilError::MissingSisPorts {
-        operation,
-        dependencies: REQUIRED_PORT_BEADS,
-    })
+    Err(XlnUlmUtilError::MissingSisPorts { operation })
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -669,30 +601,5 @@ mod tests {
         right.sort_by(|a, b| comp_ptr(*a, *b));
 
         assert_eq!(count_intsec_union(&left, &right), (2, 4));
-    }
-
-    #[test]
-    fn sis_bound_scaffold_reports_dependency_beads_and_sources() {
-        let Err(XlnUlmUtilError::MissingSisPorts {
-            operation,
-            dependencies,
-        }) = sis_bound_operation_unavailable("graph2network_node")
-        else {
-            panic!("expected missing SIS ports");
-        };
-
-        assert_eq!(operation, "graph2network_node");
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.279"
-                && dependency.source_file == "LogicSynthesis/sis/maxflow/maxflow.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.305"
-                && dependency.source_file == "LogicSynthesis/sis/network/network_util.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.485"
-                && dependency.source_file == "LogicSynthesis/sis/st/st.c"
-        }));
     }
 }

@@ -1,4 +1,4 @@
-//! Native Rust model for `LogicSynthesis/sis/power/power_psAppr.c`.
+﻿//! Native Rust model for `LogicSynthesis/sis/power/power_psAppr.c`.
 //!
 //! The C file computes approximate present-state line probabilities directly
 //! from next-state logic. This port keeps the reusable algorithmic pieces in
@@ -13,72 +13,6 @@ use std::fmt;
 
 pub const DEFAULT_PS_MAX_ALLOWED_ERROR: f64 = 0.01;
 const TINY: f64 = 1.0e-20;
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_PORT_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.2",
-        source_file: "LogicSynthesis/sis/array/array.c",
-        reason: "power_psAppr.c passes node orderings and generated NS outputs in array_t",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.299",
-        source_file: "LogicSynthesis/sis/network/net_seq.c",
-        reason: "network_latch_end maps NS primary outputs back to present-state lines",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.305",
-        source_file: "LogicSynthesis/sis/network/network_util.c",
-        reason: "network_dup, primary IO iteration, deletion, lookup, connection, and csweep",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-        reason: "node allocation, replacement, SCC minimization, names, and covers",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.313",
-        source_file: "LogicSynthesis/sis/node/fan.c",
-        reason: "nodevec_dup and fanin rewiring for generated grouped NS logic",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.329",
-        source_file: "LogicSynthesis/sis/ntbdd/manager.c",
-        reason: "ntbdd_start_manager and ntbdd_end_manager BDD manager lifetime",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.330",
-        source_file: "LogicSynthesis/sis/ntbdd/node_to_bdd.c",
-        reason: "ntbdd_node_to_bdd converts generated NS logic nodes to BDDs",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.407",
-        source_file: "LogicSynthesis/sis/power/power_util.c",
-        reason: "power_lines_in_set maps literal masks to grouped PS combination indexes",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.442",
-        source_file: "LogicSynthesis/sis/seqbdd/verif_util.c",
-        reason: "order_nodes supplies the PI order used before placing PS lines first",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.485",
-        source_file: "LogicSynthesis/sis/st/st.c",
-        reason: "info_table, leaves, and visited caches are st_table instances in the C path",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.400",
-        source_file: "LogicSynthesis/sis/power/power_main.c",
-        reason: "node_info_t probability data is populated by power_get_node_info",
-    },
-];
-
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct NodeId(pub usize);
 
@@ -152,7 +86,6 @@ pub enum PsApprError {
     },
     MissingDependency {
         operation: &'static str,
-        dependencies: &'static [PortDependency],
     },
 }
 
@@ -180,13 +113,10 @@ impl fmt::Display for PsApprError {
                 f,
                 "PS approximation did not converge after {iterations}/{max_iterations} iterations"
             ),
-            Self::MissingDependency {
-                operation,
-                dependencies,
-            } => write!(
+            Self::MissingDependency { operation } => write!(
                 f,
-                "{operation} is blocked by {} unported SIS C-file dependencies",
-                dependencies.len()
+                "operation {:?} requires native SIS prerequisite ports",
+                operation
             ),
         }
     }
@@ -237,17 +167,12 @@ impl BddArena {
     }
 }
 
-pub fn required_port_dependencies() -> &'static [PortDependency] {
-    REQUIRED_PORT_DEPENDENCIES
-}
-
 pub fn power_direct_ps_lines_prob_from_sis<Network, InfoTable>(
     _network: &Network,
     _info_table: &InfoTable,
 ) -> Result<PsApproximationReport, PsApprError> {
     Err(PsApprError::MissingDependency {
         operation: "power_direct_PS_lines_prob",
-        dependencies: REQUIRED_PORT_DEPENDENCIES,
     })
 }
 
@@ -990,37 +915,6 @@ mod tests {
 
         assert!(report.converged);
         assert_eq!(report.probabilities, vec![1.0]);
-    }
-
-    #[test]
-    fn sis_bound_operation_reports_dependency_beads_and_sources() {
-        let error = power_direct_ps_lines_prob_from_sis(&(), &()).unwrap_err();
-
-        let PsApprError::MissingDependency {
-            operation,
-            dependencies,
-        } = error
-        else {
-            panic!("expected missing dependency error");
-        };
-        assert_eq!(operation, "power_direct_PS_lines_prob");
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.330"
-                && dependency.source_file == "LogicSynthesis/sis/ntbdd/node_to_bdd.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.407"
-                && dependency.source_file == "LogicSynthesis/sis/power/power_util.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.400"
-                && dependency.source_file == "LogicSynthesis/sis/power/power_main.c"
-        }));
-        assert!(
-            error
-                .to_string()
-                .contains("unported SIS C-file dependencies")
-        );
     }
 
     #[test]

@@ -1,4 +1,4 @@
-//! Native Rust model for `LogicSynthesis/sis/power/power_pipe.c`.
+﻿//! Native Rust model for `LogicSynthesis/sis/power/power_pipe.c`.
 //!
 //! The C file evaluates static pipelined circuits by building the symbolic
 //! transition network from `power_sim.c`, splicing in two copies of zero-delay
@@ -14,76 +14,6 @@ use std::fmt;
 
 pub const CAPACITANCE: f64 = 0.01;
 pub const POWER_SCALE: f64 = 250.0;
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_PORT_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.406",
-        source_file: "LogicSynthesis/sis/power/power_sim.c",
-        reason: "power_symbolic_simulate creates the transition network consumed by power_pipe.c",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.398",
-        source_file: "LogicSynthesis/sis/power/power_comp.c",
-        reason: "power_calc_func_prob evaluates BDD output probabilities",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.330",
-        source_file: "LogicSynthesis/sis/ntbdd/node_to_bdd.c",
-        reason: "ntbdd_node_to_bdd converts symbolic nodes before probability calculation",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.329",
-        source_file: "LogicSynthesis/sis/ntbdd/manager.c",
-        reason: "ntbdd_start_manager and ntbdd_end_manager manage BDD lifetime",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.442",
-        source_file: "LogicSynthesis/sis/seqbdd/verif_util.c",
-        reason: "order_nodes supplies the PI order used for BDD leaf probabilities",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.305",
-        source_file: "LogicSynthesis/sis/network/network_util.c",
-        reason: "network_dup, node insertion/deletion, primary-output insertion, find, and checks",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.307",
-        source_file: "LogicSynthesis/sis/network/sweep.c",
-        reason: "network_sweep removes zero-delay nodes that no longer feed outputs",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.299",
-        source_file: "LogicSynthesis/sis/network/net_seq.c",
-        reason: "network_delete_latch and network_connect short-circuit pipeline latches",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.313",
-        source_file: "LogicSynthesis/sis/node/fan.c",
-        reason: "node_patch_fanin and fanout traversal are used during concatenation",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.317",
-        source_file: "LogicSynthesis/sis/node/names.c",
-        reason: "network_change_node_name and node names determine n0_/nT_ copies",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-        reason: "node_dup and node function classification for PI/PO/internal handling",
-    },
-];
-
-pub fn required_port_dependencies() -> &'static [PortDependency] {
-    REQUIRED_PORT_DEPENDENCIES
-}
-
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct NodeId(pub usize);
 
@@ -518,7 +448,6 @@ pub fn evaluate_sis_pipeline_power<Network, InfoTable>(
 ) -> Result<PipelinePowerReport, PowerPipeError> {
     Err(PowerPipeError::MissingSisDependencies {
         operation: "power_pipe_arbit",
-        dependencies: REQUIRED_PORT_DEPENDENCIES,
     })
 }
 
@@ -528,22 +457,15 @@ pub fn add_pipeline_logic_to_sis_network<Network>(
 ) -> Result<PipelineLogicReport, PowerPipeError> {
     Err(PowerPipeError::MissingSisDependencies {
         operation: "power_add_pipeline_logic",
-        dependencies: REQUIRED_PORT_DEPENDENCIES,
     })
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum PowerPipeError {
-    MissingSisDependencies {
-        operation: &'static str,
-        dependencies: &'static [PortDependency],
-    },
+    MissingSisDependencies { operation: &'static str },
     DuplicateNode,
     MissingNode(NodeId),
-    MissingFanin {
-        node: NodeId,
-        fanin: NodeId,
-    },
+    MissingFanin { node: NodeId, fanin: NodeId },
     MissingSymbolicNode(String),
     MissingPowerInfo(NodeId),
     PrimaryOutputWithoutFanin(NodeId),
@@ -554,19 +476,11 @@ pub enum PowerPipeError {
 impl fmt::Display for PowerPipeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingSisDependencies {
-                operation,
-                dependencies,
-            } => {
-                write!(f, "{operation} requires native SIS prerequisite ports: ")?;
-                for (index, dependency) in dependencies.iter().enumerate() {
-                    if index > 0 {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "{} ({})", dependency.bead_id, dependency.source_file)?;
-                }
-                Ok(())
-            }
+            Self::MissingSisDependencies { operation } => write!(
+                f,
+                "operation {:?} requires native SIS prerequisite ports",
+                operation
+            ),
             Self::DuplicateNode => write!(f, "pipeline network contains a duplicate node id"),
             Self::MissingNode(node) => write!(f, "pipeline network is missing node {:?}", node),
             Self::MissingFanin { node, fanin } => {
@@ -737,33 +651,6 @@ mod tests {
         assert_eq!(report.contributions[0].scaled_power, 2.5);
         assert_eq!(power_info[&NodeId(100)].switching_prob, 0.75);
         assert_eq!(power_info[&NodeId(101)].switching_prob, 0.25);
-    }
-
-    #[test]
-    fn sis_bound_operations_report_dependency_beads_and_sources() {
-        let error = evaluate_sis_pipeline_power(&(), &()).unwrap_err();
-        let PowerPipeError::MissingSisDependencies {
-            operation,
-            dependencies,
-        } = error
-        else {
-            panic!("expected missing SIS dependency error");
-        };
-
-        assert_eq!(operation, "power_pipe_arbit");
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.406"
-                && dependency.source_file == "LogicSynthesis/sis/power/power_sim.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.330"
-                && dependency.source_file == "LogicSynthesis/sis/ntbdd/node_to_bdd.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.299"
-                && dependency.source_file == "LogicSynthesis/sis/network/net_seq.c"
-        }));
-        assert!(format!("{error}").contains("power_pipe_arbit"));
     }
 
     #[test]

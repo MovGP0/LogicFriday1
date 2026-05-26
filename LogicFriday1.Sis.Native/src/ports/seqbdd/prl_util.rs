@@ -4,61 +4,12 @@
 //! reporting, and BDD array/minterm utilities. This module ports those behaviors
 //! onto owned Rust data structures. Direct SIS `network_t`, `node_t`, `array_t`,
 //! `st_table`, and BDD-manager integration remains blocked on the native ports
-//! listed by `required_port_beads`.
+//! reported as missing native SIS ports.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::error::Error;
 use std::fmt;
 use std::time::Duration;
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub note: &'static str,
-}
-
-pub const REQUIRED_PORT_BEADS: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.2",
-        source_file: "LogicSynthesis/sis/array/array.c",
-        note: "array_t ownership for BDD arrays and temporary node lists",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.71",
-        source_file: "LogicSynthesis/sis/bdd_cmu/bdd_port/bddport.c",
-        note: "BDD constants, boolean operations, cube iteration, smoothing, and var IDs",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.305",
-        source_file: "LogicSynthesis/sis/network/network_util.c",
-        note: "network lookup, naming, PI/PO iteration, add/delete, sweep, and dc_network slots",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.313",
-        source_file: "LogicSynthesis/sis/node/fan.c",
-        note: "fanin traversal and node_get_fanin",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-        note: "node allocation, duplication, literals, kinds, names, and fanout accounting",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.485",
-        source_file: "LogicSynthesis/sis/st/st.c",
-        note: "st_table pointer and integer maps",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.504",
-        source_file: "LogicSynthesis/sis/util/cpu_time.c",
-        note: "SIS millisecond CPU timer used by elapsed-time reports",
-    },
-];
-
-pub fn required_port_beads() -> &'static [PortDependency] {
-    REQUIRED_PORT_BEADS
-}
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct NodeId(pub usize);
@@ -276,13 +227,8 @@ pub enum PrlUtilError {
     MissingPrimaryOutputFanin(NodeId),
     MissingCopyForPrimaryInput(NodeId),
     EmptyFunction,
-    InvalidSingleOutputDcNetwork {
-        outputs: usize,
-    },
-    MissingNativePorts {
-        operation: &'static str,
-        dependencies: &'static [PortDependency],
-    },
+    InvalidSingleOutputDcNetwork { outputs: usize },
+    MissingNativePorts { operation: &'static str },
 }
 
 impl fmt::Display for PrlUtilError {
@@ -301,14 +247,9 @@ impl fmt::Display for PrlUtilError {
                 f,
                 "single-output dc network must contain exactly one PO, found {outputs}"
             ),
-            Self::MissingNativePorts {
-                operation,
-                dependencies,
-            } => write!(
-                f,
-                "{operation} is blocked by {} unported SIS dependencies",
-                dependencies.len()
-            ),
+            Self::MissingNativePorts { operation } => {
+                write!(f, "{operation} is blocked by missing native SIS ports")
+            }
         }
     }
 }
@@ -348,10 +289,7 @@ pub fn sis_get_pi_to_var_table() -> Result<(), PrlUtilError> {
 }
 
 fn missing_native_ports<T>(operation: &'static str) -> Result<T, PrlUtilError> {
-    Err(PrlUtilError::MissingNativePorts {
-        operation,
-        dependencies: REQUIRED_PORT_BEADS,
-    })
+    Err(PrlUtilError::MissingNativePorts { operation })
 }
 
 pub fn remove_dc_network(network: &mut PrlNetwork) -> Option<PrlNetwork> {
@@ -991,26 +929,5 @@ mod tests {
         assert_eq!(report.elapsed, Duration::from_millis(250));
         assert_eq!(report.total, Duration::from_millis(250));
         assert_eq!(report.comment.as_deref(), Some("done"));
-    }
-
-    #[test]
-    fn blocked_sis_entry_points_report_dependency_beads_and_source_files() {
-        let Err(PrlUtilError::MissingNativePorts {
-            operation,
-            dependencies,
-        }) = sis_get_one_edge()
-        else {
-            panic!("expected missing dependency error");
-        };
-
-        assert_eq!(operation, "Prl_GetOneEdge");
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.71"
-                && dependency.source_file == "LogicSynthesis/sis/bdd_cmu/bdd_port/bddport.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.485"
-                && dependency.source_file == "LogicSynthesis/sis/st/st.c"
-        }));
     }
 }

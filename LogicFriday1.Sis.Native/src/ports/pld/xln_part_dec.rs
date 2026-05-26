@@ -86,71 +86,15 @@ pub enum SplitPlan {
     NoAndOrDecomposition,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_INTEGRATION_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.181",
-        source_file: "LogicSynthesis/sis/extract/genkern.c",
-        reason: "ex_kernel_gen and ex_subkernel_gen enumerate algebraic kernels",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.188",
-        source_file: "LogicSynthesis/sis/extract/qdivisor.c",
-        reason: "ex_find_divisor_quick decides whether kernel extraction is worth trying",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.305",
-        source_file: "LogicSynthesis/sis/network/network_util.c",
-        reason: "network_dfs, network_add_node, and network_sweep mutate SIS networks",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.302",
-        source_file: "LogicSynthesis/sis/network/netchk.c",
-        reason: "network_check validates the network after each split",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.313",
-        source_file: "LogicSynthesis/sis/node/fan.c",
-        reason: "node_num_fanin provides support sizes for split decisions",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-        reason: "node_dup, node_free, node_literal, node_and, node_or, and node_replace are required",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.312",
-        source_file: "LogicSynthesis/sis/node/divide.c",
-        reason: "node_div computes cokernel/remainder pairs for selected divisors",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.377",
-        source_file: "LogicSynthesis/sis/pld/xln_aodecomp.c",
-        reason: "pld_decomp_and_or is the C fallback when no useful kernel divisor is found",
-    },
-];
-
-pub fn required_integration_dependencies() -> &'static [PortDependency] {
-    REQUIRED_INTEGRATION_DEPENDENCIES
-}
-
 pub fn split_network_blocked() -> Result<(), XlnPartDecError> {
     Err(XlnPartDecError::MissingIntegrationDependencies {
         operation: "SIS split_network network traversal and mutation",
-        dependencies: REQUIRED_INTEGRATION_DEPENDENCIES,
     })
 }
 
 pub fn split_node_blocked() -> Result<(), XlnPartDecError> {
     Err(XlnPartDecError::MissingIntegrationDependencies {
         operation: "SIS split_node node rewriting",
-        dependencies: REQUIRED_INTEGRATION_DEPENDENCIES,
     })
 }
 
@@ -284,27 +228,17 @@ fn recursive_split_targets(evaluations: &[KernelEvaluation]) -> Vec<PldNodeSumma
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum XlnPartDecError {
-    InvalidSize {
-        size: usize,
-    },
-    MissingIntegrationDependencies {
-        operation: &'static str,
-        dependencies: &'static [PortDependency],
-    },
+    InvalidSize { size: usize },
+    MissingIntegrationDependencies { operation: &'static str },
 }
 
 impl fmt::Display for XlnPartDecError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::InvalidSize { size } => write!(f, "split size must be positive, got {size}"),
-            Self::MissingIntegrationDependencies {
-                operation,
-                dependencies,
-            } => write!(
-                f,
-                "{operation} is blocked by {} unported SIS dependencies",
-                dependencies.len()
-            ),
+            Self::MissingIntegrationDependencies { operation } => {
+                write!(f, "{operation} is blocked by unported SIS dependencies")
+            }
         }
     }
 }
@@ -424,38 +358,5 @@ mod tests {
             plan_split_node(&parent(), 0, true, &[], true),
             Err(XlnPartDecError::InvalidSize { size: 0 })
         );
-    }
-
-    #[test]
-    fn blocked_sis_entries_report_dependency_beads_and_source_files() {
-        let error = split_network_blocked().expect_err("SIS integration is intentionally gated");
-        let XlnPartDecError::MissingIntegrationDependencies {
-            operation,
-            dependencies,
-        } = error
-        else {
-            panic!("expected dependency error");
-        };
-
-        assert_eq!(
-            operation,
-            "SIS split_network network traversal and mutation"
-        );
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.181"
-                && dependency.source_file == "LogicSynthesis/sis/extract/genkern.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.188"
-                && dependency.source_file == "LogicSynthesis/sis/extract/qdivisor.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.377"
-                && dependency.source_file == "LogicSynthesis/sis/pld/xln_aodecomp.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.318"
-                && dependency.source_file == "LogicSynthesis/sis/node/node.c"
-        }));
     }
 }

@@ -10,59 +10,9 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_SIS_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.2",
-        source_file: "LogicSynthesis/sis/array/array.c",
-        reason: "re_initial.c consumes array_t input sequences and retime graph collections",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.230",
-        source_file: "LogicSynthesis/sis/latch/latch.c",
-        reason: "latch_t identity and latch initial values are copied into retime edge state",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.305",
-        source_file: "LogicSynthesis/sis/network/network_util.c",
-        reason: "network_dup, network_free, network_find_node, real-PI checks, and latch iteration",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-        reason: "node names, primary-input metadata, node functions, cubes, and literals",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.326",
-        source_file: "LogicSynthesis/sis/ntbdd/bdd_at_node.c",
-        reason: "sequential BDD support used by seqbdd_extract_input_sequence",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.331",
-        source_file: "LogicSynthesis/sis/ntbdd/verify_ntwk.c",
-        reason: "seqbdd_extract_input_sequence computes the reset ancestor and input trace",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.423",
-        source_file: "LogicSynthesis/sis/retime/retime_util.c",
-        reason: "legacy re_graph allocation, node IDs, edge linkage, and accessors",
-    },
-];
-
-pub fn required_sis_dependencies() -> &'static [PortDependency] {
-    REQUIRED_SIS_DEPENDENCIES
-}
-
 pub fn retime_update_init_states_from_sis_blocked() -> Result<(), ReInitialError> {
     Err(ReInitialError::MissingSisDependencies {
         operation: "retime_update_init_states",
-        dependencies: REQUIRED_SIS_DEPENDENCIES,
     })
 }
 
@@ -704,7 +654,6 @@ impl RetimeStack {
 pub enum ReInitialError {
     MissingSisDependencies {
         operation: &'static str,
-        dependencies: &'static [PortDependency],
     },
     MissingNode(NodeId),
     MissingEdge(EdgeId),
@@ -766,14 +715,9 @@ pub enum ReInitialError {
 impl fmt::Display for ReInitialError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingSisDependencies {
-                operation,
-                dependencies,
-            } => write!(
-                f,
-                "{operation} is blocked by {} unported SIS dependencies",
-                dependencies.len()
-            ),
+            Self::MissingSisDependencies { operation } => {
+                write!(f, "{operation} requires native prerequisite ports")
+            }
             Self::MissingNode(node) => write!(f, "missing retime node {}", node.0),
             Self::MissingEdge(edge) => write!(f, "missing retime edge {}", edge.0),
             Self::MissingLatchInitialValue(latch) => {
@@ -969,27 +913,6 @@ mod tests {
             Err(ReInitialError::IncompleteRetiming {
                 node: n,
                 remaining: -1
-            })
-        );
-    }
-
-    #[test]
-    fn sis_entry_point_reports_dependency_beads_and_sources() {
-        let dependencies = required_sis_dependencies();
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.331"
-                && dependency.source_file == "LogicSynthesis/sis/ntbdd/verify_ntwk.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.318"
-                && dependency.source_file == "LogicSynthesis/sis/node/node.c"
-        }));
-
-        assert_eq!(
-            retime_update_init_states_from_sis_blocked(),
-            Err(ReInitialError::MissingSisDependencies {
-                operation: "retime_update_init_states",
-                dependencies: REQUIRED_SIS_DEPENDENCIES
             })
         );
     }

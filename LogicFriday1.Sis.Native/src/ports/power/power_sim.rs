@@ -9,52 +9,6 @@
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_PORT_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.2",
-        source_file: "LogicSynthesis/sis/array/array.c",
-        reason: "C power_sim.c stores transition frames and symbolic nodes in array_t",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.305",
-        source_file: "LogicSynthesis/sis/network/network_util.c",
-        reason: "network allocation, naming, node insertion, primary-output insertion, and checks",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.313",
-        source_file: "LogicSynthesis/sis/node/fan.c",
-        reason: "fanin iteration, fanin lookup, and fanin patching for duplicated nodes",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.317",
-        source_file: "LogicSynthesis/sis/node/names.c",
-        reason: "node_long_name and network_change_node_name semantics",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-        reason: "node duplication, literal creation, XOR creation, and node function classification",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.407",
-        source_file: "LogicSynthesis/sis/power/power_util.c",
-        reason: "power_network_dfs supplies the C traversal order consumed by power_sim.c",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.485",
-        source_file: "LogicSynthesis/sis/st/st.c",
-        reason: "info_table and internal delay_info lookup tables are st_table instances",
-    },
-];
-
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct NodeId(pub usize);
 
@@ -254,19 +208,9 @@ impl SymbolicPowerNetwork {
 pub enum PowerSimError {
     UnknownNode(NodeId),
     UnknownSymbolicNode(SymbolicNodeId),
-    MissingNodeInfo {
-        node: NodeId,
-        dependencies: &'static [PortDependency],
-    },
-    MissingFaninDelayInfo {
-        node: NodeId,
-        fanin: NodeId,
-        dependencies: &'static [PortDependency],
-    },
-    MissingNativePorts {
-        operation: &'static str,
-        dependencies: &'static [PortDependency],
-    },
+    MissingNodeInfo { node: NodeId },
+    MissingFaninDelayInfo { node: NodeId, fanin: NodeId },
+    MissingNativePorts { operation: &'static str },
 }
 
 impl fmt::Display for PowerSimError {
@@ -286,13 +230,10 @@ impl fmt::Display for PowerSimError {
                 "node {:?} depends on fanin {:?}, but no symbolic delay_info_t exists for it",
                 node, fanin
             ),
-            Self::MissingNativePorts {
-                operation,
-                dependencies,
-            } => write!(
+            Self::MissingNativePorts { operation } => write!(
                 f,
-                "{operation} is blocked by {} unported SIS C-file dependencies",
-                dependencies.len()
+                "operation {:?} requires native SIS prerequisite ports",
+                operation
             ),
         }
     }
@@ -338,10 +279,6 @@ impl DelayInfo {
     }
 }
 
-pub fn required_port_dependencies() -> &'static [PortDependency] {
-    REQUIRED_PORT_DEPENDENCIES
-}
-
 pub fn power_symbolic_simulate(
     network: &PowerNetwork,
     info_table: &HashMap<NodeId, NodeInfo>,
@@ -376,10 +313,7 @@ pub fn power_symbolic_simulate(
             PowerNodeKind::Internal => {
                 let gate_delay = info_table
                     .get(actual_id)
-                    .ok_or(PowerSimError::MissingNodeInfo {
-                        node: *actual_id,
-                        dependencies: REQUIRED_PORT_DEPENDENCIES,
-                    })?
+                    .ok_or(PowerSimError::MissingNodeInfo { node: *actual_id })?
                     .delay;
 
                 let mut min = i32::MAX;
@@ -391,7 +325,6 @@ pub fn power_symbolic_simulate(
                             .ok_or(PowerSimError::MissingFaninDelayInfo {
                                 node: *actual_id,
                                 fanin: *fanin,
-                                dependencies: REQUIRED_PORT_DEPENDENCIES,
                             })?;
                     min = min.min(delay_info.first_time());
                     max = max.max(delay_info.last_time());
@@ -408,7 +341,6 @@ pub fn power_symbolic_simulate(
                             .ok_or(PowerSimError::MissingFaninDelayInfo {
                                 node: *actual_id,
                                 fanin: *fanin,
-                                dependencies: REQUIRED_PORT_DEPENDENCIES,
                             })?;
                     for frame in &delay_info.switching_times {
                         switched[(frame - min) as usize][fanin_index] = true;
@@ -424,7 +356,6 @@ pub fn power_symbolic_simulate(
                             .ok_or(PowerSimError::MissingFaninDelayInfo {
                                 node: *actual_id,
                                 fanin: *fanin,
-                                dependencies: REQUIRED_PORT_DEPENDENCIES,
                             })?;
                     let old = delay_info.before_switching[0];
                     old_to_gate.push(old);
@@ -495,7 +426,6 @@ pub fn power_symbolic_simulate_from_sis_network<Network, InfoTable>(
 ) -> Result<SymbolicPowerNetwork, PowerSimError> {
     Err(PowerSimError::MissingNativePorts {
         operation: "power_symbolic_simulate",
-        dependencies: REQUIRED_PORT_DEPENDENCIES,
     })
 }
 
@@ -533,7 +463,6 @@ fn update_new_to_gate(
             .ok_or(PowerSimError::MissingFaninDelayInfo {
                 node: actual_id,
                 fanin,
-                dependencies: REQUIRED_PORT_DEPENDENCIES,
             })?;
         if let Some(symbolic_fanin) = delay_info.after_at_time(frame) {
             new_to_gate[fanin_index] = symbolic_fanin;
@@ -644,32 +573,6 @@ mod tests {
     }
 
     #[test]
-    fn missing_node_info_reports_dependency_beads_and_sources() {
-        let mut network = PowerNetwork::new("missing");
-        let a = network.add_node(PowerNode::new("a", PowerNodeKind::PrimaryInput));
-        let n = network.add_node(PowerNode::new("n", PowerNodeKind::Internal).with_fanins(vec![a]));
-
-        let error = power_symbolic_simulate(&network, &HashMap::new()).unwrap_err();
-
-        assert_eq!(
-            error,
-            PowerSimError::MissingNodeInfo {
-                node: n,
-                dependencies: REQUIRED_PORT_DEPENDENCIES,
-            }
-        );
-        assert!(error.to_string().contains("node_info_t"));
-        assert!(required_port_dependencies().iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.407"
-                && dependency.source_file == "LogicSynthesis/sis/power/power_util.c"
-        }));
-        assert!(required_port_dependencies().iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.318"
-                && dependency.source_file == "LogicSynthesis/sis/node/node.c"
-        }));
-    }
-
-    #[test]
     fn sis_bound_entry_reports_explicit_missing_dependencies() {
         let error = power_symbolic_simulate_from_sis_network(&(), &()).unwrap_err();
 
@@ -677,13 +580,12 @@ mod tests {
             error,
             PowerSimError::MissingNativePorts {
                 operation: "power_symbolic_simulate",
-                dependencies: REQUIRED_PORT_DEPENDENCIES,
             }
         );
         assert!(
             error
                 .to_string()
-                .contains("unported SIS C-file dependencies")
+                .contains("requires native SIS prerequisite ports")
         );
     }
 

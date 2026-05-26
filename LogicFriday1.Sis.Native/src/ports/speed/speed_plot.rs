@@ -1,4 +1,4 @@
-//! Native Rust command/formatting port for `LogicSynthesis/sis/speed/speed_plot.c`.
+﻿//! Native Rust command/formatting port for `LogicSynthesis/sis/speed/speed_plot.c`.
 //!
 //! The legacy C command opens the SIS graphics backend, plots the current
 //! network as BLIF, traces delay, computes critical nodes or cutsets, and then
@@ -15,22 +15,6 @@ pub const DEFAULT_SPEED_COEFF: f64 = 0.0;
 pub const DEFAULT_SPEED_DIST: i32 = 3;
 
 pub const SPEED_PLOT_COMMAND: &str = "_speed_plot";
-
-pub const REQUIRED_PORT_BEADS: &[&str] = &[
-    "LogicFriday1-8j8.2.6.133", // delay/delay.c: delay_get_model_from_name, delay_trace, delay_latest_output
-    "LogicFriday1-8j8.2.6.214", // graphics/com_graphics.c: com_graphics_enabled/open/close
-    "LogicFriday1-8j8.2.6.216", // io/plot_blif.c: io_plot_network
-    "LogicFriday1-8j8.2.6.257", // map/library.c: lib_gate_of, lib_gate_name
-    "LogicFriday1-8j8.2.6.305", // network/network_util.c: network_name and network iteration helpers
-    "LogicFriday1-8j8.2.6.317", // node/names.c: node_long_name
-    "LogicFriday1-8j8.2.6.318", // node/node.c: node type/function data
-    "LogicFriday1-8j8.2.6.465", // speed/com_speed.c: speed_fill_options
-    "LogicFriday1-8j8.2.6.467", // speed/new_speed.c: new speed cutset flow
-    "LogicFriday1-8j8.2.6.468", // speed/new_wght_util.c: new_speed_compute_weight/select/free
-    "LogicFriday1-8j8.2.6.480", // speed/speed_util.c: set_speed_thresh
-    "LogicFriday1-8j8.2.6.481", // speed/speedup.c: speed_critical
-    "LogicFriday1-8j8.2.6.483", // speed/weight.c: speed_compute_weight and cutset weights
-];
 
 const USAGE_TAIL: &[&str] = &[
     "    -n name\tPlot name to use instead of network name.\n",
@@ -245,10 +229,6 @@ pub struct HighlightOverlay<'a> {
     pub highlight_cutset: bool,
     pub critical_nodes: Vec<&'a str>,
     pub cutset_nodes: Vec<&'a str>,
-}
-
-pub fn required_port_beads() -> &'static [&'static str] {
-    REQUIRED_PORT_BEADS
 }
 
 pub fn usage(command_name: &str) -> String {
@@ -583,7 +563,6 @@ mod tests {
             format_cutset_trace(3, 0.5),
             "Distance = 3 ; Threshold =  0.50\n"
         );
-        assert!(required_port_beads().contains(&"LogicFriday1-8j8.2.6.214"));
         assert_eq!(
             plot_sis_network(&SpeedPlotOptions::with_network_name("net")),
             Err(SpeedPlotError::MissingDependency(

@@ -13,101 +13,6 @@ use std::fmt;
 pub const MAX_COST: i32 = 100_000;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_PORT_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.297",
-        source_file: "LogicSynthesis/sis/network/dfs.c",
-        reason: "act_ite_preprocess and act_ite_map_network traverse networks with network_dfs",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-        reason: "node type, node function, literal count, fanin count, and node storage drive node mapping",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.317",
-        source_file: "LogicSynthesis/sis/node/names.c",
-        reason: "debug and diagnostics use node_long_name",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.344",
-        source_file: "LogicSynthesis/sis/pld/act_bool.c",
-        reason: "act_is_act_function detects nodes realizable by one ACTEL block",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.351",
-        source_file: "LogicSynthesis/sis/pld/act_ite.c",
-        reason: "legacy ACT/ITE support routines provide ACTEL node construction helpers",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.353",
-        source_file: "LogicSynthesis/sis/pld/act_map.c",
-        reason: "my_create_act, act_init_multiple_fo_array, map_act, ACT globals, and ACT cleanup back BDD mapping",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.360",
-        source_file: "LogicSynthesis/sis/pld/act_util.c",
-        reason: "act_initialize_act_area initializes ACT DAG multiple-fanout mapping state",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.361",
-        source_file: "LogicSynthesis/sis/pld/com_ite.c",
-        reason: "command-level globals such as ACT_ITE_DEBUG, statistics, and act_is_or_used configure mapping",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.363",
-        source_file: "LogicSynthesis/sis/pld/ite_break.c",
-        reason: "act_ite_map_network_with_iter optionally breaks the final network into mapped blocks",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.365",
-        source_file: "LogicSynthesis/sis/pld/ite_factor.c",
-        reason: "factored-form ITE construction is one source of ACT_ITE_ite(node)",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.366",
-        source_file: "LogicSynthesis/sis/pld/ite_imp.c",
-        reason: "act_ite_iterative_improvement and alternate BDD remapping paths are invoked by this mapper",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.367",
-        source_file: "LogicSynthesis/sis/pld/ite_leaf.c",
-        reason: "ITE leaf handling participates in make_ite and canonical ITE construction",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.369",
-        source_file: "LogicSynthesis/sis/pld/ite_mroot.c",
-        reason: "multi-root ITE mapping shares the same act_map_ite pattern mapper",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.370",
-        source_file: "LogicSynthesis/sis/pld/ite_new_map.c",
-        reason: "MAP_WITH_ITER and MAP_WITH_JUST_DECOMP delegate to act_ite_map_node_with_iter_imp",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.371",
-        source_file: "LogicSynthesis/sis/pld/ite_new_urp.c",
-        reason: "NEW map method delegates to act_ite_new_map_node",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.372",
-        source_file: "LogicSynthesis/sis/pld/ite_pld.c",
-        reason: "ite_clear_dag and canonical ite_get storage are used after tree mapping",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.466",
-        source_file: "LogicSynthesis/sis/decomp/decomp.c",
-        reason: "act_ite_preprocess invokes decomp_quick_node for large literal-count nodes",
-    },
-];
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum NodeKind {
     PrimaryInput,
     PrimaryOutput,
@@ -199,7 +104,6 @@ pub enum IteMapError {
     HeuristicOutOfRange(i32),
     MissingNativePorts {
         operation: &'static str,
-        dependencies: &'static [PortDependency],
     },
 }
 
@@ -215,22 +119,10 @@ impl fmt::Display for IteMapError {
             Self::HeuristicOutOfRange(heuristic) => {
                 write!(f, "heuristic number {heuristic} is out of range")
             }
-            Self::MissingNativePorts {
-                operation,
-                dependencies,
-            } => {
-                write!(
-                    f,
-                    "{operation} requires native Rust ports for SIS dependencies: "
-                )?;
-                for (index, dependency) in dependencies.iter().enumerate() {
-                    if index > 0 {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "{} ({})", dependency.bead_id, dependency.source_file)?;
-                }
-                Ok(())
-            }
+            Self::MissingNativePorts { operation } => write!(
+                f,
+                "{operation} requires native Rust ports for SIS dependencies"
+            ),
         }
     }
 }
@@ -641,10 +533,6 @@ impl IteGraph {
     }
 }
 
-pub fn required_port_dependencies() -> &'static [PortDependency] {
-    REQUIRED_PORT_DEPENDENCIES
-}
-
 pub fn sis_bound_operation_unavailable(operation: &'static str) -> IteMapResult<()> {
     Err(missing_native_ports(operation))
 }
@@ -803,10 +691,7 @@ fn saturated_add(left: i32, right: i32) -> i32 {
 }
 
 fn missing_native_ports(operation: &'static str) -> IteMapError {
-    IteMapError::MissingNativePorts {
-        operation,
-        dependencies: REQUIRED_PORT_DEPENDENCIES,
-    }
+    IteMapError::MissingNativePorts { operation }
 }
 
 #[cfg(test)]
@@ -956,67 +841,6 @@ mod tests {
 
         assert_eq!(cost, 1);
         assert_eq!(node.cost.cost, 1);
-    }
-
-    #[test]
-    fn heuristic_three_reports_bdd_dependency_when_alternate_path_is_needed() {
-        let mut graph = IteGraph::new();
-        let x = graph.add_vertex(IteVertex::literal(true));
-        let y = graph.add_vertex(IteVertex::literal(false));
-        let z = graph.add_vertex(IteVertex::literal(false));
-        let a = graph.add_vertex(IteVertex::ite(x, y, z));
-        let root = graph.add_vertex(IteVertex::ite(x, a, y));
-        let mut node = MapNode::internal("n", NodeFunction::Other);
-        node.fanin_count = 3;
-        node.cost.ite_root = Some(root);
-
-        let Err(IteMapError::MissingNativePorts {
-            operation,
-            dependencies,
-        }) = act_ite_map_node_with_matcher(
-            &mut node,
-            &params(3),
-            &mut graph,
-            &MapOptions {
-                use_or_patterns: false,
-            },
-            |_node, _map_alg, _or_used| false,
-        )
-        else {
-            panic!("expected BDD missing dependency");
-        };
-
-        assert_eq!(operation, "act_bdd_make_tree_and_map alternate path");
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.353"
-                && dependency.source_file == "LogicSynthesis/sis/pld/act_map.c"
-        }));
-    }
-
-    #[test]
-    fn blocked_entries_report_dependency_beads_and_sources() {
-        let error = sis_bound_operation_unavailable("act_ite_preprocess").unwrap_err();
-        let IteMapError::MissingNativePorts {
-            operation,
-            dependencies,
-        } = error
-        else {
-            panic!("expected missing native ports");
-        };
-
-        assert_eq!(operation, "act_ite_preprocess");
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.297"
-                && dependency.source_file == "LogicSynthesis/sis/network/dfs.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.466"
-                && dependency.source_file == "LogicSynthesis/sis/decomp/decomp.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.370"
-                && dependency.source_file == "LogicSynthesis/sis/pld/ite_new_map.c"
-        }));
     }
 
     #[test]

@@ -78,16 +78,16 @@ pub struct MapperStateSummary {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum MapUtilError {
     VirtualNetwork(VirtualNetworkError),
-    MissingSisPorts {
-        operation: &'static str,
-    },
+    MissingSisPorts { operation: &'static str },
 }
 
 impl fmt::Display for MapUtilError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::VirtualNetwork(error) => write!(f, "{error}"),
-            Self::MissingSisPorts { operation } => write!(f, "{operation} requires unavailable native SIS integration"),
+            Self::MissingSisPorts { operation } => {
+                write!(f, "{operation} requires unavailable native SIS integration")
+            }
         }
     }
 }

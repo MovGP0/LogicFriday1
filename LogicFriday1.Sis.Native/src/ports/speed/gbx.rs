@@ -14,47 +14,6 @@ use std::fmt;
 const LARGE_SLACK: f64 = 1.0e29;
 const GBX_MAXWEIGHT: i32 = 0x7fff_fffe;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead: &'static str,
-    pub c_file: &'static str,
-}
-
-pub const REQUIRED_PORT_BEADS: &[PortDependency] = &[
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.133",
-        c_file: "LogicSynthesis/sis/delay/delay.c",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.278",
-        c_file: "LogicSynthesis/sis/maxflow/cutset.c",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.297",
-        c_file: "LogicSynthesis/sis/network/dfs.c",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.308",
-        c_file: "LogicSynthesis/sis/node/cofct.c",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.313",
-        c_file: "LogicSynthesis/sis/node/fan.c",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.315",
-        c_file: "LogicSynthesis/sis/node/iphase.c",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.318",
-        c_file: "LogicSynthesis/sis/node/node.c",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.476",
-        c_file: "LogicSynthesis/sis/speed/speed_net.c",
-    },
-];
-
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct NodeId(pub usize);
 
@@ -309,20 +268,10 @@ pub enum GbxTransformResult {
 #[derive(Clone, Debug, PartialEq)]
 pub enum GbxError {
     UnknownNode(NodeId),
-    MissingFanin {
-        node: NodeId,
-        fanin: NodeId,
-    },
-    MissingPinDelay {
-        node: NodeId,
-        pin: usize,
-        dependencies: &'static [PortDependency],
-    },
+    MissingFanin { node: NodeId, fanin: NodeId },
+    MissingPinDelay { node: NodeId, pin: usize },
     MissingRecord(NodeId),
-    MissingSisPorts {
-        operation: &'static str,
-        dependencies: &'static [PortDependency],
-    },
+    MissingSisPorts { operation: &'static str },
 }
 
 impl fmt::Display for GbxError {
@@ -338,14 +287,9 @@ impl fmt::Display for GbxError {
                 node
             ),
             Self::MissingRecord(node) => write!(f, "missing GBX timing record for {:?}", node),
-            Self::MissingSisPorts {
-                operation,
-                dependencies,
-            } => write!(
-                f,
-                "{operation} is blocked by {} unported SIS C-file dependencies",
-                dependencies.len()
-            ),
+            Self::MissingSisPorts { operation } => {
+                write!(f, "{operation} is blocked by unported SIS dependencies")
+            }
         }
     }
 }
@@ -383,11 +327,7 @@ pub fn new_node_bp_record(network: &GbxNetwork, node: NodeId) -> Result<NodeBpRe
             .pin_delays
             .get(pin)
             .copied()
-            .ok_or(GbxError::MissingPinDelay {
-                node,
-                pin,
-                dependencies: REQUIRED_PORT_BEADS,
-            })?;
+            .ok_or(GbxError::MissingPinDelay { node, pin })?;
         let fanin = network.node(edge.node)?;
         let mut required = node_data.required;
         let phase = if node_data.kind == NodeKind::PrimaryOutput {
@@ -742,21 +682,18 @@ pub fn critical_node_cut_weights(
 pub fn take_bypass_from_sis_network() -> Result<(), GbxError> {
     Err(GbxError::MissingSisPorts {
         operation: "take_bypass",
-        dependencies: REQUIRED_PORT_BEADS,
     })
 }
 
 pub fn do_gbx_transform_from_sis_network() -> Result<GbxTransformResult, GbxError> {
     Err(GbxError::MissingSisPorts {
         operation: "do_gbx_transform",
-        dependencies: REQUIRED_PORT_BEADS,
     })
 }
 
 pub fn do_bypass_transform_from_sis_network() -> Result<(), GbxError> {
     Err(GbxError::MissingSisPorts {
         operation: "do_bypass_transform",
-        dependencies: REQUIRED_PORT_BEADS,
     })
 }
 
@@ -1261,21 +1198,18 @@ mod tests {
             take_bypass_from_sis_network(),
             Err(GbxError::MissingSisPorts {
                 operation: "take_bypass",
-                dependencies: REQUIRED_PORT_BEADS,
             })
         );
         assert_eq!(
             do_gbx_transform_from_sis_network(),
             Err(GbxError::MissingSisPorts {
                 operation: "do_gbx_transform",
-                dependencies: REQUIRED_PORT_BEADS,
             })
         );
         assert_eq!(
             do_bypass_transform_from_sis_network(),
             Err(GbxError::MissingSisPorts {
                 operation: "do_bypass_transform",
-                dependencies: REQUIRED_PORT_BEADS,
             })
         );
     }

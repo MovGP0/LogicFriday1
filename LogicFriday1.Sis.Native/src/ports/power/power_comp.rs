@@ -9,56 +9,6 @@
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_PORT_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.329",
-        source_file: "LogicSynthesis/sis/ntbdd/manager.c",
-        reason: "native SIS BDD manager and CMU BDD node identity/index access",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.330",
-        source_file: "LogicSynthesis/sis/ntbdd/node_to_bdd.c",
-        reason: "conversion from SIS network nodes to BDD roots consumed by power_comp.c",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.403",
-        source_file: "LogicSynthesis/sis/power/power_psExact.c",
-        reason: "state probability table and present-state line encoding for exact mode",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.402",
-        source_file: "LogicSynthesis/sis/power/power_psAppr.c",
-        reason: "correlated present-state line set probabilities for approximate mode",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.407",
-        source_file: "LogicSynthesis/sis/power/power_util.c",
-        reason: "power_lines_in_set helper used by the grouped present-state probability scan",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.485",
-        source_file: "LogicSynthesis/sis/st/st.c",
-        reason: "legacy pointer-keyed visited and state-index tables are st_table instances",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.165",
-        source_file: "LogicSynthesis/sis/espresso/set.c",
-        reason: "legacy grouped present-state scan represents line constraints with Espresso pset",
-    },
-];
-
-pub fn required_port_dependencies() -> &'static [PortDependency] {
-    REQUIRED_PORT_DEPENDENCIES
-}
-
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct BddNodeId(pub usize);
 
@@ -236,7 +186,6 @@ pub enum PowerCompError {
     },
     MissingNativePorts {
         operation: &'static str,
-        dependencies: &'static [PortDependency],
     },
 }
 
@@ -278,13 +227,10 @@ impl fmt::Display for PowerCompError {
             Self::LineSetIndexOutOfRange { line, len } => {
                 write!(f, "line-set index {line} is outside line-set length {len}")
             }
-            Self::MissingNativePorts {
-                operation,
-                dependencies,
-            } => write!(
+            Self::MissingNativePorts { operation } => write!(
                 f,
-                "{operation} is blocked by {} unported SIS C-file dependencies",
-                dependencies.len()
+                "operation {:?} requires native SIS prerequisite ports",
+                operation
             ),
         }
     }
@@ -352,7 +298,6 @@ pub fn calculate_sis_function_probability<Bdd, PiInfo>(
 ) -> Result<f64, PowerCompError> {
     Err(PowerCompError::MissingNativePorts {
         operation: "power_calc_func_prob",
-        dependencies: REQUIRED_PORT_DEPENDENCIES,
     })
 }
 
@@ -364,7 +309,6 @@ pub fn calculate_sis_function_probability_with_state_prob<Bdd, PiInfo, StateProb
 ) -> Result<f64, PowerCompError> {
     Err(PowerCompError::MissingNativePorts {
         operation: "power_calc_func_prob_w_stateProb",
-        dependencies: REQUIRED_PORT_DEPENDENCIES,
     })
 }
 
@@ -375,7 +319,6 @@ pub fn calculate_sis_function_probability_with_sets<Bdd, PiInfo, PsProb>(
 ) -> Result<f64, PowerCompError> {
     Err(PowerCompError::MissingNativePorts {
         operation: "power_calc_func_prob_w_sets",
-        dependencies: REQUIRED_PORT_DEPENDENCIES,
     })
 }
 
@@ -773,32 +716,6 @@ mod tests {
         .unwrap();
 
         approx_eq(result, 0.75 * 0.8);
-    }
-
-    #[test]
-    fn sis_bound_entries_report_dependency_beads_and_sources() {
-        let error = calculate_sis_function_probability(&(), &()).unwrap_err();
-
-        assert_eq!(
-            error,
-            PowerCompError::MissingNativePorts {
-                operation: "power_calc_func_prob",
-                dependencies: REQUIRED_PORT_DEPENDENCIES,
-            }
-        );
-        assert!(
-            error
-                .to_string()
-                .contains("unported SIS C-file dependencies")
-        );
-        assert!(required_port_dependencies().iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.329"
-                && dependency.source_file == "LogicSynthesis/sis/ntbdd/manager.c"
-        }));
-        assert!(required_port_dependencies().iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.165"
-                && dependency.source_file == "LogicSynthesis/sis/espresso/set.c"
-        }));
     }
 
     #[test]

@@ -11,61 +11,6 @@ use std::error::Error;
 use std::fmt;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_PORT_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.2",
-        source_file: "LogicSynthesis/sis/array/array.c",
-        reason: "xln_exhaustive_k_decomp_network stores network_dfs nodes and Y/Z partitions in array_t",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.297",
-        source_file: "LogicSynthesis/sis/network/dfs.c",
-        reason: "xln_exhaustive_k_decomp_network visits nodes in network_dfs order",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.305",
-        source_file: "LogicSynthesis/sis/network/network_util.c",
-        reason: "network_get_po, network_num_internal, and network_free are needed for SIS network results",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.313",
-        source_file: "LogicSynthesis/sis/node/fan.c",
-        reason: "node_num_fanin and node_get_fanin drive partition generation and feasibility checks",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.386",
-        source_file: "LogicSynthesis/sis/pld/xln_k_decomp.c",
-        reason: "xln_k_decomp_node_with_network builds the candidate decomposition network for each lambda set",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.378",
-        source_file: "LogicSynthesis/sis/pld/xln_aux.c",
-        reason: "xln_array_to_indices converts the selected Y fanins into lambda indices",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.383",
-        source_file: "LogicSynthesis/sis/pld/xln_filter.c",
-        reason: "xln_generate_fanin_combination defines the binary partition order reused by this driver",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.380",
-        source_file: "LogicSynthesis/sis/pld/xln_cube.c",
-        reason: "xln_node_ao_map estimates root-node area and performs the final AO fallback",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.376",
-        source_file: "LogicSynthesis/sis/pld/pld_util.c",
-        reason: "pld_replace_node_by_network mutates the owning SIS network with the selected decomposition",
-    },
-];
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AreaNodeKind {
     PrimaryInput,
     Internal,
@@ -164,20 +109,10 @@ pub enum NodeAction {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum XlnKDeAreaError {
-    InvalidSupport {
-        support: usize,
-    },
-    TooManyFaninsForBitMask {
-        fanins: usize,
-    },
-    PartitionArityMismatch {
-        fanins: usize,
-        encoded_bits: usize,
-    },
-    MissingNativePorts {
-        operation: &'static str,
-        dependencies: &'static [PortDependency],
-    },
+    InvalidSupport { support: usize },
+    TooManyFaninsForBitMask { fanins: usize },
+    PartitionArityMismatch { fanins: usize, encoded_bits: usize },
+    MissingNativePorts { operation: &'static str },
 }
 
 impl fmt::Display for XlnKDeAreaError {
@@ -197,23 +132,15 @@ impl fmt::Display for XlnKDeAreaError {
                 f,
                 "partition encoding has {encoded_bits} bits for {fanins} fanins"
             ),
-            Self::MissingNativePorts {
-                operation,
-                dependencies,
-            } => write!(
+            Self::MissingNativePorts { operation } => write!(
                 f,
-                "{operation} is blocked by {} unported SIS C-file dependencies",
-                dependencies.len()
+                "{operation} is blocked by unported SIS C-file dependencies"
             ),
         }
     }
 }
 
 impl Error for XlnKDeAreaError {}
-
-pub fn required_port_dependencies() -> &'static [PortDependency] {
-    REQUIRED_PORT_DEPENDENCIES
-}
 
 pub fn xln_exhaustive_k_decomp_network_blocked<Network>(
     _network: &mut Network,
@@ -231,10 +158,7 @@ pub fn xln_exhaustive_k_decomp_node_blocked<Node>(
 }
 
 fn missing_native_ports(operation: &'static str) -> Result<(), XlnKDeAreaError> {
-    Err(XlnKDeAreaError::MissingNativePorts {
-        operation,
-        dependencies: REQUIRED_PORT_DEPENDENCIES,
-    })
+    Err(XlnKDeAreaError::MissingNativePorts { operation })
 }
 
 pub fn generate_fanin_combination(
@@ -567,35 +491,6 @@ mod tests {
         assert!(should_continue_after_replacement(KDecompAreaOptions::new(
             5, 7, true
         )));
-    }
-
-    #[test]
-    fn sis_bound_entries_report_dependency_beads_and_source_files() {
-        let mut network = ();
-        let Err(XlnKDeAreaError::MissingNativePorts {
-            operation,
-            dependencies,
-        }) = xln_exhaustive_k_decomp_network_blocked(
-            &mut network,
-            KDecompAreaOptions::new(5, 7, false),
-        )
-        else {
-            panic!("expected missing native ports");
-        };
-
-        assert_eq!(operation, "xln_exhaustive_k_decomp_network");
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.386"
-                && dependency.source_file == "LogicSynthesis/sis/pld/xln_k_decomp.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.380"
-                && dependency.source_file == "LogicSynthesis/sis/pld/xln_cube.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.376"
-                && dependency.source_file == "LogicSynthesis/sis/pld/pld_util.c"
-        }));
     }
 
     #[test]

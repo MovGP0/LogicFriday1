@@ -10,15 +10,6 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
 
-pub const REQUIRED_PORT_BEADS: &[&str] = &[
-    "LogicFriday1-8j8.2.6.318", // node/node.c: node duplication, fanin storage, names
-    "LogicFriday1-8j8.2.6.313", // node/fan.c: fanin/fanout rewiring
-    "LogicFriday1-8j8.2.6.297", // network/dfs.c: network_dfs_from_input
-    "LogicFriday1-8j8.2.6.305", // network/network_util.c: create_from_node, PI/PO traversal
-    "LogicFriday1-8j8.2.6.133", // delay/delay.c: delay parameters, loads, arrival times
-    "LogicFriday1-8j8.2.6.474", // speed/speed_delay.c: speed_delay_arrival_time
-];
-
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum DelayParameter {
     BlockRise,

@@ -4,56 +4,11 @@
 //! Boolean functions and returns a `node_t` sum-of-products over the associated
 //! output variables. This module keeps that behavior available over native Rust
 //! truth tables. The direct SIS entry points remain blocked on the native BDD,
-//! node, array, and `var_set` ports and report those dependencies explicitly.
+//! node, array, and `var_set` ports and reports unavailable SIS integration generically.
 
 use std::collections::BTreeSet;
 use std::error::Error;
 use std::fmt;
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead: &'static str,
-    pub c_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_PORT_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.2",
-        c_file: "LogicSynthesis/sis/array/array.c",
-        reason: "array_t ownership and indexed BDD/node lists",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.71",
-        c_file: "LogicSynthesis/sis/bdd_cmu/bdd_port/bddport.c",
-        reason: "SIS bdd_t manager, constants, tautology tests, support, and lifetime API",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.78",
-        c_file: "LogicSynthesis/sis/bdd_ucb/bdd_cofactor.c",
-        reason: "bdd_cofactor used by recursive output cofactoring",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.90",
-        c_file: "LogicSynthesis/sis/bdd_ucb/bdd_support.c",
-        reason: "bdd_get_support partitioning substrate",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.318",
-        c_file: "LogicSynthesis/sis/node/node.c",
-        reason: "node_constant, node_literal, node_and, node_or, node_function, and node_free",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.447",
-        c_file: "LogicSynthesis/sis/simplify/compute_dc.c",
-        reason: "CSPF(node)->set metadata consumed by set_size_sort",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.518",
-        c_file: "LogicSynthesis/sis/var_set/var_set.c",
-        reason: "support sets and disjoint-support partitions",
-    },
-];
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SisEntryPoint {
@@ -83,7 +38,6 @@ pub enum SimpImageError {
     },
     MissingSisDependencies {
         entry_point: SisEntryPoint,
-        dependencies: &'static [PortDependency],
     },
 }
 
@@ -113,13 +67,9 @@ impl fmt::Display for SimpImageError {
                 "image computation needs {outputs} output variables; this native scaffold supports at most {}",
                 usize::BITS - 1,
             ),
-            Self::MissingSisDependencies {
-                entry_point,
-                dependencies,
-            } => write!(
+            Self::MissingSisDependencies { entry_point } => write!(
                 f,
-                "{entry_point:?} requires {} unported SIS dependencies",
-                dependencies.len(),
+                "{entry_point:?} requires native Rust SIS ports that are not available yet"
             ),
         }
     }
@@ -239,21 +189,15 @@ impl fmt::Display for ImageExpr {
     }
 }
 
-pub fn required_port_dependencies() -> &'static [PortDependency] {
-    REQUIRED_PORT_DEPENDENCIES
-}
-
 pub fn simp_bull_cofactor_sis_blocked() -> Result<ImageExpr, SimpImageError> {
     Err(SimpImageError::MissingSisDependencies {
         entry_point: SisEntryPoint::SimpBullCofactor,
-        dependencies: REQUIRED_PORT_DEPENDENCIES,
     })
 }
 
 pub fn set_size_sort_sis_blocked() -> Result<(), SimpImageError> {
     Err(SimpImageError::MissingSisDependencies {
         entry_point: SisEntryPoint::SetSizeSort,
-        dependencies: REQUIRED_PORT_DEPENDENCIES,
     })
 }
 
@@ -503,22 +447,11 @@ mod tests {
                 values_len: 2,
             }),
         );
-
-        let error = simp_bull_cofactor_sis_blocked().unwrap_err();
-        let SimpImageError::MissingSisDependencies { dependencies, .. } = error else {
-            panic!("expected missing dependency error");
-        };
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead == "LogicFriday1-8j8.2.6.318"
-                && dependency.c_file == "LogicSynthesis/sis/node/node.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead == "LogicFriday1-8j8.2.6.518"
-                && dependency.c_file == "LogicSynthesis/sis/var_set/var_set.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead == "LogicFriday1-8j8.2.6.71"
-                && dependency.c_file == "LogicSynthesis/sis/bdd_cmu/bdd_port/bddport.c"
-        }));
+        assert_eq!(
+            simp_bull_cofactor_sis_blocked(),
+            Err(SimpImageError::MissingSisDependencies {
+                entry_point: SisEntryPoint::SimpBullCofactor,
+            })
+        );
     }
 }

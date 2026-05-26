@@ -6,118 +6,13 @@
 //! rewrites still depend on `network_t`, `node_t`, `array_t`, decomposition,
 //! simplify, partition, and delay ports. This module keeps the deterministic
 //! decision logic native on owned summaries and reports blocked SIS-bound entry
-//! points with explicit bead/source dependencies.
+//! points with explicit missing-port diagnostics.
 
 use std::error::Error;
 use std::fmt;
 
 pub const AREA: f64 = 0.0;
 pub const DELAY: f64 = 1.0;
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_PORT_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.2",
-        source_file: "LogicSynthesis/sis/array/array.c",
-        reason: "xln_imp.c stores DFS node vectors in array_t",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.129",
-        source_file: "LogicSynthesis/sis/decomp/decomp.c",
-        reason: "decomp_good_node, decomp_good_network, and decomp_disj_network drive alternate mappings",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.127",
-        source_file: "LogicSynthesis/sis/decomp/dec_tech.c",
-        reason: "xln_try_other_mapping_options calls decomp_tech_network",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.130",
-        source_file: "LogicSynthesis/sis/decomp/disj.c",
-        reason: "disjoint decomposition quality determines one alternate candidate",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.198",
-        source_file: "LogicSynthesis/sis/factor/ft_value.c",
-        reason: "selective good decomposition compares factor_num_literal against SOP literals",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.297",
-        source_file: "LogicSynthesis/sis/network/dfs.c",
-        reason: "network_dfs determines node traversal order",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.305",
-        source_file: "LogicSynthesis/sis/network/network_util.c",
-        reason: "network_create_from_node, network_num_internal, network_get_po, network_sweep, and cleanup are required",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.308",
-        source_file: "LogicSynthesis/sis/node/cofct.c",
-        reason: "xln_cofactor_decomp_node calls node_algebraic_cofactor",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.313",
-        source_file: "LogicSynthesis/sis/node/fan.c",
-        reason: "fanin traversal and fanin counts drive feasibility and cofactor fanin selection",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.317",
-        source_file: "LogicSynthesis/sis/node/names.c",
-        reason: "debug output uses node_long_name and node_name",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-        reason: "node_dup, node_free, node_literal, node_and, node_or, node_replace, and type checks are required",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.376",
-        source_file: "LogicSynthesis/sis/pld/pld_util.c",
-        reason: "pld_replace_node_by_network applies the chosen mapping to the original node",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.377",
-        source_file: "LogicSynthesis/sis/pld/xln_aodecomp.c",
-        reason: "xln_network_ao_map and xln_cofactor_decomp_node implement AO/cofactor PLD decomposition",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.389",
-        source_file: "LogicSynthesis/sis/pld/xln_map_par.c",
-        reason: "partition_network performs exact XL cover",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.391",
-        source_file: "LogicSynthesis/sis/pld/xln_move_d.c",
-        reason: "absorb mode reduces infeasibility by moving fanins",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.392",
-        source_file: "LogicSynthesis/sis/pld/xln_new_part.c",
-        reason: "xln_do_trivial_collapse_network prepares networks before exact cover",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.393",
-        source_file: "LogicSynthesis/sis/pld/xln_part_dec.c",
-        reason: "split_network recursively splits infeasible PLD nodes",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.455",
-        source_file: "LogicSynthesis/sis/simplify/simp.c",
-        reason: "xln_improve_node simplifies nodes before replacement",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.133",
-        source_file: "LogicSynthesis/sis/delay/delay.c",
-        reason: "delay-mode cofactor selection uses delay_slack_time",
-    },
-];
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct NodeId(pub usize);
@@ -414,18 +309,10 @@ pub struct ImproveNetworkPlan {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum XlnImpError {
     UnknownNode(NodeId),
-    InvalidSupport {
-        support: usize,
-    },
-    CubeArityMismatch {
-        expected: usize,
-        actual: usize,
-    },
+    InvalidSupport { support: usize },
+    CubeArityMismatch { expected: usize, actual: usize },
     NoFanins,
-    MissingNativePorts {
-        operation: ImpOperation,
-        dependencies: &'static [PortDependency],
-    },
+    MissingNativePorts { operation: ImpOperation },
 }
 
 impl fmt::Display for XlnImpError {
@@ -439,23 +326,15 @@ impl fmt::Display for XlnImpError {
                 write!(f, "cube has {actual} literals, expected {expected}")
             }
             Self::NoFanins => write!(f, "cofactor fanin selection requires at least one fanin"),
-            Self::MissingNativePorts {
-                operation,
-                dependencies,
-            } => write!(
+            Self::MissingNativePorts { operation } => write!(
                 f,
-                "{operation:?} is blocked by {} unported SIS C-file dependencies",
-                dependencies.len()
+                "{operation:?} is blocked by unported SIS C-file dependencies"
             ),
         }
     }
 }
 
 impl Error for XlnImpError {}
-
-pub fn required_port_dependencies() -> &'static [PortDependency] {
-    REQUIRED_PORT_DEPENDENCIES
-}
 
 pub fn selective_good_decomp_blocked<Network>(
     _network: &mut Network,
@@ -495,10 +374,7 @@ pub fn cofactor_decomp_blocked<Node>(
 }
 
 fn missing_native_ports<T>(operation: ImpOperation) -> Result<T, XlnImpError> {
-    Err(XlnImpError::MissingNativePorts {
-        operation,
-        dependencies: REQUIRED_PORT_DEPENDENCIES,
-    })
+    Err(XlnImpError::MissingNativePorts { operation })
 }
 
 pub fn selective_good_decomp_nodes(
@@ -1087,31 +963,6 @@ mod tests {
         let node = ImpNode::new("n", NodeKind::Internal).with_fanins(vec![a, b]);
 
         assert_eq!(select_fanin_for_cofactor_delay(&network, &node).unwrap(), b);
-    }
-
-    #[test]
-    fn sis_bound_entries_report_dependency_beads_and_sources() {
-        let Err(XlnImpError::MissingNativePorts {
-            operation,
-            dependencies,
-        }) = best_script_blocked(&(), default_params())
-        else {
-            panic!("expected dependency error");
-        };
-
-        assert_eq!(operation, ImpOperation::BestScript);
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.129"
-                && dependency.source_file == "LogicSynthesis/sis/decomp/decomp.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.376"
-                && dependency.source_file == "LogicSynthesis/sis/pld/pld_util.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.455"
-                && dependency.source_file == "LogicSynthesis/sis/simplify/simp.c"
-        }));
     }
 
     #[test]

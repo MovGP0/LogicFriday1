@@ -21,71 +21,6 @@ pub const ALL_TRANSFORMS: u8 = REPOWER_MASK | UNBALANCED_MASK | BALANCED_MASK;
 pub const UNIT_FANOUT_BLOCK: DelayTime = DelayTime::new(1.0, 1.0);
 pub const UNIT_FANOUT_DRIVE: DelayTime = DelayTime::new(0.2, 0.2);
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead: &'static str,
-    pub c_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_PORT_BEADS: &[PortDependency] = &[
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.133",
-        c_file: "LogicSynthesis/sis/delay/delay.c",
-        reason: "arrival, required, slack, load, and delay trace access",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.257",
-        c_file: "LogicSynthesis/sis/map/library.c",
-        reason: "mapped gate classes, gate pins, lib_set_gate",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.258",
-        c_file: "LogicSynthesis/sis/map/libutil.c",
-        reason: "library inverter and buffer discovery",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.297",
-        c_file: "LogicSynthesis/sis/network/dfs.c",
-        reason: "network traversal for buffering passes",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.305",
-        c_file: "LogicSynthesis/sis/network/network_util.c",
-        reason: "network_add_node and structural mutation",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.313",
-        c_file: "LogicSynthesis/sis/node/fan.c",
-        reason: "fanin and fanout traversal/patching",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.318",
-        c_file: "LogicSynthesis/sis/node/node.c",
-        reason: "node allocation, names, kinds, and buffer slots",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.460",
-        c_file: "LogicSynthesis/sis/speed/buf_delay.c",
-        reason: "buffer delay and input-drive annotation",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.461",
-        c_file: "LogicSynthesis/sis/speed/buf_recur.c",
-        reason: "top-down map-interface buffer recursion",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.474",
-        c_file: "LogicSynthesis/sis/speed/speed_delay.c",
-        reason: "mapped delay_node_pin and required-time data",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.480",
-        c_file: "LogicSynthesis/sis/speed/speed_util.c",
-        reason: "wire-load and library buffer/inverter helpers",
-    },
-];
-
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct DelayTime {
     pub rise: f64,
@@ -704,30 +639,18 @@ pub fn map_interface_with_sis_network() -> Result<(), BufUtilError> {
 }
 
 fn missing_sis_ports(operation: &'static str) -> Result<(), BufUtilError> {
-    Err(BufUtilError::MissingSisPorts {
-        operation,
-        dependencies: REQUIRED_PORT_BEADS,
-    })
+    Err(BufUtilError::MissingSisPorts { operation })
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum BufUtilError {
     UnknownOption(String),
     MissingOptionValue(&'static str),
-    InvalidOptionValue {
-        option: &'static str,
-        value: String,
-    },
+    InvalidOptionValue { option: &'static str, value: String },
     InvalidTransformMode(u8),
     NoFanins,
-    MissingGatePin {
-        gate: String,
-        pin: usize,
-    },
-    MissingSisPorts {
-        operation: &'static str,
-        dependencies: &'static [PortDependency],
-    },
+    MissingGatePin { gate: String, pin: usize },
+    MissingSisPorts { operation: &'static str },
 }
 
 impl fmt::Display for BufUtilError {
@@ -747,14 +670,9 @@ impl fmt::Display for BufUtilError {
             Self::MissingGatePin { gate, pin } => {
                 write!(f, "gate {gate} has no delay pin at index {pin}")
             }
-            Self::MissingSisPorts {
-                operation,
-                dependencies,
-            } => write!(
-                f,
-                "{operation} requires {} native SIS prerequisite ports",
-                dependencies.len()
-            ),
+            Self::MissingSisPorts { operation } => {
+                write!(f, "{operation} is blocked by unported SIS dependencies")
+            }
         }
     }
 }
@@ -972,14 +890,12 @@ mod tests {
             implement_buffer_chain_in_sis_network(),
             Err(BufUtilError::MissingSisPorts {
                 operation: "sp_implement_buffer_chain",
-                dependencies: REQUIRED_PORT_BEADS,
             })
         );
         assert_eq!(
             map_interface_with_sis_network(),
             Err(BufUtilError::MissingSisPorts {
                 operation: "buf_map_interface",
-                dependencies: REQUIRED_PORT_BEADS,
             })
         );
     }

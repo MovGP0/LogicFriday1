@@ -1,4 +1,4 @@
-//! Native Rust port scaffold for `sis/speed/speed_no.c`.
+﻿//! Native Rust port scaffold for `sis/speed/speed_no.c`.
 //!
 //! The original file drives speed decomposition by creating a temporary SIS
 //! network from one node, repeatedly trying alternative decompositions, keeping
@@ -13,15 +13,6 @@ use std::error::Error;
 use std::fmt;
 
 pub const POS_LARGE: f64 = 10_000.0;
-
-pub const REQUIRED_PORT_BEADS: &[&str] = &[
-    "LogicFriday1-8j8.2.6.476", // speed/speed_net.c: speed_network_create_from_node, array conversion
-    "LogicFriday1-8j8.2.6.474", // speed/speed_delay.c: speed_delay_trace and arrival extraction
-    "LogicFriday1-8j8.2.6.481", // speed/speedup.c: speed_decomp_network
-    "LogicFriday1-8j8.2.6.299", // network/net_seq.c and related network traversal
-    "LogicFriday1-8j8.2.6.318", // node/node.c: node type/function/mutation
-    "LogicFriday1-8j8.2.6.313", // node/fan.c: fanout traversal and collapse
-];
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum NodeKind {

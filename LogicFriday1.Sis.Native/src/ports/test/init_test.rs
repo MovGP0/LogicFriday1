@@ -16,12 +16,10 @@ pub struct CommandRegistration {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct CommandHandler {
     pub c_symbol: &'static str,
-    pub source_file: &'static str,
 }
 
 pub const TEST_COMMAND_HANDLER: CommandHandler = CommandHandler {
     c_symbol: "com_test",
-    source_file: "LogicSynthesis/sis/test/example.c",
 };
 
 pub const TEST_COMMAND_REGISTRATION: CommandRegistration = CommandRegistration {
@@ -57,7 +55,6 @@ mod tests {
     #[test]
     fn documents_unported_handler_dependency() {
         assert!(init_test_is_scaffolded());
-        assert!(TEST_COMMAND_HANDLER.source_file.ends_with("test/example.c"));
         assert!(INIT_TEST_BLOCKER.contains("com_test"));
     }
 }

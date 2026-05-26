@@ -1,4 +1,4 @@
-//! Native Rust model for `LogicSynthesis/sis/power/power_dynamic.c`.
+﻿//! Native Rust model for `LogicSynthesis/sis/power/power_dynamic.c`.
 //!
 //! The C routine estimates dynamic-logic power by optionally refreshing
 //! present-state probabilities for sequential networks, ordering primary inputs,
@@ -15,76 +15,6 @@ use std::fmt;
 
 pub const CAPACITANCE: f64 = 0.01;
 pub const POWER_SCALE: f64 = 250.0;
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_PORT_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.402",
-        source_file: "LogicSynthesis/sis/power/power_psAppr.c",
-        reason: "power_direct_PS_lines_prob refreshes present-state line probabilities",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.398",
-        source_file: "LogicSynthesis/sis/power/power_comp.c",
-        reason: "power_calc_func_prob evaluates BDD probability from PI probabilities",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.400",
-        source_file: "LogicSynthesis/sis/power/power_main.c",
-        reason: "allocates power_info_table and node_info_t probability records",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.329",
-        source_file: "LogicSynthesis/sis/ntbdd/manager.c",
-        reason: "ntbdd_start_manager and ntbdd_end_manager lifetime",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.330",
-        source_file: "LogicSynthesis/sis/ntbdd/node_to_bdd.c",
-        reason: "ntbdd_node_to_bdd and ntbdd_at_node provide per-node BDDs",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.442",
-        source_file: "LogicSynthesis/sis/seqbdd/verif_util.c",
-        reason: "order_nodes supplies the PI order used by the BDD manager",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.299",
-        source_file: "LogicSynthesis/sis/network/net_seq.c",
-        reason: "network_num_latch detects dynamic sequential circuits",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.305",
-        source_file: "LogicSynthesis/sis/network/network_util.c",
-        reason: "primary-input, primary-output, and node iteration over network_t",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-        reason: "node function classification and node names",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.485",
-        source_file: "LogicSynthesis/sis/st/st.c",
-        reason: "info_table, leaves, and power_info_table are st_table instances",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.2",
-        source_file: "LogicSynthesis/sis/array/array.c",
-        reason: "poArray, piOrder, and psOrder are legacy array_t values",
-    },
-];
-
-pub fn required_port_dependencies() -> &'static [PortDependency] {
-    REQUIRED_PORT_DEPENDENCIES
-}
-
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct NodeId(pub usize);
 
@@ -353,7 +283,6 @@ impl DynamicPowerModel {
 pub enum PowerDynamicError {
     MissingNativePorts {
         operation: &'static str,
-        dependencies: &'static [PortDependency],
     },
     DuplicateNode(NodeId),
     MissingNode(NodeId),
@@ -370,19 +299,11 @@ pub enum PowerDynamicError {
 impl fmt::Display for PowerDynamicError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingNativePorts {
-                operation,
-                dependencies,
-            } => {
-                write!(f, "{operation} requires native SIS prerequisite ports: ")?;
-                for (index, dependency) in dependencies.iter().enumerate() {
-                    if index > 0 {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "{} ({})", dependency.bead_id, dependency.source_file)?;
-                }
-                Ok(())
-            }
+            Self::MissingNativePorts { operation } => write!(
+                f,
+                "operation {:?} requires native SIS prerequisite ports",
+                operation
+            ),
             Self::DuplicateNode(node) => {
                 write!(f, "dynamic power model has duplicate node {:?}", node)
             }
@@ -420,7 +341,6 @@ pub fn evaluate_sis_dynamic_power<Network>(
 ) -> Result<DynamicPowerReport, PowerDynamicError> {
     Err(PowerDynamicError::MissingNativePorts {
         operation: "SIS power_dynamic",
-        dependencies: REQUIRED_PORT_DEPENDENCIES,
     })
 }
 
@@ -538,33 +458,6 @@ mod tests {
             expr.probability_one(&probabilities).unwrap_err(),
             PowerDynamicError::MissingInputProbability(NodeId(99))
         );
-    }
-
-    #[test]
-    fn sis_entry_reports_dependency_beads_and_sources() {
-        let error = evaluate_sis_dynamic_power(&()).unwrap_err();
-        let PowerDynamicError::MissingNativePorts {
-            operation,
-            dependencies,
-        } = error
-        else {
-            panic!("expected missing native port error");
-        };
-
-        assert_eq!(operation, "SIS power_dynamic");
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.402"
-                && dependency.source_file == "LogicSynthesis/sis/power/power_psAppr.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.398"
-                && dependency.source_file == "LogicSynthesis/sis/power/power_comp.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.330"
-                && dependency.source_file == "LogicSynthesis/sis/ntbdd/node_to_bdd.c"
-        }));
-        assert!(format!("{error}").contains("LogicFriday1-8j8.2.6.485"));
     }
 
     #[test]

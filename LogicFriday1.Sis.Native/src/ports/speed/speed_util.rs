@@ -44,71 +44,6 @@ pub const SP_PI_2: f64 = std::f64::consts::FRAC_PI_2;
 pub const SP_PI_4: f64 = std::f64::consts::FRAC_PI_4;
 pub const SP_1_PI: f64 = std::f64::consts::FRAC_1_PI;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead: &'static str,
-    pub c_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_PORT_BEADS: &[PortDependency] = &[
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.133",
-        c_file: "LogicSynthesis/sis/delay/delay.c",
-        reason: "delay_trace, delay_latest_output, delay_slack_time",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.195",
-        c_file: "LogicSynthesis/sis/factor/factor.c",
-        reason: "factor_num_literal for unmapped area",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.257",
-        c_file: "LogicSynthesis/sis/map/library.c",
-        reason: "mapped gate classes, gate lookup, gate area",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.297",
-        c_file: "LogicSynthesis/sis/network/dfs.c",
-        reason: "network_dfs_from_input ordering",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.305",
-        c_file: "LogicSynthesis/sis/network/network_util.c",
-        reason: "network_delete_node and network traversal helpers",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.309",
-        c_file: "LogicSynthesis/sis/node/collapse.c",
-        reason: "node_collapse for single-fanin cleanup",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.313",
-        c_file: "LogicSynthesis/sis/node/fan.c",
-        reason: "fanin and fanout traversal",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.318",
-        c_file: "LogicSynthesis/sis/node/node.c",
-        reason: "node cubes, literals, constants, names, and types",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.321",
-        c_file: "LogicSynthesis/sis/node/nodemisc.c",
-        reason: "node_replace",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.474",
-        c_file: "LogicSynthesis/sis/speed/speed_delay.c",
-        reason: "speed_delay_arrival_time",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.481",
-        c_file: "LogicSynthesis/sis/speed/speedup.c",
-        reason: "speed_critical",
-    },
-];
-
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct DelayTime {
     pub rise: f64,
@@ -289,10 +224,7 @@ impl<N> LevelNode<N> {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum SpeedUtilError {
-    MissingSisPorts {
-        operation: &'static str,
-        dependencies: &'static [PortDependency],
-    },
+    MissingSisPorts { operation: &'static str },
     MissingNode(String),
     Cycle(String),
     EmptyGateClass,
@@ -301,14 +233,9 @@ pub enum SpeedUtilError {
 impl fmt::Display for SpeedUtilError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingSisPorts {
-                operation,
-                dependencies,
-            } => write!(
-                f,
-                "{operation} requires {} native SIS prerequisite ports",
-                dependencies.len()
-            ),
+            Self::MissingSisPorts { operation } => {
+                write!(f, "{operation} is blocked by unported SIS dependencies")
+            }
             Self::MissingNode(node) => write!(f, "levelization references missing node {node}"),
             Self::Cycle(node) => write!(f, "levelization found a cycle at node {node}"),
             Self::EmptyGateClass => write!(f, "library class has no gates"),
@@ -317,10 +244,6 @@ impl fmt::Display for SpeedUtilError {
 }
 
 impl Error for SpeedUtilError {}
-
-pub fn required_port_beads() -> &'static [PortDependency] {
-    REQUIRED_PORT_BEADS
-}
 
 pub fn compute_levels<N>(nodes: &[LevelNode<N>]) -> Result<HashMap<N, usize>, SpeedUtilError>
 where
@@ -583,35 +506,30 @@ pub fn select_gate<N: Clone>(
 pub fn speed_get_stats_from_sis_network() -> Result<(), SpeedUtilError> {
     Err(SpeedUtilError::MissingSisPorts {
         operation: "speed_get_stats",
-        dependencies: REQUIRED_PORT_BEADS,
     })
 }
 
 pub fn delete_single_fanin_node_in_sis_network() -> Result<(), SpeedUtilError> {
     Err(SpeedUtilError::MissingSisPorts {
         operation: "speed_delete_single_fanin_node",
-        dependencies: REQUIRED_PORT_BEADS,
     })
 }
 
 pub fn delete_node_in_sis_network() -> Result<(), SpeedUtilError> {
     Err(SpeedUtilError::MissingSisPorts {
         operation: "speed_network_delete_node",
-        dependencies: REQUIRED_PORT_BEADS,
     })
 }
 
 pub fn library_buffer_from_sis_library() -> Result<(), SpeedUtilError> {
     Err(SpeedUtilError::MissingSisPorts {
         operation: "sp_lib_get_buffer",
-        dependencies: REQUIRED_PORT_BEADS,
     })
 }
 
 pub fn library_inverter_from_sis_library() -> Result<(), SpeedUtilError> {
     Err(SpeedUtilError::MissingSisPorts {
         operation: "sp_lib_get_inv",
-        dependencies: REQUIRED_PORT_BEADS,
     })
 }
 
@@ -937,30 +855,22 @@ mod tests {
 
     #[test]
     fn sis_bound_entry_points_report_explicit_missing_dependencies() {
-        assert!(
-            required_port_beads()
-                .iter()
-                .any(|dependency| dependency.bead == "LogicFriday1-8j8.2.6.318")
-        );
         assert_eq!(
             speed_get_stats_from_sis_network(),
             Err(SpeedUtilError::MissingSisPorts {
                 operation: "speed_get_stats",
-                dependencies: REQUIRED_PORT_BEADS,
             })
         );
         assert_eq!(
             delete_single_fanin_node_in_sis_network(),
             Err(SpeedUtilError::MissingSisPorts {
                 operation: "speed_delete_single_fanin_node",
-                dependencies: REQUIRED_PORT_BEADS,
             })
         );
         assert_eq!(
             library_buffer_from_sis_library(),
             Err(SpeedUtilError::MissingSisPorts {
                 operation: "sp_lib_get_buffer",
-                dependencies: REQUIRED_PORT_BEADS,
             })
         );
     }

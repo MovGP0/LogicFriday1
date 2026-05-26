@@ -1,4 +1,4 @@
-//! Native Rust port scaffold for `sis/speed/buf_trans2.c`.
+﻿//! Native Rust port scaffold for `sis/speed/buf_trans2.c`.
 //!
 //! This module ports the balanced two-level buffering partition selection from
 //! the C implementation. Applying the transform to real SIS nodes remains
@@ -9,15 +9,6 @@ use std::error::Error;
 use std::fmt;
 
 pub const POS_LARGE: f64 = 10_000.0;
-pub const REQUIRED_PORT_BEADS: &[&str] = &[
-    "LogicFriday1-8j8.2.6.461",
-    "LogicFriday1-8j8.2.6.460",
-    "LogicFriday1-8j8.2.6.464",
-    "LogicFriday1-8j8.2.6.470",
-    "LogicFriday1-8j8.2.6.313",
-    "LogicFriday1-8j8.2.6.318",
-];
-
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct DelayTime {
     pub rise: f64,

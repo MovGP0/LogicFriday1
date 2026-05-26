@@ -4,8 +4,8 @@ pub fn print_time(t: i64) -> String {
     format!("{}.{:02} sec", t / 1000, (t % 1000) / 10)
 }
 
-// TODO(LogicFriday1-8j8.2.6.508): expose this module through the crate module
-// tree once native Rust callers need it.
+// TODO: expose this module through the crate module tree once native Rust
+// callers need it.
 
 #[cfg(test)]
 mod tests {

@@ -12,66 +12,6 @@ use std::collections::HashSet;
 use std::error::Error;
 use std::fmt;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_PORT_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.2",
-        source_file: "LogicSynthesis/sis/array/array.c",
-        reason: "xln_filter.c stores DFS nodes, partitions, and decomposition results in array_t",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.297",
-        source_file: "LogicSynthesis/sis/network/dfs.c",
-        reason: "xln_absorb_nodes_in_fanins iterates network_dfs order",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.305",
-        source_file: "LogicSynthesis/sis/network/network_util.c",
-        reason: "network_add_node and network_sweep finalize accepted decompositions",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.309",
-        source_file: "LogicSynthesis/sis/node/collapse.c",
-        reason: "node_collapse absorbs generated nodes into selected fanins",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.313",
-        source_file: "LogicSynthesis/sis/node/fan.c",
-        reason: "fanin and fanout counts drive every xln_filter predicate",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-        reason: "node_replace and node_long_name are used by the SIS-backed absorption pass",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.376",
-        source_file: "LogicSynthesis/sis/pld/pld_util.c",
-        reason: "pld_get_array_of_fanins builds the second-order fanin support vector",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.378",
-        source_file: "LogicSynthesis/sis/pld/xln_aux.c",
-        reason: "xl_binary1 supplies the C binary partition encoding mirrored here",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.386",
-        source_file: "LogicSynthesis/sis/pld/xln_k_decomp.c",
-        reason: "xln_k_decomp_node_with_array decides whether a candidate Y partition is realizable",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.485",
-        source_file: "LogicSynthesis/sis/st/st.c",
-        reason: "st_table is used by the C fanin-union implementation",
-    },
-];
-
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct NodeId(pub usize);
 
@@ -175,7 +115,6 @@ pub enum XlnFilterError {
     NodeMustBeInternal(NodeId),
     MissingNativePorts {
         operation: &'static str,
-        dependencies: &'static [PortDependency],
     },
 }
 
@@ -200,23 +139,15 @@ impl fmt::Display for XlnFilterError {
             Self::NodeMustBeInternal(node) => {
                 write!(f, "xln_filter node {:?} must be internal", node)
             }
-            Self::MissingNativePorts {
-                operation,
-                dependencies,
-            } => write!(
+            Self::MissingNativePorts { operation } => write!(
                 f,
-                "{operation} is blocked by {} unported SIS C-file dependencies",
-                dependencies.len()
+                "{operation} is blocked by unported SIS C-file dependencies"
             ),
         }
     }
 }
 
 impl Error for XlnFilterError {}
-
-pub fn required_port_dependencies() -> &'static [PortDependency] {
-    REQUIRED_PORT_DEPENDENCIES
-}
 
 pub fn xln_absorb_nodes_in_fanins_blocked<Network>(
     _network: &mut Network,
@@ -233,10 +164,7 @@ pub fn xln_can_node_be_absorbed_in_fanins_blocked<Node>(
 }
 
 fn missing_native_ports(operation: &'static str) -> Result<(), XlnFilterError> {
-    Err(XlnFilterError::MissingNativePorts {
-        operation,
-        dependencies: REQUIRED_PORT_DEPENDENCIES,
-    })
+    Err(XlnFilterError::MissingNativePorts { operation })
 }
 
 pub fn can_node_be_absorbed_in_fanins_with<F>(
@@ -652,33 +580,6 @@ mod tests {
                 " c, \n"
             )
         );
-    }
-
-    #[test]
-    fn blocked_sis_entries_report_dependency_beads_and_sources() {
-        let mut network = ();
-        let error = xln_absorb_nodes_in_fanins_blocked(&mut network, 5).unwrap_err();
-
-        let XlnFilterError::MissingNativePorts {
-            operation,
-            dependencies,
-        } = error
-        else {
-            panic!("expected missing dependency error");
-        };
-        assert_eq!(operation, "xln_absorb_nodes_in_fanins");
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.386"
-                && dependency.source_file == "LogicSynthesis/sis/pld/xln_k_decomp.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.376"
-                && dependency.source_file == "LogicSynthesis/sis/pld/pld_util.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.309"
-                && dependency.source_file == "LogicSynthesis/sis/node/collapse.c"
-        }));
     }
 
     #[test]

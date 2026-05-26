@@ -12,60 +12,10 @@ use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::fmt;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_PORT_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.297",
-        source_file: "LogicSynthesis/sis/network/dfs.c",
-        reason: "act_ite_create_mroot_ite_network visits nodes in network_dfs order",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.313",
-        source_file: "LogicSynthesis/sis/node/fan.c",
-        reason: "node_get_fanin selects primary-output fanins and buffer fanin nodes",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-        reason: "node type checks distinguish primary inputs, outputs, and internal nodes",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.368",
-        source_file: "LogicSynthesis/sis/pld/ite_map.c",
-        reason: "act_ite_mroot_make_tree_and_map delegates each root to act_map_ite",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.372",
-        source_file: "LogicSynthesis/sis/pld/ite_new_urp.c",
-        reason: "act_ite_intermediate_new_make_ite and act_ite_new_make_ite construct per-node ITEs",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.375",
-        source_file: "LogicSynthesis/sis/pld/ite_util.c",
-        reason: "ACT_ITE_ite(node), ite_my_free, and ite_my_free_vertex own the legacy ITE slots",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.485",
-        source_file: "LogicSynthesis/sis/st/st.c",
-        reason: "pointer tables de-duplicate traversal and delayed frees in the C implementation",
-    },
-];
-
-pub fn required_port_dependencies() -> &'static [PortDependency] {
-    REQUIRED_PORT_DEPENDENCIES
-}
-
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum IteMrootError {
     MissingNativePorts {
         operation: &'static str,
-        dependencies: &'static [PortDependency],
     },
     MissingNode(NodeId),
     MissingIteForNode(NodeId),
@@ -90,13 +40,9 @@ pub enum IteMrootError {
 impl fmt::Display for IteMrootError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingNativePorts {
-                operation,
-                dependencies,
-            } => write!(
+            Self::MissingNativePorts { operation } => write!(
                 f,
-                "{operation} is blocked by {} unported SIS C-file dependencies",
-                dependencies.len()
+                "{operation} is blocked by unported SIS C-file dependencies"
             ),
             Self::MissingNode(node) => write!(f, "missing SIS node {}", node.0),
             Self::MissingIteForNode(node) => write!(f, "node {} has no ITE root", node.0),
@@ -441,10 +387,7 @@ pub struct FreeReport {
 }
 
 pub fn missing_native_ports(operation: &'static str) -> IteMrootError {
-    IteMrootError::MissingNativePorts {
-        operation,
-        dependencies: REQUIRED_PORT_DEPENDENCIES,
-    }
+    IteMrootError::MissingNativePorts { operation }
 }
 
 pub fn create_and_map_mroot_network_blocked<Network, Init>(
@@ -925,34 +868,5 @@ mod tests {
             network.ite_root(NodeId(2)).unwrap()
         );
         assert_eq!(report.replaced_roots, 1);
-    }
-
-    #[test]
-    fn blocked_sis_entries_report_dependency_beads_and_sources() {
-        let Err(IteMrootError::MissingNativePorts {
-            operation,
-            dependencies,
-        }) = create_and_map_mroot_network_blocked(&mut (), &())
-        else {
-            panic!("expected missing dependency error");
-        };
-
-        assert_eq!(operation, "act_ite_create_and_map_mroot_network");
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.297"
-                && dependency.source_file == "LogicSynthesis/sis/network/dfs.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.368"
-                && dependency.source_file == "LogicSynthesis/sis/pld/ite_map.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.372"
-                && dependency.source_file == "LogicSynthesis/sis/pld/ite_new_urp.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.485"
-                && dependency.source_file == "LogicSynthesis/sis/st/st.c"
-        }));
     }
 }

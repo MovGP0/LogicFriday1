@@ -12,35 +12,6 @@ use std::fmt;
 
 pub const INFINITY_LEVEL: usize = usize::MAX;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead: &'static str,
-    pub c_file: &'static str,
-}
-
-pub const REQUIRED_PORT_BEADS: &[PortDependency] = &[
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.297",
-        c_file: "LogicSynthesis/sis/network/dfs.c",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.305",
-        c_file: "LogicSynthesis/sis/network/network_util.c",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.313",
-        c_file: "LogicSynthesis/sis/node/fan.c",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.318",
-        c_file: "LogicSynthesis/sis/node/node.c",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.485",
-        c_file: "LogicSynthesis/sis/st/st.c",
-    },
-];
-
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct SimpNodeId(pub usize);
 
@@ -254,10 +225,7 @@ pub struct NodeFanout {
 pub enum SimpDcError {
     UnknownNode(SimpNodeId),
     MissingLevel(SimpNodeId),
-    MissingSisPorts {
-        operation: &'static str,
-        dependencies: &'static [PortDependency],
-    },
+    MissingSisPorts { operation: &'static str },
 }
 
 impl fmt::Display for SimpDcError {
@@ -265,13 +233,9 @@ impl fmt::Display for SimpDcError {
         match self {
             Self::UnknownNode(node) => write!(f, "unknown simplify node {:?}", node),
             Self::MissingLevel(node) => write!(f, "missing simplify level for {:?}", node),
-            Self::MissingSisPorts {
-                operation,
-                dependencies,
-            } => write!(
+            Self::MissingSisPorts { operation } => write!(
                 f,
-                "{operation} is blocked by {} unported SIS C-file dependencies",
-                dependencies.len()
+                "{operation} requires native Rust SIS ports that are not available yet"
             ),
         }
     }
@@ -279,15 +243,8 @@ impl fmt::Display for SimpDcError {
 
 impl Error for SimpDcError {}
 
-pub fn required_port_beads() -> &'static [PortDependency] {
-    REQUIRED_PORT_BEADS
-}
-
 pub fn sis_node_bound_dont_care(operation: &'static str) -> Result<BoolExpr, SimpDcError> {
-    Err(SimpDcError::MissingSisPorts {
-        operation,
-        dependencies: REQUIRED_PORT_BEADS,
-    })
+    Err(SimpDcError::MissingSisPorts { operation })
 }
 
 pub fn simp_di(node: SimpNodeId) -> BoolExpr {
@@ -821,12 +778,7 @@ mod tests {
             sis_node_bound_dont_care("simp_tfanin_dc"),
             Err(SimpDcError::MissingSisPorts {
                 operation: "simp_tfanin_dc",
-                dependencies: REQUIRED_PORT_BEADS,
             })
         );
-        assert!(required_port_beads().iter().any(|dependency| {
-            dependency.bead == "LogicFriday1-8j8.2.6.318"
-                && dependency.c_file == "LogicSynthesis/sis/node/node.c"
-        }));
     }
 }

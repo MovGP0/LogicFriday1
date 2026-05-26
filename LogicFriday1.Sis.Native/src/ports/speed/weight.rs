@@ -113,62 +113,19 @@ impl AreaNode {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead: &'static str,
-    pub c_file: &'static str,
-}
-
-pub const REQUIRED_PORT_BEADS: &[PortDependency] = &[
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.133",
-        c_file: "LogicSynthesis/sis/delay/delay.c",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.134",
-        c_file: "LogicSynthesis/sis/delay/mapdelay.c",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.258",
-        c_file: "LogicSynthesis/sis/map/libutil.c",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.313",
-        c_file: "LogicSynthesis/sis/node/fan.c",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.315",
-        c_file: "LogicSynthesis/sis/node/iphase.c",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.318",
-        c_file: "LogicSynthesis/sis/node/node.c",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.480",
-        c_file: "LogicSynthesis/sis/speed/speed_util.c",
-    },
-];
-
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum SpeedWeightError {
-    MissingSisGraphPorts {
-        dependencies: &'static [PortDependency],
-    },
-    MismatchedPointCount {
-        arrivals: usize,
-        delays: usize,
-    },
+    MissingSisGraphPorts {},
+    MismatchedPointCount { arrivals: usize, delays: usize },
     InvalidDistance(i32),
 }
 
 impl fmt::Display for SpeedWeightError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingSisGraphPorts { dependencies } => write!(
+            Self::MissingSisGraphPorts {} => write!(
                 f,
-                "SIS speed weight graph traversal is blocked by {} unported dependencies",
-                dependencies.len()
+                "SIS speed weight graph traversal is blocked by unported SIS dependencies"
             ),
             Self::MismatchedPointCount { arrivals, delays } => write!(
                 f,
@@ -184,21 +141,15 @@ impl fmt::Display for SpeedWeightError {
 impl Error for SpeedWeightError {}
 
 pub fn speed_weight_for_sis_node() -> Result<WeightComputation, SpeedWeightError> {
-    Err(SpeedWeightError::MissingSisGraphPorts {
-        dependencies: REQUIRED_PORT_BEADS,
-    })
+    Err(SpeedWeightError::MissingSisGraphPorts {})
 }
 
 pub fn compute_duplicated_area_from_sis_network() -> Result<f64, SpeedWeightError> {
-    Err(SpeedWeightError::MissingSisGraphPorts {
-        dependencies: REQUIRED_PORT_BEADS,
-    })
+    Err(SpeedWeightError::MissingSisGraphPorts {})
 }
 
 pub fn compute_side_required_time_from_sis_network() -> Result<DelayTime, SpeedWeightError> {
-    Err(SpeedWeightError::MissingSisGraphPorts {
-        dependencies: REQUIRED_PORT_BEADS,
-    })
+    Err(SpeedWeightError::MissingSisGraphPorts {})
 }
 
 pub fn compute_weight_from_samples(
@@ -658,31 +609,18 @@ mod tests {
     }
 
     #[test]
-    fn graph_bound_entry_points_report_missing_port_beads() {
-        let error = speed_weight_for_sis_node().expect_err("SIS graph port should be blocked");
-        let SpeedWeightError::MissingSisGraphPorts { dependencies } = error else {
-            panic!("unexpected error kind");
-        };
-
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead == "LogicFriday1-8j8.2.6.133"
-                && dependency.c_file == "LogicSynthesis/sis/delay/delay.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead == "LogicFriday1-8j8.2.6.313"
-                && dependency.c_file == "LogicSynthesis/sis/node/fan.c"
-        }));
+    fn graph_bound_entry_points_report_missing_ports() {
+        assert_eq!(
+            speed_weight_for_sis_node(),
+            Err(SpeedWeightError::MissingSisGraphPorts {})
+        );
         assert_eq!(
             compute_duplicated_area_from_sis_network(),
-            Err(SpeedWeightError::MissingSisGraphPorts {
-                dependencies: REQUIRED_PORT_BEADS,
-            })
+            Err(SpeedWeightError::MissingSisGraphPorts {})
         );
         assert_eq!(
             compute_side_required_time_from_sis_network(),
-            Err(SpeedWeightError::MissingSisGraphPorts {
-                dependencies: REQUIRED_PORT_BEADS,
-            })
+            Err(SpeedWeightError::MissingSisGraphPorts {})
         );
     }
 }

@@ -1,4 +1,4 @@
-//! Native Rust port scaffold for `LogicSynthesis/sis/simplify/simp.c`.
+﻿//! Native Rust port scaffold for `LogicSynthesis/sis/simplify/simp.c`.
 //!
 //! The C file is the single-node simplify driver: it selects a don't-care
 //! source, filters it, maps the requested SIS simplify method to a node
@@ -10,61 +10,6 @@
 
 use std::error::Error;
 use std::fmt;
-
-pub const REQUIRED_PORT_BEADS: &[PortDependency] = &[
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.318",
-        c_file: "LogicSynthesis/sis/node/node.c",
-        reason: "node constants, metrics, node_simplify, and node_free",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.321",
-        c_file: "LogicSynthesis/sis/node/nodemisc.c",
-        reason: "node_replace",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.313",
-        c_file: "LogicSynthesis/sis/node/fan.c",
-        reason: "fanin lookup and fanin/fanout counts",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.297",
-        c_file: "LogicSynthesis/sis/network/dfs.c",
-        reason: "network_tfi and network_tfo used by CSPF local don't-care generation",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.447",
-        c_file: "LogicSynthesis/sis/simplify/compute_dc.c",
-        reason: "cspf_bdd_dc and CSPF support data",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.448",
-        c_file: "LogicSynthesis/sis/simplify/dc_filter.c",
-        reason: "simp_dc_filter and simp_obssatdc_filter",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.451",
-        c_file: "LogicSynthesis/sis/simplify/simp_dc.c",
-        reason: "local don't-care generators",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.452",
-        c_file: "LogicSynthesis/sis/simplify/simp_image.c",
-        reason: "simp_bull_cofactor and set_size_sort",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.453",
-        c_file: "LogicSynthesis/sis/simplify/simp_sm.c",
-        reason: "sparse-matrix conversion used by filtering",
-    },
-];
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead: &'static str,
-    pub c_file: &'static str,
-    pub reason: &'static str,
-}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SimMethod {
@@ -252,10 +197,7 @@ pub enum SimplifyError {
     UnknownMethod,
     UnknownAcceptCriteria,
     UnknownDontCareType,
-    MissingSisPorts {
-        operation: &'static str,
-        dependencies: &'static [PortDependency],
-    },
+    MissingSisPorts { operation: &'static str },
 }
 
 impl fmt::Display for SimplifyError {
@@ -266,23 +208,15 @@ impl fmt::Display for SimplifyError {
                 write!(f, "unknown SIS simplification acceptance criteria")
             }
             Self::UnknownDontCareType => write!(f, "unknown SIS simplify don't-care type"),
-            Self::MissingSisPorts {
-                operation,
-                dependencies,
-            } => write!(
+            Self::MissingSisPorts { operation } => write!(
                 f,
-                "{operation} is blocked by {} unported SIS C-file dependencies",
-                dependencies.len()
+                "{operation} requires native Rust SIS ports that are not available yet"
             ),
         }
     }
 }
 
 impl Error for SimplifyError {}
-
-pub fn required_port_beads() -> &'static [PortDependency] {
-    REQUIRED_PORT_BEADS
-}
 
 pub fn map_method(method: SimMethod) -> Result<NodeSimType, SimplifyError> {
     match method {
@@ -481,14 +415,12 @@ pub fn plan_simplify_cspf_node(
 pub fn simplify_node_native() -> Result<(), SimplifyError> {
     Err(SimplifyError::MissingSisPorts {
         operation: "simplify_node",
-        dependencies: REQUIRED_PORT_BEADS,
     })
 }
 
 pub fn simplify_cspf_node_native() -> Result<(), SimplifyError> {
     Err(SimplifyError::MissingSisPorts {
         operation: "simplify_cspf_node",
-        dependencies: REQUIRED_PORT_BEADS,
     })
 }
 
@@ -706,19 +638,17 @@ mod tests {
     }
 
     #[test]
-    fn node_bound_entries_report_missing_dependencies() {
+    fn node_bound_entries_report_missing_sis_ports() {
         assert_eq!(
             simplify_node_native(),
             Err(SimplifyError::MissingSisPorts {
                 operation: "simplify_node",
-                dependencies: REQUIRED_PORT_BEADS,
             })
         );
         assert_eq!(
             simplify_cspf_node_native(),
             Err(SimplifyError::MissingSisPorts {
                 operation: "simplify_cspf_node",
-                dependencies: REQUIRED_PORT_BEADS,
             })
         );
     }

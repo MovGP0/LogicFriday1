@@ -193,18 +193,10 @@ pub enum ReplacementPlanError {
     DuplicateOriginalNode(NodeId),
     DuplicateGateOutput(NodeId),
     EmptyCover(NodeId),
-    RootDoesNotReplaceOriginal {
-        original: NodeId,
-        root: NodeId,
-    },
+    RootDoesNotReplaceOriginal { original: NodeId, root: NodeId },
     SelfDependency(NodeId),
-    ReplacementOrder {
-        user: NodeId,
-        dependency: NodeId,
-    },
-    MissingSisPorts {
-        operation: &'static str,
-    },
+    ReplacementOrder { user: NodeId, dependency: NodeId },
+    MissingSisPorts { operation: &'static str },
 }
 
 impl fmt::Display for ReplacementPlanError {
@@ -243,7 +235,9 @@ impl fmt::Display for ReplacementPlanError {
                 user.index(),
                 dependency.index()
             ),
-            Self::MissingSisPorts { operation } => write!(f, "{operation} requires unavailable native SIS integration"),
+            Self::MissingSisPorts { operation } => {
+                write!(f, "{operation} requires unavailable native SIS integration")
+            }
         }
     }
 }

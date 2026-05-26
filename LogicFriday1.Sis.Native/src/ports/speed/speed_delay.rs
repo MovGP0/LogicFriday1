@@ -12,59 +12,6 @@ use std::fmt;
 pub const POS_LARGE: f64 = 10_000.0;
 pub const NEG_LARGE: f64 = -10_000.0;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead: &'static str,
-    pub c_file: &'static str,
-}
-
-pub const REQUIRED_PORT_BEADS: &[PortDependency] = &[
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.133",
-        c_file: "LogicSynthesis/sis/delay/delay.c",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.134",
-        c_file: "LogicSynthesis/sis/delay/mapdelay.c",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.257",
-        c_file: "LogicSynthesis/sis/map/library.c",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.258",
-        c_file: "LogicSynthesis/sis/map/libutil.c",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.297",
-        c_file: "LogicSynthesis/sis/network/dfs.c",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.299",
-        c_file: "LogicSynthesis/sis/network/net_seq.c",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.305",
-        c_file: "LogicSynthesis/sis/network/network_util.c",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.313",
-        c_file: "LogicSynthesis/sis/node/fan.c",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.315",
-        c_file: "LogicSynthesis/sis/node/iphase.c",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.318",
-        c_file: "LogicSynthesis/sis/node/node.c",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.476",
-        c_file: "LogicSynthesis/sis/speed/speed_net.c",
-    },
-];
-
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct NodeId(pub usize);
 
@@ -323,20 +270,10 @@ impl SpeedDelayNetwork {
 #[derive(Clone, Debug, PartialEq)]
 pub enum SpeedDelayError {
     UnknownNode(NodeId),
-    MissingFanin {
-        node: NodeId,
-        pin: usize,
-    },
-    MissingPinDelay {
-        node: NodeId,
-        pin: usize,
-        dependencies: &'static [PortDependency],
-    },
+    MissingFanin { node: NodeId, pin: usize },
+    MissingPinDelay { node: NodeId, pin: usize },
     MissingPrimitiveDelay(PrimitiveFunction),
-    MissingSisPorts {
-        operation: &'static str,
-        dependencies: &'static [PortDependency],
-    },
+    MissingSisPorts { operation: &'static str },
 }
 
 impl fmt::Display for SpeedDelayError {
@@ -358,14 +295,9 @@ impl fmt::Display for SpeedDelayError {
                     function
                 )
             }
-            Self::MissingSisPorts {
-                operation,
-                dependencies,
-            } => write!(
-                f,
-                "{operation} is blocked by {} unported SIS C-file dependencies",
-                dependencies.len()
-            ),
+            Self::MissingSisPorts { operation } => {
+                write!(f, "{operation} is blocked by unported SIS dependencies")
+            }
         }
     }
 }
@@ -518,14 +450,12 @@ pub fn reset_arrival_time(node: &mut SpeedDelayNode) {
 pub fn update_fanout_from_sis_network() -> Result<(), SpeedDelayError> {
     Err(SpeedDelayError::MissingSisPorts {
         operation: "speed_update_fanout",
-        dependencies: REQUIRED_PORT_BEADS,
     })
 }
 
 pub fn delay_data_from_sis_library() -> Result<SpeedDelayParams, SpeedDelayError> {
     Err(SpeedDelayError::MissingSisPorts {
         operation: "speed_set_delay_data",
-        dependencies: REQUIRED_PORT_BEADS,
     })
 }
 
@@ -557,11 +487,7 @@ pub fn delay_node_pin(
         .pin_delays
         .get(pin)
         .copied()
-        .ok_or(SpeedDelayError::MissingPinDelay {
-            node,
-            pin,
-            dependencies: REQUIRED_PORT_BEADS,
-        })
+        .ok_or(SpeedDelayError::MissingPinDelay { node, pin })
 }
 
 fn update_arrival_time_recur(
@@ -863,11 +789,7 @@ mod tests {
 
         assert_eq!(
             delay_node_pin(&network, node, 0, &params()),
-            Err(SpeedDelayError::MissingPinDelay {
-                node,
-                pin: 0,
-                dependencies: REQUIRED_PORT_BEADS,
-            })
+            Err(SpeedDelayError::MissingPinDelay { node, pin: 0 })
         );
     }
 
@@ -877,14 +799,12 @@ mod tests {
             update_fanout_from_sis_network(),
             Err(SpeedDelayError::MissingSisPorts {
                 operation: "speed_update_fanout",
-                dependencies: REQUIRED_PORT_BEADS,
             })
         );
         assert_eq!(
             delay_data_from_sis_library(),
             Err(SpeedDelayError::MissingSisPorts {
                 operation: "speed_set_delay_data",
-                dependencies: REQUIRED_PORT_BEADS,
             })
         );
     }

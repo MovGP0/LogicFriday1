@@ -361,7 +361,9 @@ impl fmt::Display for TwoLevelError {
                     "output '{output}' is not driven by an input or .names node"
                 )
             }
-            Self::MissingSisPorts { operation } => write!(f, "{operation} requires unavailable native SIS integration"),
+            Self::MissingSisPorts { operation } => {
+                write!(f, "{operation} requires unavailable native SIS integration")
+            }
         }
     }
 }

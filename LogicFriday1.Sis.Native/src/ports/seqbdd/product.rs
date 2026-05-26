@@ -8,82 +8,13 @@
 //!   merged.
 //!
 //! The planner is ported here with owned Rust data so it can be tested without
-//! the legacy SIS C ABI. BDD-backed entry points report typed dependency errors
+//! the legacy SIS C ABI. BDD-backed entry points report typed missing-port errors
 //! until the required native BDD, ntbdd, node, network, and seqbdd helper ports
 //! are available.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
 use std::fmt;
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead: &'static str,
-    pub source_file: &'static str,
-}
-
-pub const REQUIRED_PRODUCT_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.2",
-        source_file: "LogicSynthesis/sis/array/array.c",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.75",
-        source_file: "LogicSynthesis/sis/bdd_ucb/and_smooth.c",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.78",
-        source_file: "LogicSynthesis/sis/bdd_ucb/bdd_cofactor.c",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.87",
-        source_file: "LogicSynthesis/sis/bdd_ucb/bdd_quantify.c",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.89",
-        source_file: "LogicSynthesis/sis/bdd_ucb/bdd_substit.c",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.90",
-        source_file: "LogicSynthesis/sis/bdd_ucb/bdd_support.c",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.305",
-        source_file: "LogicSynthesis/sis/network/network_util.c",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.326",
-        source_file: "LogicSynthesis/sis/ntbdd/bdd_at_node.c",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.329",
-        source_file: "LogicSynthesis/sis/ntbdd/manager.c",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.330",
-        source_file: "LogicSynthesis/sis/ntbdd/node_to_bdd.c",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.431",
-        source_file: "LogicSynthesis/sis/seqbdd/prioqueue.c",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.442",
-        source_file: "LogicSynthesis/sis/seqbdd/verif_util.c",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.485",
-        source_file: "LogicSynthesis/sis/st/st.c",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.518",
-        source_file: "LogicSynthesis/sis/var_set/var_set.c",
-    },
-];
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ProductPortDisposition {
@@ -98,34 +29,19 @@ pub fn is_product_sis_integration_blocked() -> bool {
     product_port_disposition() == ProductPortDisposition::PlannerPortedSisBddIntegrationBlocked
 }
 
-pub fn required_product_dependencies() -> &'static [PortDependency] {
-    REQUIRED_PRODUCT_DEPENDENCIES
-}
-
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ProductError {
-    MissingSisDependencies {
-        operation: &'static str,
-        dependencies: &'static [PortDependency],
-    },
+    MissingSisDependencies { operation: &'static str },
     EmptyTransitionSet,
-    VariableOutOfRange {
-        variable: usize,
-        n_vars: usize,
-    },
+    VariableOutOfRange { variable: usize, n_vars: usize },
 }
 
 impl fmt::Display for ProductError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingSisDependencies {
-                operation,
-                dependencies,
-            } => write!(
-                f,
-                "{operation} is blocked by {} unported SIS/BDD dependencies",
-                dependencies.len()
-            ),
+            Self::MissingSisDependencies { operation } => {
+                write!(f, "{operation} is blocked by missing native SIS ports")
+            }
             Self::EmptyTransitionSet => write!(f, "product transition set is empty"),
             Self::VariableOutOfRange { variable, n_vars } => write!(
                 f,
@@ -204,10 +120,7 @@ pub fn product_check_output() -> Result<(), ProductError> {
 }
 
 fn missing_sis_dependencies<T>(operation: &'static str) -> Result<T, ProductError> {
-    Err(ProductError::MissingSisDependencies {
-        operation,
-        dependencies: REQUIRED_PRODUCT_DEPENDENCIES,
-    })
+    Err(ProductError::MissingSisDependencies { operation })
 }
 
 pub fn plan_incremental_and_smooth(
@@ -543,33 +456,6 @@ mod tests {
                 .map(|step| step.target_partition_after)
                 .collect::<Vec<_>>(),
             vec![2, 6, 7, 8]
-        );
-    }
-
-    #[test]
-    fn sis_bdd_entry_points_report_dependency_beads_and_sources() {
-        let error = product_compute_next_states().expect_err("BDD integration should be blocked");
-        let ProductError::MissingSisDependencies {
-            operation,
-            dependencies,
-        } = error
-        else {
-            panic!("unexpected error kind");
-        };
-
-        assert_eq!(operation, "product_compute_next_states");
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead == "LogicFriday1-8j8.2.6.75"
-                && dependency.source_file == "LogicSynthesis/sis/bdd_ucb/and_smooth.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead == "LogicFriday1-8j8.2.6.431"
-                && dependency.source_file == "LogicSynthesis/sis/seqbdd/prioqueue.c"
-        }));
-        assert!(is_product_sis_integration_blocked());
-        assert_eq!(
-            required_product_dependencies(),
-            REQUIRED_PRODUCT_DEPENDENCIES
         );
     }
 }

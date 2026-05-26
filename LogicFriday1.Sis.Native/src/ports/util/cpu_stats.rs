@@ -16,5 +16,5 @@ pub fn write_cpu_stats(mut writer: impl Write) -> io::Result<()> {
     writer.write_all(cpu_stats_report().as_bytes())
 }
 
-// TODO(LogicFriday1-8j8.2.6.503): expose this module through the crate module
-// tree and csbindgen surface once this worker is allowed to edit `src/lib.rs`.
+// TODO: expose this module through the crate module tree and csbindgen surface
+// once translated Rust callers need it.

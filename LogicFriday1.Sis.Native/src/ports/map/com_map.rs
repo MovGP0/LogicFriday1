@@ -212,7 +212,10 @@ impl fmt::Display for MapCommandError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::MissingLibrary => {
-                write!(f, "map requires a technology library loaded by read_library")
+                write!(
+                    f,
+                    "map requires a technology library loaded by read_library"
+                )
             }
             Self::MissingDependencies => {
                 write!(f, "map requires unavailable native SIS mapper integration")

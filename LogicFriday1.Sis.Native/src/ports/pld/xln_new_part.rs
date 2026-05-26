@@ -11,71 +11,6 @@ use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::fmt;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_PORT_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.2",
-        source_file: "LogicSynthesis/sis/array/array.c",
-        reason: "xln_new_part.c stores candidate and cover sets in array_t",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.297",
-        source_file: "LogicSynthesis/sis/network/dfs.c",
-        reason: "trivial collapse iterates network_dfs order",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.305",
-        source_file: "LogicSynthesis/sis/network/network_util.c",
-        reason: "network internal-node iteration, delete-node, and sweep operations",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.309",
-        source_file: "LogicSynthesis/sis/node/collapse.c",
-        reason: "node_collapse changes fanout logic during candidate and trivial collapses",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.313",
-        source_file: "LogicSynthesis/sis/node/fan.c",
-        reason: "fanin/fanout traversal and fanin-index lookup",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.317",
-        source_file: "LogicSynthesis/sis/node/names.c",
-        reason: "diagnostic output uses node_long_name",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-        reason: "node type/function classification and fanin counts",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.321",
-        source_file: "LogicSynthesis/sis/node/nodemisc.c",
-        reason: "node_replace applies simplified fanout functions after trivial collapse",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.391",
-        source_file: "LogicSynthesis/sis/pld/xln_move_d.c",
-        reason: "MOVE_FANINS calls xln_node_move_fanins before testing trivial collapse",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.455",
-        source_file: "LogicSynthesis/sis/simplify/simp.c",
-        reason: "node_simplify refreshes collapsed fanout functions",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.485",
-        source_file: "LogicSynthesis/sis/st/st.c",
-        reason: "array_disjoint uses st_table to map node pointers to dense indexes",
-    },
-];
-
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct NodeId(pub usize);
 
@@ -264,7 +199,6 @@ pub enum XlnNewPartError {
     },
     MissingNativePorts {
         operation: &'static str,
-        dependencies: &'static [PortDependency],
     },
 }
 
@@ -289,23 +223,15 @@ impl fmt::Display for XlnNewPartError {
                 "composite fanin of ({:?}, {:?}) is {composite_fanin}, exceeding size {size}",
                 input, out
             ),
-            Self::MissingNativePorts {
-                operation,
-                dependencies,
-            } => write!(
+            Self::MissingNativePorts { operation } => write!(
                 f,
-                "{operation} is blocked by {} unported SIS C-file dependencies",
-                dependencies.len()
+                "{operation} is blocked by unported SIS C-file dependencies"
             ),
         }
     }
 }
 
 impl Error for XlnNewPartError {}
-
-pub fn required_port_dependencies() -> &'static [PortDependency] {
-    REQUIRED_PORT_DEPENDENCIES
-}
 
 pub fn composite_fanin_count(
     network: &PldNetwork,
@@ -451,7 +377,6 @@ pub fn trivial_collapse_node(
     if options.move_fanins {
         return Err(XlnNewPartError::MissingNativePorts {
             operation: "xln_node_move_fanins",
-            dependencies: REQUIRED_PORT_DEPENDENCIES,
         });
     }
     trivial_collapse_node_without_moving(network, node, options.size)
@@ -535,7 +460,6 @@ pub fn imp_part_sis_network_blocked<Network>(
 ) -> Result<PartitionStats, XlnNewPartError> {
     Err(XlnNewPartError::MissingNativePorts {
         operation: "imp_part_network",
-        dependencies: REQUIRED_PORT_DEPENDENCIES,
     })
 }
 
@@ -699,66 +623,6 @@ mod tests {
             node_names(&network, &network.node(y).unwrap().fanins),
             vec!["a", "b", "c"]
         );
-    }
-
-    #[test]
-    fn move_fanins_reports_explicit_dependency() {
-        let mut network = PldNetwork::new();
-        let node = network.add_node(PldNode::new("n", NodeKind::Internal));
-
-        let error = trivial_collapse_node(
-            &mut network,
-            node,
-            XlnOptions {
-                size: 4,
-                move_fanins: true,
-                max_fanins: 8,
-            },
-        )
-        .unwrap_err();
-
-        assert_eq!(
-            error,
-            XlnNewPartError::MissingNativePorts {
-                operation: "xln_node_move_fanins",
-                dependencies: REQUIRED_PORT_DEPENDENCIES,
-            }
-        );
-        assert!(required_port_dependencies().iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.391"
-                && dependency.source_file == "LogicSynthesis/sis/pld/xln_move_d.c"
-        }));
-    }
-
-    #[test]
-    fn sis_bound_entry_reports_dependency_beads_and_sources() {
-        let mut network = ();
-        let error = imp_part_sis_network_blocked(
-            &mut network,
-            XlnOptions {
-                size: 4,
-                move_fanins: false,
-                max_fanins: 8,
-            },
-        )
-        .unwrap_err();
-
-        assert_eq!(
-            error,
-            XlnNewPartError::MissingNativePorts {
-                operation: "imp_part_network",
-                dependencies: REQUIRED_PORT_DEPENDENCIES,
-            }
-        );
-        assert!(
-            error
-                .to_string()
-                .contains("unported SIS C-file dependencies")
-        );
-        assert!(required_port_dependencies().iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.309"
-                && dependency.source_file == "LogicSynthesis/sis/node/collapse.c"
-        }));
     }
 
     #[test]

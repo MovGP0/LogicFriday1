@@ -5,50 +5,11 @@
 //! and a two-function range shortcut. The support grouping and two-function
 //! shortcut are ported onto owned Rust data. The full recursive image path is
 //! still tied to SIS `array_t`, `st_table`, `var_set_t`, and BDD-manager
-//! lifetimes, so it reports explicit dependency errors until those ports exist.
+//! lifetimes, so it reports generic missing-port diagnostics until those ports exist.
 
 use std::collections::BTreeSet;
 use std::error::Error;
 use std::fmt;
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub note: &'static str,
-}
-
-pub const REQUIRED_PORT_BEADS: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.2",
-        source_file: "LogicSynthesis/sis/array/array.c",
-        note: "array_t ownership for BDD and PI lists",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.71",
-        source_file: "LogicSynthesis/sis/bdd_cmu/bdd_port/bddport.c",
-        note: "BDD variables, complement, cofactor, tautology, and boolean operations",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.425",
-        source_file: "LogicSynthesis/sis/seqbdd/bull.c",
-        note: "bull_cofactor terminal recursion used by input_cofactor",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.485",
-        source_file: "LogicSynthesis/sis/st/st.c",
-        note: "cache and leaf tables threaded through BULL recursion",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.518",
-        source_file: "LogicSynthesis/sis/var_set/var_set.c",
-        note: "var_set_t input split sets and support sets",
-    },
-];
-
-pub fn required_port_beads() -> &'static [PortDependency] {
-    REQUIRED_PORT_BEADS
-}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum BullUtilDisposition {
@@ -67,7 +28,6 @@ pub fn is_sis_bdd_integration_blocked() -> bool {
 pub enum BullUtilError {
     MissingSisDependencies {
         operation: &'static str,
-        dependencies: &'static [PortDependency],
     },
     EmptySupportList,
     SupportWidthMismatch {
@@ -95,14 +55,9 @@ pub enum BullUtilError {
 impl fmt::Display for BullUtilError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingSisDependencies {
-                operation,
-                dependencies,
-            } => write!(
-                f,
-                "{operation} is blocked by {} unported SIS/BDD dependencies",
-                dependencies.len()
-            ),
+            Self::MissingSisDependencies { operation } => {
+                write!(f, "{operation} is blocked by missing native SIS ports")
+            }
             Self::EmptySupportList => write!(f, "support list is empty"),
             Self::SupportWidthMismatch {
                 expected,
@@ -404,7 +359,6 @@ pub fn input_cofactor_is_blocked() -> bool {
 pub fn input_cofactor() -> Result<TruthTable, BullUtilError> {
     Err(BullUtilError::MissingSisDependencies {
         operation: "input_cofactor",
-        dependencies: REQUIRED_PORT_BEADS,
     })
 }
 
@@ -519,22 +473,5 @@ mod tests {
                 .or(&x.not().and(&y.not()).unwrap())
                 .unwrap()
         );
-    }
-
-    #[test]
-    fn blocked_input_cofactor_reports_dependency_beads_and_sources_without_c_abi() {
-        assert!(input_cofactor_is_blocked());
-        let dependencies = required_port_beads();
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.425"
-                && dependency.source_file == "LogicSynthesis/sis/seqbdd/bull.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.71"
-                && dependency.source_file == "LogicSynthesis/sis/bdd_cmu/bdd_port/bddport.c"
-        }));
-
-        let error = input_cofactor().unwrap_err();
-        assert!(format!("{error}").contains("input_cofactor"));
     }
 }

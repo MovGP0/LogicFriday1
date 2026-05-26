@@ -12,16 +12,6 @@
 use std::error::Error;
 use std::fmt;
 
-pub const REQUIRED_PORT_BEADS: &[&str] = &[
-    "LogicFriday1-8j8.2.6.492", // stg/stg.c: STG graph storage, names, states, transitions
-    "LogicFriday1-8j8.2.6.213", // graph/graph.c: graph_t, vertex_t, edge_t traversal
-    "LogicFriday1-8j8.2.6.305", // network/network_util.c: PI/PO lists, counts, renaming
-    "LogicFriday1-8j8.2.6.299", // network/net_seq.c: real PI/PO and latch classification
-    "LogicFriday1-8j8.2.6.110", // clock/clock.c: clock lookup, cycle time, edge parameters
-    "LogicFriday1-8j8.2.6.317", // node/names.c: node_long_name
-    "LogicFriday1-8j8.2.6.318", // node/node.c: node allocation/constants for empty networks
-];
-
 #[derive(Clone, Debug, PartialEq)]
 pub struct StgGraph {
     pub start_state: String,
@@ -412,10 +402,6 @@ pub fn traverse_sis_stg_graph() -> Result<(), StgUtilError> {
     Err(StgUtilError::MissingGraphTraversalPort)
 }
 
-pub fn required_port_beads() -> &'static [&'static str] {
-    REQUIRED_PORT_BEADS
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -563,8 +549,5 @@ mod tests {
             traverse_sis_stg_graph(),
             Err(StgUtilError::MissingGraphTraversalPort)
         );
-        assert!(required_port_beads().contains(&"LogicFriday1-8j8.2.6.492"));
-        assert!(required_port_beads().contains(&"LogicFriday1-8j8.2.6.305"));
-        assert!(required_port_beads().contains(&"LogicFriday1-8j8.2.6.110"));
     }
 }

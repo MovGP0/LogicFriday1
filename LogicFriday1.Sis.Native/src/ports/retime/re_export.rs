@@ -5,46 +5,16 @@
 //! weights, node area totals, and forward/backward retimability predicates.
 //! This module ports those behaviors to owned Rust data structures. Direct use
 //! of the legacy SIS `re_graph` storage remains an explicit dependency error
-//! with bead IDs and source files; no legacy C ABI entry points are exposed here.
+//!; no legacy C ABI entry points are exposed here.
 
 use std::error::Error;
 use std::fmt;
 
 pub const POS_LARGE: i32 = 10_000;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_SIS_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.2",
-        source_file: "LogicSynthesis/sis/array/array.c",
-        reason: "legacy re_graph stores node, edge, fanin, and fanout collections in array_t",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.415",
-        source_file: "LogicSynthesis/sis/retime/re_graph.c",
-        reason: "legacy re_graph, re_node, and re_edge storage/accessor ownership",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.422",
-        source_file: "LogicSynthesis/sis/retime/re_util.c",
-        reason: "re_ignore_edge behavior shared by retiming graph metric helpers",
-    },
-];
-
-pub fn required_sis_dependencies() -> &'static [PortDependency] {
-    REQUIRED_SIS_DEPENDENCIES
-}
-
 pub fn legacy_re_export_blocked() -> Result<(), ReExportError> {
     Err(ReExportError::MissingSisDependencies {
         operation: "retime re_export metrics over legacy SIS re_graph",
-        dependencies: REQUIRED_SIS_DEPENDENCIES,
     })
 }
 
@@ -255,7 +225,6 @@ enum IncidentDirection {
 pub enum ReExportError {
     MissingSisDependencies {
         operation: &'static str,
-        dependencies: &'static [PortDependency],
     },
     MissingNode(NodeId),
     MissingEdge(EdgeId),
@@ -268,14 +237,9 @@ pub enum ReExportError {
 impl fmt::Display for ReExportError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingSisDependencies {
-                operation,
-                dependencies,
-            } => write!(
-                f,
-                "{operation} requires {} native SIS prerequisite ports",
-                dependencies.len()
-            ),
+            Self::MissingSisDependencies { operation } => {
+                write!(f, "{operation} requires native prerequisite ports")
+            }
             Self::MissingNode(node) => write!(f, "missing retime node {}", node.0),
             Self::MissingEdge(edge) => write!(f, "missing retime edge {}", edge.0),
             Self::CannotRetimeNonInternal { node, node_type } => {
@@ -381,25 +345,5 @@ mod tests {
         assert_eq!(graph.max_fanin_weight(node), Ok(0));
         assert_eq!(graph.max_fanout_weight(node), Ok(0));
         assert_eq!(graph.node_retimable(node), Ok(true));
-    }
-
-    #[test]
-    fn dependency_scaffold_reports_beads_and_source_files() {
-        assert!(required_sis_dependencies().iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.415"
-                && dependency.source_file == "LogicSynthesis/sis/retime/re_graph.c"
-        }));
-        assert!(required_sis_dependencies().iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.422"
-                && dependency.source_file == "LogicSynthesis/sis/retime/re_util.c"
-        }));
-
-        assert_eq!(
-            legacy_re_export_blocked(),
-            Err(ReExportError::MissingSisDependencies {
-                operation: "retime re_export metrics over legacy SIS re_graph",
-                dependencies: REQUIRED_SIS_DEPENDENCIES,
-            })
-        );
     }
 }

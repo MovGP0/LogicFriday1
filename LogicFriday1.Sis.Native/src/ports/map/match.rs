@@ -274,7 +274,9 @@ impl fmt::Display for MatchError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Tree(error) => write!(f, "{error}"),
-            Self::MissingSisPorts { operation } => write!(f, "{operation} requires unavailable native SIS integration"),
+            Self::MissingSisPorts { operation } => {
+                write!(f, "{operation} requires unavailable native SIS integration")
+            }
             Self::TooManyPatterns { max } => write!(f, "too many match patterns; max is {max}"),
             Self::TooManyMatches { max } => write!(f, "too many tree matches; max is {max}"),
             Self::PatternTooLarge { gate, max } => {

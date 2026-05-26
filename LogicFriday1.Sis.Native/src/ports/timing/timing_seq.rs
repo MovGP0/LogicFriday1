@@ -17,13 +17,6 @@ pub const UNIT_FANOUT_SLOPE: f64 = 0.2;
 pub const UNIT_BASE_DELAY: f64 = 1.0;
 pub const MAPPED_GATE_LOAD: f64 = 0.0;
 
-pub const REQUIRED_PORT_BEADS: &[&str] = &[
-    "LogicFriday1-8j8.2.6.134", // delay/mapdelay.c: delay_map_simulate
-    "LogicFriday1-8j8.2.6.257", // map/library.c: lib_gate_of, lib_gate_num_in
-    "LogicFriday1-8j8.2.6.313", // node/fan.c: node_num_fanout
-    "LogicFriday1-8j8.2.6.318", // node/node.c: node_function
-];
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DelayModel {
     Unit,
@@ -141,10 +134,6 @@ impl fmt::Display for TimingSeqError {
 }
 
 impl Error for TimingSeqError {}
-
-pub fn required_port_beads() -> &'static [&'static str] {
-    REQUIRED_PORT_BEADS
-}
 
 pub fn node_get_delay(node: &TimingNode, model: DelayModel) -> Result<DelayTime, TimingSeqError> {
     if matches!(
@@ -365,7 +354,6 @@ mod tests {
                 pins: 1
             })
         );
-        assert!(required_port_beads().contains(&"LogicFriday1-8j8.2.6.134"));
         assert_eq!(
             node_delay_from_unported_sis_node(),
             Err(TimingSeqError::MissingDependency(

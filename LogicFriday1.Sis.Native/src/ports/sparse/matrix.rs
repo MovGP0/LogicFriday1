@@ -76,26 +76,6 @@ impl fmt::Display for SparseParseError {
 
 impl std::error::Error for SparseParseError {}
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct MissingSparseDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const UNPORTED_VECTOR_DEPENDENCIES: &[MissingSparseDependency] = &[
-    MissingSparseDependency {
-        bead_id: "LogicFriday1-8j8.2.6.458",
-        source_file: "LogicSynthesis/sis/sparse/rows.c",
-        reason: "standalone row-vector allocation, comparison, intersection, hashing, and printing APIs",
-    },
-    MissingSparseDependency {
-        bead_id: "LogicFriday1-8j8.2.6.456",
-        source_file: "LogicSynthesis/sis/sparse/cols.c",
-        reason: "standalone column-vector allocation, comparison, intersection, hashing, and printing APIs",
-    },
-];
-
 impl Default for SparseMatrix {
     fn default() -> Self {
         Self::new()

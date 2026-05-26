@@ -129,39 +129,9 @@ pub struct WdEntry {
 
 pub type WdMatrix = Vec<Vec<WdEntry>>;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_INTEGRATION_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.418",
-        source_file: "LogicSynthesis/sis/retime/re_minreg.c",
-        reason: "native callers need the min-register setup to pass prepared LP node-index data",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.422",
-        source_file: "LogicSynthesis/sis/retime/re_util.c",
-        reason: "SIS re_graph construction and node metadata are ported separately",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.423",
-        source_file: "LogicSynthesis/sis/retime/retime_util.c",
-        reason: "legacy retime graph allocation/accessor helpers are outside this W/D computation",
-    },
-];
-
-pub fn required_integration_dependencies() -> &'static [PortDependency] {
-    REQUIRED_INTEGRATION_DEPENDENCIES
-}
-
 pub fn sis_re_compute_wd_blocked() -> Result<(), ComputeWdError> {
     Err(ComputeWdError::MissingIntegrationDependencies {
         operation: "SIS re_computeWD graph/table integration",
-        dependencies: REQUIRED_INTEGRATION_DEPENDENCIES,
     })
 }
 
@@ -296,7 +266,6 @@ fn sum(left: WdEntry, right: WdEntry) -> WdEntry {
 pub enum ComputeWdError {
     MissingIntegrationDependencies {
         operation: &'static str,
-        dependencies: &'static [PortDependency],
     },
     MissingNode(NodeId),
     MissingLpIndex(NodeId),
@@ -322,14 +291,9 @@ pub enum ComputeWdError {
 impl fmt::Display for ComputeWdError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingIntegrationDependencies {
-                operation,
-                dependencies,
-            } => write!(
-                f,
-                "{operation} is blocked by {} unported SIS retime dependencies",
-                dependencies.len()
-            ),
+            Self::MissingIntegrationDependencies { operation } => {
+                write!(f, "{operation} requires native prerequisite ports")
+            }
             Self::MissingNode(node) => write!(f, "retime graph references missing node {}", node.0),
             Self::MissingLpIndex(node) => write!(f, "retime node {} has no LP index", node.0),
             Self::LpIndexOutOfRange { node, lp_index, n } => write!(
@@ -470,34 +434,6 @@ mod tests {
             })
         );
     }
-
-    #[test]
-    fn missing_integration_dependencies_report_beads_and_sources() {
-        let error =
-            sis_re_compute_wd_blocked().expect_err("SIS integration is intentionally gated");
-        let ComputeWdError::MissingIntegrationDependencies {
-            operation,
-            dependencies,
-        } = error
-        else {
-            panic!("expected dependency error");
-        };
-
-        assert_eq!(operation, "SIS re_computeWD graph/table integration");
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.418"
-                && dependency.source_file == "LogicSynthesis/sis/retime/re_minreg.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.422"
-                && dependency.source_file == "LogicSynthesis/sis/retime/re_util.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.423"
-                && dependency.source_file == "LogicSynthesis/sis/retime/retime_util.c"
-        }));
-    }
-
     #[test]
     fn debug_dump_matches_c_infinite_threshold_ordering() {
         let wd = vec![

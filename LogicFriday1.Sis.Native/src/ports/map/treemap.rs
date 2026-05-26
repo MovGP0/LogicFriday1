@@ -206,7 +206,9 @@ impl fmt::Display for TreeMapError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Tree(error) => write!(f, "{error}"),
-            Self::MissingSisPorts { operation } => write!(f, "{operation} requires unavailable native SIS integration"),
+            Self::MissingSisPorts { operation } => {
+                write!(f, "{operation} requires unavailable native SIS integration")
+            }
             Self::TooManyCandidates { max } => write!(f, "too many candidate gates; max is {max}"),
             Self::PatternTooLarge { gate, max } => {
                 write!(f, "candidate gate '{gate}' pattern exceeds {max} nodes")

@@ -14,43 +14,6 @@ use std::fmt;
 pub const POS_LARGE: f64 = 10_000.0;
 pub const INFINITY_TIME: f64 = f64::INFINITY;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead: &'static str,
-    pub c_file: &'static str,
-}
-
-pub const REQUIRED_PORT_BEADS: &[PortDependency] = &[
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.133",
-        c_file: "LogicSynthesis/sis/delay/delay.c",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.257",
-        c_file: "LogicSynthesis/sis/map/library.c",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.258",
-        c_file: "LogicSynthesis/sis/map/libutil.c",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.305",
-        c_file: "LogicSynthesis/sis/network/network_util.c",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.313",
-        c_file: "LogicSynthesis/sis/node/fan.c",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.318",
-        c_file: "LogicSynthesis/sis/node/node.c",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.464",
-        c_file: "LogicSynthesis/sis/speed/buf_util.c",
-    },
-];
-
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct NodeId(pub usize);
 
@@ -379,30 +342,13 @@ impl PipoDefaultUpdate {
 #[derive(Clone, Debug, PartialEq)]
 pub enum BufDelayError {
     UnknownNode(NodeId),
-    MissingFanin {
-        node: NodeId,
-        pin: usize,
-    },
+    MissingFanin { node: NodeId, pin: usize },
     MissingCriticalFanin(NodeId),
     MissingBuffer(NodeId),
-    MissingPinDelay {
-        node: NodeId,
-        pin: usize,
-        dependencies: &'static [PortDependency],
-    },
-    MissingWireRequiredTime {
-        node: NodeId,
-        pin: usize,
-        dependencies: &'static [PortDependency],
-    },
-    MissingDefaultInverter {
-        num_inv: usize,
-        buffer_count: usize,
-    },
-    PartitionOutOfRange {
-        requested: usize,
-        available: usize,
-    },
+    MissingPinDelay { node: NodeId, pin: usize },
+    MissingWireRequiredTime { node: NodeId, pin: usize },
+    MissingDefaultInverter { num_inv: usize, buffer_count: usize },
+    PartitionOutOfRange { requested: usize, available: usize },
 }
 
 impl fmt::Display for BufDelayError {
@@ -462,7 +408,6 @@ pub fn buffer_pin_requirement(
         BufDelayError::MissingWireRequiredTime {
             node: fanout_id,
             pin,
-            dependencies: REQUIRED_PORT_BEADS,
         },
     )?;
     let pin_delay = pin_delay(fanout, fanout_id, pin)?;
@@ -634,7 +579,6 @@ pub fn buffer_delay_from_sis_network() -> Result<(), BufDelayError> {
     Err(BufDelayError::MissingWireRequiredTime {
         node: NodeId(0),
         pin: 0,
-        dependencies: REQUIRED_PORT_BEADS,
     })
 }
 
@@ -689,11 +633,7 @@ fn pin_delay(
     node.pin_delays
         .get(pin)
         .copied()
-        .ok_or(BufDelayError::MissingPinDelay {
-            node: node_id,
-            pin,
-            dependencies: REQUIRED_PORT_BEADS,
-        })
+        .ok_or(BufDelayError::MissingPinDelay { node: node_id, pin })
 }
 
 #[cfg(test)]
@@ -956,7 +896,6 @@ mod tests {
             Err(BufDelayError::MissingPinDelay {
                 node: NodeId(7),
                 pin: 0,
-                dependencies: REQUIRED_PORT_BEADS,
             })
         );
         assert_eq!(
@@ -969,7 +908,6 @@ mod tests {
             Err(BufDelayError::MissingWireRequiredTime {
                 node: NodeId(7),
                 pin: 0,
-                dependencies: REQUIRED_PORT_BEADS,
             })
         );
         assert_eq!(
@@ -977,7 +915,6 @@ mod tests {
             Err(BufDelayError::MissingWireRequiredTime {
                 node: NodeId(0),
                 pin: 0,
-                dependencies: REQUIRED_PORT_BEADS,
             })
         );
     }

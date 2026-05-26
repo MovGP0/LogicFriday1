@@ -1,4 +1,4 @@
-//! Native Rust port scaffold for `sis/speed/absorb.c`.
+﻿//! Native Rust port scaffold for `sis/speed/absorb.c`.
 //!
 //! The C code finds critical transitive fanin nodes within a distance, then
 //! repeatedly collapses them into a root and deletes fanin nodes that lose all
@@ -9,15 +9,6 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::error::Error;
 use std::fmt;
-
-pub const REQUIRED_PORT_BEADS: &[&str] = &[
-    "LogicFriday1-8j8.2.6.309", // node/collapse.c
-    "LogicFriday1-8j8.2.6.313", // node/fan.c
-    "LogicFriday1-8j8.2.6.318", // node/node.c
-    "LogicFriday1-8j8.2.6.455", // simplify/simp.c
-    "LogicFriday1-8j8.2.6.305", // network/network_util.c
-    "LogicFriday1-8j8.2.6.480", // speed/speed_util.c criticality helper
-];
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct NodeId(pub usize);

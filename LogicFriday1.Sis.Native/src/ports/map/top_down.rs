@@ -132,7 +132,9 @@ impl fmt::Display for TopDownError {
                 write!(f, "root '{root}' has no top-down mapping candidates")
             }
             Self::VirtualNetwork(error) => write!(f, "{error}"),
-            Self::MissingSisPorts { operation } => write!(f, "{operation} requires unavailable native SIS integration"),
+            Self::MissingSisPorts { operation } => {
+                write!(f, "{operation} requires unavailable native SIS integration")
+            }
         }
     }
 }

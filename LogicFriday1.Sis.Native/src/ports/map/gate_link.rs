@@ -49,7 +49,11 @@ impl fmt::Display for GateLinkError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::InvalidPin { node, pin } => {
-                write!(f, "gate link to node {} has invalid pin {pin}", node.index())
+                write!(
+                    f,
+                    "gate link to node {} has invalid pin {pin}",
+                    node.index()
+                )
             }
             Self::InvalidLoad { node, pin, load } => write!(
                 f,
@@ -67,7 +71,9 @@ impl fmt::Display for GateLinkError {
                 node.index()
             ),
             Self::VirtualNetwork(error) => write!(f, "{error}"),
-            Self::MissingSisPorts { operation } => write!(f, "{operation} requires unavailable native SIS integration"),
+            Self::MissingSisPorts { operation } => {
+                write!(f, "{operation} requires unavailable native SIS integration")
+            }
         }
     }
 }
@@ -138,9 +144,7 @@ pub fn full_sis_gate_link_unavailable() -> Result<GateLinkCollection, GateLinkEr
     })
 }
 
-pub fn rebuild_network_gate_links(
-    network: &mut VirtualMappedNetwork,
-) -> Result<(), GateLinkError> {
+pub fn rebuild_network_gate_links(network: &mut VirtualMappedNetwork) -> Result<(), GateLinkError> {
     network.setup_gate_links().map_err(GateLinkError::from)
 }
 
@@ -261,11 +265,9 @@ fn ensure_node(
     network: &VirtualMappedNetwork,
     node: NodeId,
 ) -> Result<&super::virtual_net::VirtualMappedNode, GateLinkError> {
-    network
-        .node(node)
-        .ok_or(GateLinkError::VirtualNetwork(VirtualNetworkError::MissingNode(
-            node,
-        )))
+    network.node(node).ok_or(GateLinkError::VirtualNetwork(
+        VirtualNetworkError::MissingNode(node),
+    ))
 }
 
 fn gate_link_key(link: GateLink) -> GateLinkKey {
@@ -277,8 +279,8 @@ fn gate_link_key(link: GateLink) -> GateLinkKey {
 
 #[cfg(test)]
 mod tests {
+    use super::super::virtual_net::{GateKind, MINUS_INFINITY, SourceRef};
     use super::*;
-    use super::super::virtual_net::{GateKind, SourceRef, MINUS_INFINITY};
 
     fn node_ids(count: usize) -> Vec<NodeId> {
         let mut network = VirtualMappedNetwork::new();
@@ -340,7 +342,10 @@ mod tests {
             })
             .unwrap();
 
-        assert_eq!(collection.compute_load(|fanouts| fanouts as f64 * 0.25), 4.5);
+        assert_eq!(
+            collection.compute_load(|fanouts| fanouts as f64 * 0.25),
+            4.5
+        );
     }
 
     #[test]
@@ -396,7 +401,10 @@ mod tests {
 
         assert_eq!(network_gate_link_count(&network, a).unwrap(), 1);
         assert_eq!(
-            get_network_gate_link(&network, a, gate, 0).unwrap().unwrap().required,
+            get_network_gate_link(&network, a, gate, 0)
+                .unwrap()
+                .unwrap()
+                .required,
             DelayTime::new(11.0, 12.0)
         );
         assert_eq!(
@@ -419,7 +427,10 @@ mod tests {
 
         rebuild_network_gate_links(&mut network).unwrap();
 
-        assert_eq!(compute_network_min_required(&network, a).unwrap(), PLUS_INFINITY);
+        assert_eq!(
+            compute_network_min_required(&network, a).unwrap(),
+            PLUS_INFINITY
+        );
         assert!(network_gate_link_is_empty(&network, a).unwrap());
     }
 
@@ -437,13 +448,7 @@ mod tests {
             })
             .unwrap_err();
 
-        assert_eq!(
-            error,
-            GateLinkError::InvalidPin {
-                node,
-                pin: -2
-            }
-        );
+        assert_eq!(error, GateLinkError::InvalidPin { node, pin: -2 });
         assert!(collection.is_empty());
     }
 

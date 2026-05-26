@@ -1,4 +1,4 @@
-//! Native Rust model for `LogicSynthesis/sis/simplify/filter_util.c`.
+﻿//! Native Rust model for `LogicSynthesis/sis/simplify/filter_util.c`.
 //!
 //! The C file filters don't-care rows in an `sm_matrix` using sparse row,
 //! column, flag, and `user_word` metadata. This module ports those filtering
@@ -12,41 +12,6 @@ use std::fmt;
 
 pub const SIZE_BOUND: usize = 3;
 pub const DIST_BOUND: i32 = 2;
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_PORT_BEADS: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.457",
-        source_file: "LogicSynthesis/sis/sparse/matrix.c",
-        reason: "canonical sm_matrix storage, row deletion, and row/column lookup",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.458",
-        source_file: "LogicSynthesis/sis/sparse/rows.c",
-        reason: "native sm_row flags, user_word metadata, length, and sorted element traversal",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.456",
-        source_file: "LogicSynthesis/sis/sparse/cols.c",
-        reason: "native sm_col flags, length, and sorted element traversal",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.2",
-        source_file: "LogicSynthesis/sis/array/array.c",
-        reason: "array_t chosen-column bit vector used by sm_col_count_init and sm_get_long_col",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.448",
-        source_file: "LogicSynthesis/sis/simplify/dc_filter.c",
-        reason: "higher-level simplify filter dispatch that repeatedly calls these utilities",
-    },
-];
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RowKind {
@@ -180,23 +145,16 @@ impl FilterMatrix {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum FilterUtilError {
-    MissingSisPorts {
-        operation: &'static str,
-        dependencies: &'static [PortDependency],
-    },
+    MissingSisPorts { operation: &'static str },
     UnknownRow(usize),
 }
 
 impl fmt::Display for FilterUtilError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingSisPorts {
-                operation,
-                dependencies,
-            } => write!(
+            Self::MissingSisPorts { operation } => write!(
                 f,
-                "{operation} requires {} native SIS prerequisite ports",
-                dependencies.len()
+                "{operation} requires native Rust SIS ports that are not available yet"
             ),
             Self::UnknownRow(row) => write!(f, "unknown sparse matrix row {row}"),
         }
@@ -205,17 +163,10 @@ impl fmt::Display for FilterUtilError {
 
 impl Error for FilterUtilError {}
 
-pub fn required_port_beads() -> &'static [PortDependency] {
-    REQUIRED_PORT_BEADS
-}
-
 pub fn sis_sparse_matrix_filter_unavailable(
     operation: &'static str,
 ) -> Result<(), FilterUtilError> {
-    Err(FilterUtilError::MissingSisPorts {
-        operation,
-        dependencies: REQUIRED_PORT_BEADS,
-    })
+    Err(FilterUtilError::MissingSisPorts { operation })
 }
 
 pub fn exact_block_filter_excluding_col(matrix: &mut FilterMatrix, excluded_col: Option<usize>) {
@@ -656,25 +607,13 @@ mod tests {
     }
 
     #[test]
-    fn sis_sparse_matrix_entry_reports_dependency_beads_and_sources() {
+    fn sis_sparse_matrix_entry_reports_missing_sis_ports() {
         let err = sis_sparse_matrix_filter_unavailable("fdc_sm_bp_1")
             .expect_err("canonical SIS sm_matrix integration should be blocked");
 
         match err {
-            FilterUtilError::MissingSisPorts {
-                operation,
-                dependencies,
-            } => {
+            FilterUtilError::MissingSisPorts { operation } => {
                 assert_eq!(operation, "fdc_sm_bp_1");
-                assert_eq!(dependencies, REQUIRED_PORT_BEADS);
-                assert!(dependencies.iter().any(|dependency| {
-                    dependency.bead_id == "LogicFriday1-8j8.2.6.457"
-                        && dependency.source_file == "LogicSynthesis/sis/sparse/matrix.c"
-                }));
-                assert!(dependencies.iter().any(|dependency| {
-                    dependency.bead_id == "LogicFriday1-8j8.2.6.448"
-                        && dependency.source_file == "LogicSynthesis/sis/simplify/dc_filter.c"
-                }));
             }
             other => panic!("unexpected error: {other:?}"),
         }

@@ -11,81 +11,6 @@ use std::collections::HashSet;
 use std::error::Error;
 use std::fmt;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_PORT_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.2",
-        source_file: "LogicSynthesis/sis/array/array.c",
-        reason: "array_t stores node vectors and lambda check vectors",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.297",
-        source_file: "LogicSynthesis/sis/network/dfs.c",
-        reason: "karp_decomp_network traverses network_dfs_from_input",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.305",
-        source_file: "LogicSynthesis/sis/network/network_util.c",
-        reason: "network_create_from_node, network_add_node, network_sweep, and node network ownership are required",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.314",
-        source_file: "LogicSynthesis/sis/node/invert.c",
-        reason: "node_not produces the complement cover used for incompatibility",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-        reason: "node_constant, node_literal, node_and, node_or, node_free, and node_replace build decomposed nodes",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.313",
-        source_file: "LogicSynthesis/sis/node/fan.c",
-        reason: "fanin traversal, fanin lookup, and fanin counts drive lambda selection",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.455",
-        source_file: "LogicSynthesis/sis/simplify/simp.c",
-        reason: "node_simplify refreshes the source node and generated alpha/G nodes",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.393",
-        source_file: "LogicSynthesis/sis/pld/xln_part_dec.c",
-        reason: "split_node is the recursive fallback when Karp decomposition fails",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.388",
-        source_file: "LogicSynthesis/sis/pld/xln_k_decomp_area.c",
-        reason: "area-oriented callers consume xln_k_decomp_node_with_network results",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.378",
-        source_file: "LogicSynthesis/sis/pld/xln_aux.c",
-        reason: "intlog2 and xl_binary1 are shared C helpers mirrored here",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.383",
-        source_file: "LogicSynthesis/sis/pld/xln_filter.c",
-        reason: "filtering callers use xln_k_decomp_node_with_array and lambda-index checks",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.382",
-        source_file: "LogicSynthesis/sis/pld/xln_feasible.c",
-        reason: "feasibility callers use xln_k_decomp_node_with_array to test decomposition quality",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.485",
-        source_file: "LogicSynthesis/sis/st/st.c",
-        reason: "st_table marks lambda fanins and root classes in the C implementation",
-    },
-];
-
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum Literal {
     Zero,
@@ -220,7 +145,6 @@ pub enum XlnKDecompError {
     },
     MissingNativePorts {
         operation: &'static str,
-        dependencies: &'static [PortDependency],
     },
 }
 
@@ -253,23 +177,15 @@ impl fmt::Display for XlnKDecompError {
                 f,
                 "node/complement fanin mismatch: {node_fanins} vs {complement_fanins}"
             ),
-            Self::MissingNativePorts {
-                operation,
-                dependencies,
-            } => write!(
+            Self::MissingNativePorts { operation } => write!(
                 f,
-                "{operation} is blocked by {} unported SIS C-file dependencies",
-                dependencies.len()
+                "{operation} is blocked by unported SIS C-file dependencies"
             ),
         }
     }
 }
 
 impl Error for XlnKDecompError {}
-
-pub fn required_port_dependencies() -> &'static [PortDependency] {
-    REQUIRED_PORT_DEPENDENCIES
-}
 
 pub fn karp_decomp_network_blocked() -> Result<(), XlnKDecompError> {
     missing_native_ports("karp_decomp_network")
@@ -284,10 +200,7 @@ pub fn xln_k_decomp_node_with_array_blocked() -> Result<(), XlnKDecompError> {
 }
 
 fn missing_native_ports(operation: &'static str) -> Result<(), XlnKDecompError> {
-    Err(XlnKDecompError::MissingNativePorts {
-        operation,
-        dependencies: REQUIRED_PORT_DEPENDENCIES,
-    })
+    Err(XlnKDecompError::MissingNativePorts { operation })
 }
 
 pub fn literal_intersection(left: Literal, right: Literal) -> Option<Literal> {
@@ -897,35 +810,6 @@ mod tests {
             vec![0, 2]
         );
         assert_eq!(get_combination(5, 3, 4), vec![3, 4, 0, 1]);
-    }
-
-    #[test]
-    fn sis_bound_entries_report_dependency_beads_and_source_files() {
-        let Err(XlnKDecompError::MissingNativePorts {
-            operation,
-            dependencies,
-        }) = xln_k_decomp_node_with_array_blocked()
-        else {
-            panic!("expected dependency error");
-        };
-
-        assert_eq!(operation, "xln_k_decomp_node_with_array");
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.314"
-                && dependency.source_file == "LogicSynthesis/sis/node/invert.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.455"
-                && dependency.source_file == "LogicSynthesis/sis/simplify/simp.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.393"
-                && dependency.source_file == "LogicSynthesis/sis/pld/xln_part_dec.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.485"
-                && dependency.source_file == "LogicSynthesis/sis/st/st.c"
-        }));
     }
 
     #[test]

@@ -1,4 +1,4 @@
-//! Native Rust model for `LogicSynthesis/sis/simplify/simp_daemon.c`.
+﻿//! Native Rust model for `LogicSynthesis/sis/simplify/simp_daemon.c`.
 //!
 //! The C daemon manages the `node_t->simplify` slot: allocate a
 //! `sim_flag_t`, reset it to unknown values, free it, and copy it during node
@@ -8,26 +8,6 @@
 
 use std::error::Error;
 use std::fmt;
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_SIS_NODE_PORTS: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-        reason: "native node storage is needed before the simplify slot can be attached to SIS nodes",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.455",
-        source_file: "LogicSynthesis/sis/simplify/simp.c",
-        reason: "native simplify-node execution is the main consumer of the stored method, accept, and don't-care type flags",
-    },
-];
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum SimMethod {
@@ -236,13 +216,8 @@ impl SimplifySlot {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum SimDaemonError {
-    MissingSimplifySlot {
-        operation: &'static str,
-    },
-    MissingSisNodePorts {
-        operation: &'static str,
-        dependencies: &'static [PortDependency],
-    },
+    MissingSimplifySlot { operation: &'static str },
+    MissingSisNodePorts { operation: &'static str },
 }
 
 impl fmt::Display for SimDaemonError {
@@ -251,13 +226,9 @@ impl fmt::Display for SimDaemonError {
             Self::MissingSimplifySlot { operation } => {
                 write!(f, "{operation} requires an allocated simplify slot")
             }
-            Self::MissingSisNodePorts {
-                operation,
-                dependencies,
-            } => write!(
+            Self::MissingSisNodePorts { operation } => write!(
                 f,
-                "{operation} requires {} unported native SIS dependencies",
-                dependencies.len()
+                "{operation} requires native Rust SIS node ports that are not available yet"
             ),
         }
     }
@@ -265,35 +236,27 @@ impl fmt::Display for SimDaemonError {
 
 impl Error for SimDaemonError {}
 
-pub fn required_sis_node_ports() -> &'static [PortDependency] {
-    REQUIRED_SIS_NODE_PORTS
-}
-
 pub fn attach_to_sis_node() -> Result<(), SimDaemonError> {
     Err(SimDaemonError::MissingSisNodePorts {
         operation: "simp_alloc on native SIS node",
-        dependencies: REQUIRED_SIS_NODE_PORTS,
     })
 }
 
 pub fn detach_from_sis_node() -> Result<(), SimDaemonError> {
     Err(SimDaemonError::MissingSisNodePorts {
         operation: "simp_free on native SIS node",
-        dependencies: REQUIRED_SIS_NODE_PORTS,
     })
 }
 
 pub fn invalidate_sis_node() -> Result<(), SimDaemonError> {
     Err(SimDaemonError::MissingSisNodePorts {
         operation: "simp_invalid on native SIS node",
-        dependencies: REQUIRED_SIS_NODE_PORTS,
     })
 }
 
 pub fn duplicate_sis_node_slot() -> Result<(), SimDaemonError> {
     Err(SimDaemonError::MissingSisNodePorts {
         operation: "simp_dup on native SIS nodes",
-        dependencies: REQUIRED_SIS_NODE_PORTS,
     })
 }
 
@@ -395,29 +358,17 @@ mod tests {
     }
 
     #[test]
-    fn sis_node_entry_points_report_dependency_beads_and_source_files() {
-        let dependencies = required_sis_node_ports();
-
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.318"
-                && dependency.source_file == "LogicSynthesis/sis/node/node.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.455"
-                && dependency.source_file == "LogicSynthesis/sis/simplify/simp.c"
-        }));
+    fn sis_node_entry_points_report_missing_sis_node_ports() {
         assert_eq!(
             attach_to_sis_node(),
             Err(SimDaemonError::MissingSisNodePorts {
                 operation: "simp_alloc on native SIS node",
-                dependencies: REQUIRED_SIS_NODE_PORTS,
             })
         );
         assert_eq!(
             duplicate_sis_node_slot(),
             Err(SimDaemonError::MissingSisNodePorts {
                 operation: "simp_dup on native SIS nodes",
-                dependencies: REQUIRED_SIS_NODE_PORTS,
             })
         );
     }

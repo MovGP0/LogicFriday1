@@ -14,76 +14,6 @@ pub const ACT_ITE_ALPHA: isize = 10;
 pub const ACT_ITE_GAMMA: isize = 2;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_PORT_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-        reason: "node_function, node cubes, node literals, node_free, and constant/literal node construction",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.313",
-        source_file: "LogicSynthesis/sis/node/fan.c",
-        reason: "fanin enumeration, fanin lookup, and support-size checks",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.308",
-        source_file: "LogicSynthesis/sis/node/cofct.c",
-        reason: "node_algebraic_cofactor and node_cofactor drive recursive ITE decomposition",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.317",
-        source_file: "LogicSynthesis/sis/node/names.c",
-        reason: "literal vertices and cover columns carry fanin long names",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.344",
-        source_file: "LogicSynthesis/sis/pld/act_bool.c",
-        reason: "act_is_act_function and ACT_MATCH conversion to ITE are SIS-backed fast paths",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.350",
-        source_file: "LogicSynthesis/sis/pld/act_ite_new.c",
-        reason: "cost slots, ACT_ITE_ite storage, and tree mapping belong to the ACT ITE integration port",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.359",
-        source_file: "LogicSynthesis/sis/pld/act_urp.c",
-        reason: "legacy unate-recursive mapping variants are called by selection heuristics",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.360",
-        source_file: "LogicSynthesis/sis/pld/act_util.c",
-        reason: "my_shannon_ite, ACT cleanup, and shared utility behavior are legacy SIS helpers",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.367",
-        source_file: "LogicSynthesis/sis/pld/ite_leaf.c",
-        reason: "single cube, single-literal cube, and unate-cover leaf constructors are delegated helpers",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.376",
-        source_file: "LogicSynthesis/sis/pld/pld_util.c",
-        reason: "cube-to-node conversion and cube extraction are used by orthogonal cube handling",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.457",
-        source_file: "LogicSynthesis/sis/sparse/matrix.c",
-        reason: "build_F and unate-cover minimum-cover construction use sm_matrix",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.485",
-        source_file: "LogicSynthesis/sis/st/st.c",
-        reason: "ite_end_table interns constant ITE terminals during recursive construction",
-    },
-];
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum NodeKind {
     PrimaryInput,
     PrimaryOutput,
@@ -427,33 +357,16 @@ pub enum MuxRemainder {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum IteNewUrpError {
-    PrimaryNode {
-        kind: NodeKind,
-    },
-    RowWidthMismatch {
-        expected: usize,
-        actual: usize,
-    },
-    InputWidthMismatch {
-        expected: usize,
-        actual: usize,
-    },
+    PrimaryNode { kind: NodeKind },
+    RowWidthMismatch { expected: usize, actual: usize },
+    InputWidthMismatch { expected: usize, actual: usize },
     UnknownColumn(usize),
-    MissingFanin {
-        column: usize,
-    },
+    MissingFanin { column: usize },
     InvalidLiteralValue(i32),
-    InvalidCubeCount {
-        actual: usize,
-    },
-    BinateLiteralInCube {
-        column: usize,
-    },
+    InvalidCubeCount { actual: usize },
+    BinateLiteralInCube { column: usize },
     ActMatchEvaluationUnavailable,
-    MissingNativePorts {
-        operation: &'static str,
-        dependencies: &'static [PortDependency],
-    },
+    MissingNativePorts { operation: &'static str },
 }
 
 impl fmt::Display for IteNewUrpError {
@@ -483,13 +396,9 @@ impl fmt::Display for IteNewUrpError {
             Self::ActMatchEvaluationUnavailable => {
                 write!(f, "ACT match leaf evaluation requires the ACT matcher port")
             }
-            Self::MissingNativePorts {
-                operation,
-                dependencies,
-            } => write!(
+            Self::MissingNativePorts { operation } => write!(
                 f,
-                "{operation} is blocked by {} unported SIS C-file dependencies",
-                dependencies.len()
+                "{operation} is blocked by unported SIS C-file dependencies"
             ),
         }
     }
@@ -498,10 +407,6 @@ impl fmt::Display for IteNewUrpError {
 impl Error for IteNewUrpError {}
 
 pub type IteNewUrpResult<T> = Result<T, IteNewUrpError>;
-
-pub fn required_port_dependencies() -> &'static [PortDependency] {
-    REQUIRED_PORT_DEPENDENCIES
-}
 
 pub fn act_ite_new_map_node_blocked<Node>(
     _node: &mut Node,
@@ -1040,10 +945,7 @@ fn ensure_column(matrix: &CoverMatrix, column: usize) -> IteNewUrpResult<()> {
 }
 
 fn missing_native_ports(operation: &'static str) -> IteNewUrpError {
-    IteNewUrpError::MissingNativePorts {
-        operation,
-        dependencies: REQUIRED_PORT_DEPENDENCIES,
-    }
+    IteNewUrpError::MissingNativePorts { operation }
 }
 
 #[cfg(test)]
@@ -1242,38 +1144,5 @@ mod tests {
         assert_eq!(or.evaluate(&[false, false]).unwrap(), true);
         assert_eq!(or.evaluate(&[true, false]).unwrap(), false);
         assert_eq!(or.evaluate(&[true, true]).unwrap(), true);
-    }
-
-    #[test]
-    fn blocked_sis_entries_report_dependency_beads_and_source_files() {
-        let error = act_ite_new_make_ite_blocked(&mut (), InitParams::default()).unwrap_err();
-        let IteNewUrpError::MissingNativePorts {
-            operation,
-            dependencies,
-        } = error
-        else {
-            panic!("expected missing dependency error");
-        };
-
-        assert_eq!(
-            operation,
-            "act_ite_new_make_ite SIS recursive ITE integration"
-        );
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.318"
-                && dependency.source_file == "LogicSynthesis/sis/node/node.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.344"
-                && dependency.source_file == "LogicSynthesis/sis/pld/act_bool.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.457"
-                && dependency.source_file == "LogicSynthesis/sis/sparse/matrix.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.485"
-                && dependency.source_file == "LogicSynthesis/sis/st/st.c"
-        }));
     }
 }

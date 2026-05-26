@@ -15,46 +15,6 @@ pub const ONE: usize = 2;
 pub const TWO: usize = 3;
 pub const PACKED_PATTERN_BITS: usize = 32;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead: &'static str,
-    pub c_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_PORT_BEADS: &[PortDependency] = &[
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.305",
-        c_file: "LogicSynthesis/sis/network/network_util.c",
-        reason: "provides native primary-input and primary-output traversal",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.297",
-        c_file: "LogicSynthesis/sis/network/dfs.c",
-        reason: "provides native DFS node order used by simulate_network callers",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.313",
-        c_file: "LogicSynthesis/sis/node/fan.c",
-        reason: "provides native node fanin relationships",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.318",
-        c_file: "LogicSynthesis/sis/node/node.c",
-        reason: "provides native node type, cube, literal, cofactor, and function behavior",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.492",
-        c_file: "LogicSynthesis/sis/stg/stg.c",
-        reason: "provides native STG state, edge, current-state, and ANY/* lookup behavior",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.444",
-        c_file: "LogicSynthesis/sis/sim/com_sim.c",
-        reason: "owns command-level simulation wiring and user-facing argument parsing",
-    },
-];
-
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct NodeId(pub usize);
 
@@ -333,7 +293,6 @@ pub enum InterpretError {
     },
     MissingSisPorts {
         operation: &'static str,
-        dependencies: &'static [PortDependency],
     },
 }
 
@@ -373,23 +332,15 @@ impl fmt::Display for InterpretError {
                 "STG edge from {state} produced output {output:?} with width {}, expected {expected}",
                 output.chars().count()
             ),
-            Self::MissingSisPorts {
-                operation,
-                dependencies,
-            } => write!(
+            Self::MissingSisPorts { operation } => write!(
                 f,
-                "{operation} is blocked by {} unported SIS C-file dependencies",
-                dependencies.len()
+                "{operation} is blocked by unported native SIS dependencies"
             ),
         }
     }
 }
 
 impl Error for InterpretError {}
-
-pub fn required_port_beads() -> &'static [PortDependency] {
-    REQUIRED_PORT_BEADS
-}
 
 pub fn simulate_node(network: &mut SimNetwork, node: NodeId) -> Result<LogicValue, InterpretError> {
     let node_data = network.node(node)?.clone();
@@ -637,21 +588,18 @@ pub fn print_pattern(pattern: &[u32], mask: u32) -> Vec<LogicValue> {
 pub fn simulate_node_from_sis() -> Result<LogicValue, InterpretError> {
     Err(InterpretError::MissingSisPorts {
         operation: "simulate_node(node_t *)",
-        dependencies: REQUIRED_PORT_BEADS,
     })
 }
 
 pub fn simulate_network_from_sis() -> Result<Vec<LogicValue>, InterpretError> {
     Err(InterpretError::MissingSisPorts {
         operation: "simulate_network(network_t *, array_t *, array_t *)",
-        dependencies: REQUIRED_PORT_BEADS,
     })
 }
 
 pub fn simulate_stg_from_sis() -> Result<Option<StgStep>, InterpretError> {
     Err(InterpretError::MissingSisPorts {
         operation: "simulate_stg(graph_t *, array_t *, vertex_t **)",
-        dependencies: REQUIRED_PORT_BEADS,
     })
 }
 
@@ -839,24 +787,14 @@ mod tests {
     }
 
     #[test]
-    fn sis_bound_entry_points_report_dependency_beads() {
+    fn sis_bound_entry_points_report_missing_native_prerequisites() {
         assert_eq!(
             simulate_node_from_sis(),
             Err(InterpretError::MissingSisPorts {
                 operation: "simulate_node(node_t *)",
-                dependencies: REQUIRED_PORT_BEADS,
             })
         );
 
-        let dependencies = required_port_beads();
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead == "LogicFriday1-8j8.2.6.318"
-                && dependency.c_file == "LogicSynthesis/sis/node/node.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead == "LogicFriday1-8j8.2.6.492"
-                && dependency.c_file == "LogicSynthesis/sis/stg/stg.c"
-        }));
         assert!(format!("{}", simulate_network_from_sis().unwrap_err()).contains("blocked"));
     }
 }

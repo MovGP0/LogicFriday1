@@ -13,70 +13,6 @@ use std::error::Error;
 use std::fmt;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead: &'static str,
-    pub c_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const BLOCKED_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.487",
-        c_file: "LogicSynthesis/sis/stg/enumerate.c",
-        reason: "performs recursive state enumeration and packed-state queueing",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.488",
-        c_file: "LogicSynthesis/sis/stg/level_c.c",
-        reason: "builds ndata records, latch endpoint arrays, levels, and varying-node order",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.490",
-        c_file: "LogicSynthesis/sis/stg/stg_sc_sim.c",
-        reason: "simulates one combinational step during enumeration",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.492",
-        c_file: "LogicSynthesis/sis/stg/stg.c",
-        reason: "allocates and mutates the target STG graph",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.110",
-        c_file: "LogicSynthesis/sis/clock/clock.c",
-        reason: "provides clock lookup, transitive clock relation, and edge timing data",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.230",
-        c_file: "LogicSynthesis/sis/latch/latch.c",
-        reason: "provides latch control, type, and initial-value APIs",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.305",
-        c_file: "LogicSynthesis/sis/network/network_util.c",
-        reason: "provides network checks, duplication, primary I/O counts, and traversal",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.307",
-        c_file: "LogicSynthesis/sis/network/sweep.c",
-        reason: "removes dangling and parallel latch structure before extraction",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.313",
-        c_file: "LogicSynthesis/sis/node/fan.c",
-        reason: "provides transitive fanin/fanout traversal for clock validation and removal",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.318",
-        c_file: "LogicSynthesis/sis/node/node.c",
-        reason: "provides node kind/name storage and deletion behavior",
-    },
-];
-
-pub fn blocked_dependencies() -> &'static [PortDependency] {
-    BLOCKED_DEPENDENCIES
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ExtractionMode {
     InitialStateOnly,
     CompleteStateTable,
@@ -402,9 +338,7 @@ pub fn prepare_extraction(
 
 pub fn stg_extract(network: &SenumNetwork, mode: ExtractionMode) -> Result<SenumSetup, SenumError> {
     let _ = prepare_extraction(network, mode)?;
-    Err(SenumError::MissingExtractionDependencies {
-        dependencies: blocked_dependencies(),
-    })
+    Err(SenumError::MissingExtractionDependencies)
 }
 
 pub fn remove_control_logic(network: &mut SenumNetwork) -> ControlRemoval {
@@ -543,9 +477,7 @@ pub enum SenumError {
         primary_outputs: usize,
         latches: usize,
     },
-    MissingExtractionDependencies {
-        dependencies: &'static [PortDependency],
-    },
+    MissingExtractionDependencies,
 }
 
 impl fmt::Display for SenumError {
@@ -599,11 +531,9 @@ impl fmt::Display for SenumError {
                 f,
                 "network counts are inconsistent: {primary_inputs} PIs, {primary_outputs} POs, {latches} latches"
             ),
-            Self::MissingExtractionDependencies { dependencies } => write!(
-                f,
-                "STG extraction is blocked by {} unported SIS dependencies",
-                dependencies.len()
-            ),
+            Self::MissingExtractionDependencies => {
+                write!(f, "STG extraction is blocked by unported SIS dependencies")
+            }
         }
     }
 }
@@ -872,23 +802,6 @@ mod tests {
         let error = stg_extract(&network, ExtractionMode::InitialStateOnly)
             .expect_err("full STG extraction is intentionally blocked");
 
-        let SenumError::MissingExtractionDependencies { dependencies } = error else {
-            panic!("unexpected error kind");
-        };
-        assert!(
-            dependencies
-                .iter()
-                .any(|dependency| dependency.bead == "LogicFriday1-8j8.2.6.487")
-        );
-        assert!(
-            dependencies
-                .iter()
-                .any(|dependency| dependency.bead == "LogicFriday1-8j8.2.6.490")
-        );
-        assert!(
-            dependencies
-                .iter()
-                .any(|dependency| dependency.bead == "LogicFriday1-8j8.2.6.230")
-        );
+        assert_eq!(error, SenumError::MissingExtractionDependencies);
     }
 }

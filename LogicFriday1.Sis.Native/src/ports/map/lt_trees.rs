@@ -357,8 +357,7 @@ impl LtTreeInput {
         if self.options.max_gaps == 0 {
             return Err(LtTreeError::InvalidMaxGaps);
         }
-        if !self.options.wire_load.per_fanout.is_finite()
-            || self.options.wire_load.per_fanout < 0.0
+        if !self.options.wire_load.per_fanout.is_finite() || self.options.wire_load.per_fanout < 0.0
         {
             return Err(LtTreeError::InvalidWireLoad);
         }
@@ -467,7 +466,11 @@ impl LtTreePlan {
                         let origin = backward_load_dependent(
                             ZERO_DELAY,
                             gate,
-                            load + self.input.options.wire_load.load_for_fanout_count(fanout_count),
+                            load + self
+                                .input
+                                .options
+                                .wire_load
+                                .load_for_fanout_count(fanout_count),
                         );
                         result.push(SingleSourceMerge {
                             source_index,
@@ -487,13 +490,13 @@ impl LtTreePlan {
     }
 
     pub fn build_tree(&self, source: SelectedSource) -> Result<Vec<FanoutTreeAction>, LtTreeError> {
-        let source_gate = self
-            .input
-            .gates
-            .get(source.main_source)
-            .ok_or(LtTreeError::InvalidGateIndex {
-                gate_index: source.main_source,
-            })?;
+        let source_gate =
+            self.input
+                .gates
+                .get(source.main_source)
+                .ok_or(LtTreeError::InvalidGateIndex {
+                    gate_index: source.main_source,
+                })?;
         let source_polarity =
             source_gate
                 .kind
@@ -636,13 +639,17 @@ impl LtTreePlan {
                 let sinks = self.input.fanout_data.sinks(sink_polarity);
                 if *sink_index < sinks.len() {
                     Ok((
-                        self.input.fanout_data.cumulative_load(sink_polarity, *sink_index)?
+                        self.input
+                            .fanout_data
+                            .cumulative_load(sink_polarity, *sink_index)?
                             + self.input.gates[*buffer_index].input_load,
                         *sink_index + 1,
                     ))
                 } else {
                     Ok((
-                        self.input.fanout_data.cumulative_load(sink_polarity, sinks.len())?,
+                        self.input
+                            .fanout_data
+                            .cumulative_load(sink_polarity, sinks.len())?,
                         sinks.len(),
                     ))
                 }
@@ -686,13 +693,14 @@ impl LtTreePlan {
                 let buffer_polarity = self.input.gates[buffer_index]
                     .kind
                     .output_polarity(source_polarity);
-                let buffer_gaps = if next_sink_index == sink_index
-                    && buffer_polarity == sink_polarity
-                {
-                    gaps_remaining.checked_sub(1).ok_or(LtTreeError::GapUnderflow)?
-                } else {
-                    gaps_remaining
-                };
+                let buffer_gaps =
+                    if next_sink_index == sink_index && buffer_polarity == sink_polarity {
+                        gaps_remaining
+                            .checked_sub(1)
+                            .ok_or(LtTreeError::GapUnderflow)?
+                    } else {
+                        gaps_remaining
+                    };
                 let fanout_count = self.fanout_count(
                     buffer_index,
                     buffer_polarity,
@@ -880,12 +888,16 @@ pub enum LtTreeError {
 impl fmt::Display for LtTreeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingSisPorts { operation } => write!(f, "{operation} requires unavailable native SIS integration"),
+            Self::MissingSisPorts { operation } => {
+                write!(f, "{operation} requires unavailable native SIS integration")
+            }
             Self::NoGates => write!(f, "LT-tree planning requires at least one gate"),
             Self::NoSources => write!(f, "LT-tree planning requires at least one source gate"),
             Self::NoBuffers => write!(f, "LT-tree planning requires at least one buffer gate"),
             Self::InvalidMaxGaps => write!(f, "max_gaps must be greater than zero"),
-            Self::InvalidWireLoad => write!(f, "wire load per fanout must be finite and non-negative"),
+            Self::InvalidWireLoad => {
+                write!(f, "wire load per fanout must be finite and non-negative")
+            }
             Self::InvalidGateIndex { gate_index } => write!(f, "invalid gate index {gate_index}"),
             Self::InvalidArea { gate_index } => {
                 write!(f, "gate {gate_index} has invalid area")
@@ -913,7 +925,10 @@ impl fmt::Display for LtTreeError {
             }
             Self::MissingLtTreeEntry { key } => write!(f, "missing LT-tree entry for {key:?}"),
             Self::SourcePolarityRequired { source_index } => {
-                write!(f, "selected main source {source_index} is not a source gate")
+                write!(
+                    f,
+                    "selected main source {source_index} is not a source gate"
+                )
             }
             Self::InvalidSelectedSource => write!(f, "selected source and buffer are inconsistent"),
             Self::GapUnderflow => write!(f, "LT-tree gap counter underflowed"),
@@ -1046,8 +1061,7 @@ fn best_one_source(
             if sink > key.sink_index {
                 local_required = min_delay(
                     local_required,
-                    input.fanout_data.sinks(key.sink_polarity).sinks[key.sink_index]
-                        .min_required,
+                    input.fanout_data.sinks(key.sink_polarity).sinks[key.sink_index].min_required,
                 );
             }
             local_required = backward_load_dependent(local_required, source_gate, load);
@@ -1134,11 +1148,7 @@ fn validate_gate(index: usize, gate: &FanoutGate) -> Result<(), LtTreeError> {
     Ok(())
 }
 
-fn validate_sink(
-    polarity: Polarity,
-    index: usize,
-    sink: &FanoutSink,
-) -> Result<(), LtTreeError> {
+fn validate_sink(polarity: Polarity, index: usize, sink: &FanoutSink) -> Result<(), LtTreeError> {
     if !sink.load.is_finite() || sink.load < 0.0 {
         return Err(LtTreeError::InvalidSinkLoad { polarity, index });
     }

@@ -16,86 +16,9 @@ pub const FUDGE: f64 = 1.0;
 pub const RETIME_TEST_NOT_SET: f64 = -50_000.0;
 pub const UNKNOWN_INITIAL_VALUE: i32 = 3;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_NATIVE_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.414",
-        source_file: "LogicSynthesis/sis/retime/re_export.c",
-        reason: "native total-area/export helpers are used by command-level retime reporting",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.416",
-        source_file: "LogicSynthesis/sis/retime/re_initial.c",
-        reason: "retime_update_init_states computes concrete latch initial states after retiming",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.417",
-        source_file: "LogicSynthesis/sis/retime/re_milp.c",
-        reason: "Li/Leiserson feasibility solver used when lp_flag selects the LP routine",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.419",
-        source_file: "LogicSynthesis/sis/retime/re_nanni.c",
-        reason: "Nanni/Saxe feasibility solver used by the alternate graph retiming path",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.420",
-        source_file: "LogicSynthesis/sis/retime/re_net.c",
-        reason: "network update integration consumes the final retimed graph",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.412",
-        source_file: "LogicSynthesis/sis/retime/re_computeWD.c",
-        reason: "minimum-register retiming depends on W/D path data",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.423",
-        source_file: "LogicSynthesis/sis/retime/retime_util.c",
-        reason: "SIS graph conversion and shared re_graph allocation/accessor substrate",
-    },
-];
-
-pub const REQUIRED_INITIAL_STATE_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.416",
-        source_file: "LogicSynthesis/sis/retime/re_initial.c",
-        reason: "retime_update_init_states is required when initial-state preservation is requested",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.230",
-        source_file: "LogicSynthesis/sis/latch/latch.c",
-        reason: "native latch identity and old initial values are needed to preserve reset behavior",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.305",
-        source_file: "LogicSynthesis/sis/network/network_util.c",
-        reason: "initial-state extraction walks and duplicates SIS networks",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.331",
-        source_file: "LogicSynthesis/sis/ntbdd/verify_ntwk.c",
-        reason: "sequential BDD input-sequence extraction is used by the C initial-state path",
-    },
-];
-
-pub fn required_native_dependencies() -> &'static [PortDependency] {
-    REQUIRED_NATIVE_DEPENDENCIES
-}
-
-pub fn required_initial_state_dependencies() -> &'static [PortDependency] {
-    REQUIRED_INITIAL_STATE_DEPENDENCIES
-}
-
 pub fn sis_retime_graph_blocked() -> Result<(), RetimeGraphError> {
     Err(RetimeGraphError::MissingNativeDependencies {
         operation: "retime_graph over SIS network_t/re_graph",
-        dependencies: REQUIRED_NATIVE_DEPENDENCIES,
     })
 }
 
@@ -685,7 +608,6 @@ pub fn retime_graph<S: RetimeSolver>(
         if options.initial_state_mode != InitialStateMode::Suppressed {
             return Err(RetimeGraphError::MissingNativeDependencies {
                 operation: "retime_update_init_states",
-                dependencies: REQUIRED_INITIAL_STATE_DEPENDENCIES,
             });
         }
 
@@ -714,7 +636,6 @@ pub fn retime_graph<S: RetimeSolver>(
 pub enum RetimeGraphError {
     MissingNativeDependencies {
         operation: &'static str,
-        dependencies: &'static [PortDependency],
     },
     MissingNode(NodeId),
     MissingEdge(EdgeId),
@@ -753,14 +674,9 @@ pub enum RetimeGraphError {
 impl fmt::Display for RetimeGraphError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingNativeDependencies {
-                operation,
-                dependencies,
-            } => write!(
-                f,
-                "{operation} requires {} native SIS prerequisite ports",
-                dependencies.len()
-            ),
+            Self::MissingNativeDependencies { operation } => {
+                write!(f, "{operation} requires native prerequisite ports")
+            }
             Self::MissingNode(node) => write!(f, "retime graph references missing node {}", node.0),
             Self::MissingEdge(edge) => write!(f, "retime graph references missing edge {}", edge.0),
             Self::PrimaryInputHasFanins { node } => {
@@ -961,52 +877,6 @@ mod tests {
         retime_graph(&mut graph, options, 0, &mut solver).unwrap();
         assert_eq!(solver.calls[0].0, RetimeAlgorithm::MinRegister);
     }
-
-    #[test]
-    fn requested_initial_state_preservation_reports_dependency_beads_and_sources() {
-        let mut graph = chain_graph();
-        graph.edges[0].weight = 1;
-        let mut solver = ScriptedSolver::with_responses(vec![SolverStatus::Feasible {
-            retiming: vec![0, -1, 0, 0],
-        }]);
-        let mut options = RetimeGraphOptions::new(4.0);
-        options.initial_state_mode = InitialStateMode::WhenSmall;
-
-        let error = retime_graph(&mut graph, options, 0, &mut solver).unwrap_err();
-        let RetimeGraphError::MissingNativeDependencies {
-            operation,
-            dependencies,
-        } = error
-        else {
-            panic!("expected missing native dependencies");
-        };
-        assert_eq!(operation, "retime_update_init_states");
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.416"
-                && dependency.source_file == "LogicSynthesis/sis/retime/re_initial.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.331"
-                && dependency.source_file == "LogicSynthesis/sis/ntbdd/verify_ntwk.c"
-        }));
-    }
-
-    #[test]
-    fn top_level_sis_entry_reports_dependency_beads_and_sources() {
-        let error = sis_retime_graph_blocked().unwrap_err();
-        let RetimeGraphError::MissingNativeDependencies { dependencies, .. } = error else {
-            panic!("expected missing native dependencies");
-        };
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.417"
-                && dependency.source_file == "LogicSynthesis/sis/retime/re_milp.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.420"
-                && dependency.source_file == "LogicSynthesis/sis/retime/re_net.c"
-        }));
-    }
-
     #[test]
     fn host_vertex_retiming_is_rejected_when_applying_final_unknowns() {
         let mut graph = chain_graph();

@@ -12,40 +12,6 @@ use std::fmt;
 const LARGE_NUMBER: i32 = 0x1fff_ffff;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub note: &'static str,
-}
-
-pub const REQUIRED_ORDERING_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.2",
-        source_file: "LogicSynthesis/sis/array/array.c",
-        note: "legacy array_t order result allocation and ownership",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.442",
-        source_file: "LogicSynthesis/sis/seqbdd/verif_util.c",
-        note: "legacy caller builds set_info_t from SIS nodes and consumes the output ordering",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.485",
-        source_file: "LogicSynthesis/sis/st/st.c",
-        note: "legacy st_table memoization keyed by var_set_t values",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.518",
-        source_file: "LogicSynthesis/sis/var_set/var_set.c",
-        note: "legacy var_set_t bitsets, hashing, comparison, and set operations",
-    },
-];
-
-pub fn required_ordering_dependencies() -> &'static [PortDependency] {
-    REQUIRED_ORDERING_DEPENDENCIES
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct OrderingOptions {
     pub ordering_depth: i32,
     pub verbose: i32,
@@ -64,7 +30,6 @@ impl Default for OrderingOptions {
 pub enum OrderingError {
     MissingNativePorts {
         operation: &'static str,
-        dependencies: &'static [PortDependency],
     },
     EmptySetCollection,
     SetVariableOutOfRange {
@@ -86,14 +51,9 @@ pub enum OrderingError {
 impl fmt::Display for OrderingError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingNativePorts {
-                operation,
-                dependencies,
-            } => write!(
-                f,
-                "{operation} requires native Rust ports for {} SIS dependencies",
-                dependencies.len()
-            ),
+            Self::MissingNativePorts { operation } => {
+                write!(f, "{operation} is blocked by missing native SIS ports")
+            }
             Self::EmptySetCollection => write!(f, "set ordering requires at least one set"),
             Self::SetVariableOutOfRange {
                 set_index,
@@ -215,7 +175,6 @@ pub fn find_best_set_order(
 pub fn find_best_set_order_from_sis() -> Result<OrderingResult, OrderingError> {
     Err(OrderingError::MissingNativePorts {
         operation: "find_best_set_order SIS set_info_t/verif_options_t entry",
-        dependencies: REQUIRED_ORDERING_DEPENDENCIES,
     })
 }
 
@@ -643,31 +602,5 @@ mod tests {
             SetInfo::new(2, Vec::<Vec<usize>>::new()),
             Err(OrderingError::EmptySetCollection)
         );
-    }
-
-    #[test]
-    fn sis_entry_reports_dependency_beads_and_sources() {
-        let error = find_best_set_order_from_sis().unwrap_err();
-
-        match error {
-            OrderingError::MissingNativePorts {
-                operation,
-                dependencies,
-            } => {
-                assert_eq!(
-                    operation,
-                    "find_best_set_order SIS set_info_t/verif_options_t entry"
-                );
-                assert!(dependencies.iter().any(|dependency| {
-                    dependency.bead_id == "LogicFriday1-8j8.2.6.442"
-                        && dependency.source_file == "LogicSynthesis/sis/seqbdd/verif_util.c"
-                }));
-                assert!(dependencies.iter().any(|dependency| {
-                    dependency.bead_id == "LogicFriday1-8j8.2.6.518"
-                        && dependency.source_file == "LogicSynthesis/sis/var_set/var_set.c"
-                }));
-            }
-            other => panic!("unexpected error: {other:?}"),
-        }
     }
 }

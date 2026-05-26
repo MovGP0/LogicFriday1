@@ -11,115 +11,6 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::error::Error;
 use std::fmt;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub note: &'static str,
-}
-
-pub const REQUIRED_PORT_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.2",
-        source_file: "LogicSynthesis/sis/array/array.c",
-        note: "array_t allocation, indexed fetch, insertion, and ownership",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.75",
-        source_file: "LogicSynthesis/sis/bdd_ucb/and_smooth.c",
-        note: "bdd_and_smooth during incremental image computation",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.78",
-        source_file: "LogicSynthesis/sis/bdd_ucb/bdd_cofactor.c",
-        note: "bdd_cofactor of transition products by the current state set",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.87",
-        source_file: "LogicSynthesis/sis/bdd_ucb/bdd_quantify.c",
-        note: "bdd_smooth for variables whose final dependent function was merged",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.89",
-        source_file: "LogicSynthesis/sis/bdd_ucb/bdd_substit.c",
-        note: "bdd_substitute between present-state and next-state variables",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.90",
-        source_file: "LogicSynthesis/sis/bdd_ucb/bdd_support.c",
-        note: "bdd_get_support and bdd_get_varids support extraction",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.92",
-        source_file: "LogicSynthesis/sis/bdd_ucb/bdd_util.c",
-        note: "bdd_get_variable, bdd_one, duplication, and BDD lifetime helpers",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.93",
-        source_file: "LogicSynthesis/sis/bdd_ucb/boolean_ops.c",
-        note: "bdd_and and bdd_xnor transition-product construction",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.299",
-        source_file: "LogicSynthesis/sis/network/net_seq.c",
-        note: "network_is_real_pi, network_is_real_po, and network_latch_end",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.305",
-        source_file: "LogicSynthesis/sis/network/network_util.c",
-        note: "primary input/output iteration and PI/PO counts",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.313",
-        source_file: "LogicSynthesis/sis/node/fan.c",
-        note: "foreach_fanin traversal",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-        note: "node type and node name fields",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.329",
-        source_file: "LogicSynthesis/sis/ntbdd/manager.c",
-        note: "ntbdd_start_manager for product variable managers",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.335",
-        source_file: "LogicSynthesis/sis/order/dfs_order.c",
-        note: "order_dfs PI ordering heuristic",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.431",
-        source_file: "LogicSynthesis/sis/seqbdd/prioqueue.c",
-        note: "priority queue used by incremental product merging",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.435",
-        source_file: "LogicSynthesis/sis/seqbdd/prl_ordering.c",
-        note: "Prl_OrderSetHeuristic for next-state PO support ordering",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.439",
-        source_file: "LogicSynthesis/sis/seqbdd/prl_util.c",
-        note: "Prl_FreeBddArray and shared product verification helpers",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.485",
-        source_file: "LogicSynthesis/sis/st/st.c",
-        note: "st_table maps for leaves, next-state outputs, and function supports",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.518",
-        source_file: "LogicSynthesis/sis/var_set/var_set.c",
-        note: "var_set_t bitmap support records",
-    },
-];
-
-pub fn required_port_dependencies() -> &'static [PortDependency] {
-    REQUIRED_PORT_DEPENDENCIES
-}
-
 pub fn is_prl_product_sis_integration_blocked() -> bool {
     true
 }
@@ -293,22 +184,10 @@ pub enum PrlProductError {
     MissingPi(NodeId),
     MissingLatchEnd(NodeId),
     DuplicatePrimaryInput(NodeId),
-    InvalidPoOrderingIndex {
-        index: usize,
-        output_count: usize,
-    },
-    PoOrderingLengthMismatch {
-        expected: usize,
-        actual: usize,
-    },
-    TransitionLengthMismatch {
-        functions: usize,
-        variables: usize,
-    },
-    MissingNativePorts {
-        operation: &'static str,
-        dependencies: &'static [PortDependency],
-    },
+    InvalidPoOrderingIndex { index: usize, output_count: usize },
+    PoOrderingLengthMismatch { expected: usize, actual: usize },
+    TransitionLengthMismatch { functions: usize, variables: usize },
+    MissingNativePorts { operation: &'static str },
 }
 
 impl fmt::Display for PrlProductError {
@@ -340,14 +219,9 @@ impl fmt::Display for PrlProductError {
                 f,
                 "next-state function count {functions} does not match transition variable count {variables}"
             ),
-            Self::MissingNativePorts {
-                operation,
-                dependencies,
-            } => write!(
-                f,
-                "{operation} is blocked by {} unported SIS/BDD dependencies",
-                dependencies.len()
-            ),
+            Self::MissingNativePorts { operation } => {
+                write!(f, "{operation} is blocked by missing native SIS ports")
+            }
         }
     }
 }
@@ -434,10 +308,7 @@ pub fn product_free_seq_info_bdd_blocked() -> Result<(), PrlProductError> {
 }
 
 fn missing_native_ports<T>(operation: &'static str) -> Result<T, PrlProductError> {
-    Err(PrlProductError::MissingNativePorts {
-        operation,
-        dependencies: REQUIRED_PORT_DEPENDENCIES,
-    })
+    Err(PrlProductError::MissingNativePorts { operation })
 }
 
 fn primary_input_order(
@@ -852,34 +723,5 @@ mod tests {
             product_extract_network_input_names(&names),
             vec![Some("a".to_owned()), None, Some("ps".to_owned())]
         );
-    }
-
-    #[test]
-    fn blocked_bdd_entry_points_report_dependency_beads_and_sources() {
-        let error = product_compute_next_states_blocked()
-            .expect_err("BDD image operation should be blocked");
-        let PrlProductError::MissingNativePorts {
-            operation,
-            dependencies,
-        } = error
-        else {
-            panic!("unexpected error kind");
-        };
-
-        assert_eq!(operation, "Prl_ProductComputeNextStates");
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.435"
-                && dependency.source_file == "LogicSynthesis/sis/seqbdd/prl_ordering.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.335"
-                && dependency.source_file == "LogicSynthesis/sis/order/dfs_order.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.93"
-                && dependency.source_file == "LogicSynthesis/sis/bdd_ucb/boolean_ops.c"
-        }));
-        assert!(is_prl_product_sis_integration_blocked());
-        assert_eq!(required_port_dependencies(), REQUIRED_PORT_DEPENDENCIES);
     }
 }

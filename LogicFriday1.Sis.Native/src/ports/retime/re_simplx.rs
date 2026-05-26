@@ -16,41 +16,15 @@ use std::fmt;
 
 pub const SIMPLEX_EPSILON: f64 = 1.0e-6;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_INTEGRATION_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.418",
-        source_file: "LogicSynthesis/sis/retime/re_minreg.c",
-        reason: "builds the retiming minimum-register LP tableau consumed by re_simplx",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.19",
-        source_file: "LogicSynthesis/sis/astg/bwd_lp.c",
-        reason: "builds the ASTG backward-retiming LP tableau consumed by re_simplx",
-    },
-];
-
-pub fn required_integration_dependencies() -> &'static [PortDependency] {
-    REQUIRED_INTEGRATION_DEPENDENCIES
-}
-
 pub fn retime_min_register_simplex_blocked() -> Result<(), SimplexError> {
     Err(SimplexError::MissingIntegrationDependencies {
         operation: "retime minimum-register LP construction",
-        dependencies: REQUIRED_INTEGRATION_DEPENDENCIES,
     })
 }
 
 pub fn astg_backward_lp_simplex_blocked() -> Result<(), SimplexError> {
     Err(SimplexError::MissingIntegrationDependencies {
         operation: "ASTG backward LP construction",
-        dependencies: REQUIRED_INTEGRATION_DEPENDENCIES,
     })
 }
 
@@ -163,7 +137,6 @@ pub enum SimplexError {
     EmptyVariableSet,
     MissingIntegrationDependencies {
         operation: &'static str,
-        dependencies: &'static [PortDependency],
     },
 }
 
@@ -196,14 +169,9 @@ impl fmt::Display for SimplexError {
                 write!(f, "simplex constraint row {row} has a negative RHS")
             }
             Self::EmptyVariableSet => write!(f, "simplex problem has no variables"),
-            Self::MissingIntegrationDependencies {
-                operation,
-                dependencies,
-            } => write!(
-                f,
-                "{operation} is blocked by {} unported LP integration dependencies",
-                dependencies.len()
-            ),
+            Self::MissingIntegrationDependencies { operation } => {
+                write!(f, "{operation} requires native prerequisite ports")
+            }
         }
     }
 }
@@ -591,24 +559,5 @@ mod tests {
                 required_cols: 2,
             })
         );
-    }
-
-    #[test]
-    fn integration_blockers_report_beads_and_source_files() {
-        let dependencies = required_integration_dependencies();
-
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.418"
-                && dependency.source_file == "LogicSynthesis/sis/retime/re_minreg.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.19"
-                && dependency.source_file == "LogicSynthesis/sis/astg/bwd_lp.c"
-        }));
-        assert!(matches!(
-            retime_min_register_simplex_blocked(),
-            Err(SimplexError::MissingIntegrationDependencies { dependencies, .. })
-                if dependencies.len() == 2
-        ));
     }
 }

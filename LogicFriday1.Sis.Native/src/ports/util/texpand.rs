@@ -63,8 +63,8 @@ fn user_home(_username: &str) -> Option<String> {
     None
 }
 
-// TODO(LogicFriday1-8j8.2.6.516): expose this module through the crate module
-// tree once translated Rust callers need it.
+// TODO: expose this module through the crate module tree once translated Rust
+// callers need it.
 
 #[cfg(test)]
 mod tests {

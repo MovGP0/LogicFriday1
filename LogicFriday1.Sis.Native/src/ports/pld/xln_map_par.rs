@@ -10,91 +10,6 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
 use std::fmt;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub reason: &'static str,
-}
-
-pub const REQUIRED_PORT_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.2",
-        source_file: "LogicSynthesis/sis/array/array.c",
-        reason: "xln_map_par.c stores sink, separating-set, and solution lists in array_t",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.278",
-        source_file: "LogicSynthesis/sis/maxflow/cutset.c",
-        reason: "generate_matching extracts cutsets from the maxflow graph",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.279",
-        source_file: "LogicSynthesis/sis/maxflow/maxflow.c",
-        reason: "generate_matching and squeeze_matching depend on maxflow computation",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.280",
-        source_file: "LogicSynthesis/sis/maxflow/mf_input.c",
-        reason: "construct_maxflow_network creates maxflow nodes and edges",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.302",
-        source_file: "LogicSynthesis/sis/network/netchk.c",
-        reason: "partition_network validates the rewritten SIS network",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.305",
-        source_file: "LogicSynthesis/sis/network/network_util.c",
-        reason: "partition_network iterates, sweeps, and deletes SIS network nodes",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.309",
-        source_file: "LogicSynthesis/sis/node/collapse.c",
-        reason: "partial_collapse_node collapses fanins until the separating set is reached",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.313",
-        source_file: "LogicSynthesis/sis/node/fan.c",
-        reason: "fanin/fanout traversal drives maxflow graph and covering rows",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.317",
-        source_file: "LogicSynthesis/sis/node/names.c",
-        reason: "maxflow graph names are derived from node_long_name",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-        reason: "node type checks, duplication, replacement, and freeing are required",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.320",
-        source_file: "LogicSynthesis/sis/node/nodeindex.c",
-        reason: "separating-set and binate rows use nodeindex lookups",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.456",
-        source_file: "LogicSynthesis/sis/sparse/cols.c",
-        reason: "binate cover heuristics scan and delete sparse columns",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.457",
-        source_file: "LogicSynthesis/sis/sparse/matrix.c",
-        reason: "cover construction uses sm_matrix insert, duplicate, copy, and deletion",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.458",
-        source_file: "LogicSynthesis/sis/sparse/rows.c",
-        reason: "cover solutions are sparse rows",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.485",
-        source_file: "LogicSynthesis/sis/st/st.c",
-        reason: "the nonbasic heuristic tracks rows covered by odd columns in st_table",
-    },
-];
-
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct NodeId(pub usize);
 
@@ -336,17 +251,9 @@ pub enum XlnMapParOperation {
 pub enum XlnMapParError {
     UnknownNode(NodeId),
     EmptyEvenColumns,
-    DuplicateOddColumnRow {
-        row: usize,
-    },
-    MissingOddColumnRow {
-        row: usize,
-        col: usize,
-    },
-    MissingNativePorts {
-        operation: XlnMapParOperation,
-        dependencies: &'static [PortDependency],
-    },
+    DuplicateOddColumnRow { row: usize },
+    MissingOddColumnRow { row: usize, col: usize },
+    MissingNativePorts { operation: XlnMapParOperation },
 }
 
 impl fmt::Display for XlnMapParError {
@@ -363,22 +270,10 @@ impl fmt::Display for XlnMapParError {
                     "odd column {col} expected row {row} in the uncovered-row table"
                 )
             }
-            Self::MissingNativePorts {
-                operation,
-                dependencies,
-            } => {
-                write!(
-                    f,
-                    "{operation:?} requires native Rust ports for SIS dependencies: "
-                )?;
-                for (index, dependency) in dependencies.iter().enumerate() {
-                    if index > 0 {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "{} ({})", dependency.bead_id, dependency.source_file)?;
-                }
-                Ok(())
-            }
+            Self::MissingNativePorts { operation } => write!(
+                f,
+                "{operation:?} requires native Rust ports for SIS dependencies"
+            ),
         }
     }
 }
@@ -386,10 +281,6 @@ impl fmt::Display for XlnMapParError {
 impl Error for XlnMapParError {}
 
 pub type XlnMapParResult<T> = Result<T, XlnMapParError>;
-
-pub fn required_port_dependencies() -> &'static [PortDependency] {
-    REQUIRED_PORT_DEPENDENCIES
-}
 
 pub fn construct_maxflow_network_blocked() -> XlnMapParResult<()> {
     Err(missing(XlnMapParOperation::ConstructMaxflowNetwork))
@@ -408,10 +299,7 @@ pub fn partial_collapse_sis_network_blocked() -> XlnMapParResult<()> {
 }
 
 fn missing(operation: XlnMapParOperation) -> XlnMapParError {
-    XlnMapParError::MissingNativePorts {
-        operation,
-        dependencies: REQUIRED_PORT_DEPENDENCIES,
-    }
+    XlnMapParError::MissingNativePorts { operation }
 }
 
 pub fn dfs_covered_nodes(
@@ -765,28 +653,6 @@ mod tests {
     }
 
     #[test]
-    fn exact_binate_cover_modes_report_dependency_beads_and_sources() {
-        let matrix = SparseMatrix::new();
-        let Err(XlnMapParError::MissingNativePorts {
-            operation,
-            dependencies,
-        }) = sm_mat_bin_minimum_cover_greedy(&matrix, 1)
-        else {
-            panic!("expected exact-cover dependency error");
-        };
-
-        assert_eq!(operation, XlnMapParOperation::ExactBinateCover);
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.457"
-                && dependency.source_file == "LogicSynthesis/sis/sparse/matrix.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.458"
-                && dependency.source_file == "LogicSynthesis/sis/sparse/rows.c"
-        }));
-    }
-
-    #[test]
     fn nonbasic_cover_inserts_all_odd_columns_when_they_cover_every_row() {
         let mut matrix = SparseMatrix::new();
         matrix.insert(10, 1);
@@ -833,32 +699,6 @@ mod tests {
     fn row_even_check_matches_c_helper() {
         assert!(xln_seq_check_row_elements_even(&set(&[0, 2, 8])));
         assert!(!xln_seq_check_row_elements_even(&set(&[0, 3, 8])));
-    }
-
-    #[test]
-    fn sis_bound_entries_report_maxflow_network_node_and_sparse_blockers() {
-        let error = partition_sis_network_blocked().unwrap_err();
-        let XlnMapParError::MissingNativePorts {
-            operation,
-            dependencies,
-        } = error
-        else {
-            panic!("expected dependency error");
-        };
-
-        assert_eq!(operation, XlnMapParOperation::PartitionNetwork);
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.279"
-                && dependency.source_file == "LogicSynthesis/sis/maxflow/maxflow.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.320"
-                && dependency.source_file == "LogicSynthesis/sis/node/nodeindex.c"
-        }));
-        assert!(dependencies.iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.302"
-                && dependency.source_file == "LogicSynthesis/sis/network/netchk.c"
-        }));
     }
 
     #[test]
