@@ -4,6 +4,8 @@ pub mod factor;
 pub mod main;
 pub mod map;
 pub mod maxflow;
+pub mod mincov;
+pub mod minimize;
 pub mod network;
 pub mod node;
 pub mod ntbdd;

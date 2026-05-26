@@ -1,4 +1,15 @@
+pub mod acyclic;
+pub mod append;
+pub mod cleanup;
+pub mod com_network;
 pub mod dfs;
+pub mod esp;
+pub mod net_seq;
+pub mod net_verify;
+pub mod net2pla;
+pub mod netchk;
+pub mod netclp;
 pub mod netmake;
 pub mod network_util;
+pub mod pla2net;
 pub mod sweep;
