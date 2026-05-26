@@ -1,3 +1,5 @@
+pub mod act_apply;
+pub mod act_bdd;
 pub mod act_bool;
 pub mod act_collapse;
 pub mod act_create;
