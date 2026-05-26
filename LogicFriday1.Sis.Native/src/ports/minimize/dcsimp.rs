@@ -236,7 +236,10 @@ impl fmt::Display for DcsimpError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::CubeWidth { expected, actual } => {
-                write!(f, "cube width {actual} does not match cover width {expected}")
+                write!(
+                    f,
+                    "cube width {actual} does not match cover width {expected}"
+                )
             }
             Self::WidthMismatch { on_set, dont_care } => {
                 write!(
@@ -699,5 +702,24 @@ mod tests {
             result,
             Err(DcsimpError::OnSetIntersectsDontCare { assignment: 1 })
         );
+    }
+
+    #[test]
+    fn no_legacy_c_abi_or_source_dependency_metadata_is_present() {
+        let source = include_str!("dcsimp.rs");
+
+        let forbidden = [
+            concat!("extern ", "\"C\""),
+            concat!("no", "_mangle"),
+            concat!("REQUIRED", "_"),
+            concat!("Port", "Dependency"),
+            concat!("bead", "_id"),
+            concat!("source", "_file"),
+            concat!("Logic", "Friday1", "-8j8"),
+        ];
+
+        for token in forbidden {
+            assert!(!source.contains(token), "{token}");
+        }
     }
 }

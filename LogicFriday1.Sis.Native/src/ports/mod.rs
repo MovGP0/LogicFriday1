@@ -1,3 +1,4 @@
+pub mod bdd_cmu;
 pub mod bdd_ucb;
 pub mod clock;
 pub mod command;
