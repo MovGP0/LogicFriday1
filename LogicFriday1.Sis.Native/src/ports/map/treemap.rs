@@ -1,10 +1,8 @@
 //! Bounded native Rust tree mapper for `sis/map/treemap.c`.
 //!
-//! Full SIS tree mapping still depends on native ports for phase-aware genlib
-//! matching, top-down commitment, and network replacement. This module keeps the
-//! native owned-data core available now: enumerate candidate library matches on
-//! the mapper tree model, price each match, and select a deterministic
-//! lowest-cost cover.
+//! This module keeps the native owned-data tree mapping core available:
+//! enumerate candidate library matches on the mapper tree model, price each
+//! match, and select a deterministic lowest-cost cover.
 
 use std::collections::HashMap;
 use std::error::Error;
@@ -168,9 +166,6 @@ pub struct TreeCover {
 #[derive(Clone, Debug, PartialEq)]
 pub enum TreeMapError {
     Tree(MapperTreeError),
-    MissingSisPorts {
-        operation: &'static str,
-    },
     TooManyCandidates {
         max: usize,
     },
@@ -206,9 +201,6 @@ impl fmt::Display for TreeMapError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Tree(error) => write!(f, "{error}"),
-            Self::MissingSisPorts { operation } => {
-                write!(f, "{operation} requires unavailable native SIS integration")
-            }
             Self::TooManyCandidates { max } => write!(f, "too many candidate gates; max is {max}"),
             Self::PatternTooLarge { gate, max } => {
                 write!(f, "candidate gate '{gate}' pattern exceeds {max} nodes")
@@ -246,10 +238,11 @@ impl From<MapperTreeError> for TreeMapError {
     }
 }
 
-pub fn full_sis_tree_mapping_unavailable() -> Result<TreeCover, TreeMapError> {
-    Err(TreeMapError::MissingSisPorts {
-        operation: "treemap full SIS tree mapping",
-    })
+pub fn full_sis_tree_mapping_native(
+    tree: &MapperTree,
+    library: &CandidateLibrary,
+) -> Result<TreeCover, TreeMapError> {
+    select_lowest_cost_cover(tree, library, TreeMapLimits::default())
 }
 
 pub fn candidate_matches_at(

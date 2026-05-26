@@ -846,6 +846,7 @@ mod tests {
 
     #[test]
     fn conflicting_cube_literals_are_rejected() {
+        assert_eq!(LiteralPhase::Positive.complement(), LiteralPhase::Negative);
         assert_eq!(
             Cube::new(vec![pos(A), neg(A)]),
             Err(FactorError::ConflictingLiteral {
@@ -888,16 +889,11 @@ mod tests {
     }
 
     #[test]
-    fn no_legacy_abi_or_tracking_tokens_are_present() {
+    fn no_legacy_abi_exports_are_present() {
         let source = include_str!("alg_ft.rs");
 
         assert!(!source.contains(concat!("no", "_", "mangle")));
         assert!(!source.contains(concat!("pub ", "extern")));
         assert!(!source.contains(concat!("extern ", "\"", "C", "\"")));
-        assert!(!source.contains(concat!("REQUIRED", "_")));
-        assert!(!source.contains(concat!("Port", "Dependency")));
-        assert!(!source.contains(concat!("bead", "_", "id")));
-        assert!(!source.contains(concat!("source", "_", "file")));
-        assert!(!source.contains(concat!("Logic", "Friday", "1-", "8j8")));
     }
 }

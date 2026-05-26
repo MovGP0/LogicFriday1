@@ -5,7 +5,7 @@
 //! DFS order, and filtering correlated present-state line sets.  This Rust port
 //! keeps those behaviors on explicit owned data structures.  Entry points that
 //! would require live SIS `network_t`, `node_t`, `array_t`, `st_table`, or
-//! Espresso `pset` objects fail with dependency bead/source information.
+//! Espresso `pset` objects fail with native integration errors.
 
 use std::collections::{HashMap, HashSet};
 use std::error::Error;

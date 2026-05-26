@@ -5,7 +5,7 @@
 //! summing `switching_prob * cap_factor * CAPACITANCE * 250.0`. This module
 //! ports that sampling core to owned Rust data structures. Direct binding to
 //! legacy SIS `network_t`, delay tracing, and symbolic-network construction is
-//! reported as an explicit missing dependency with bead IDs and source files.
+//! reported as an explicit missing native integration.
 
 use std::collections::HashMap;
 use std::error::Error;

@@ -6,8 +6,7 @@
 //! and DC-network cleanup. This port keeps the deterministic command table,
 //! option parsing, status mapping, and early-exit behavior in Rust. Operations
 //! that still require SIS command execution, `network_t`, `array_t`, BDDs, or
-//! PRL mutation routines return explicit missing missing-port errors with bead
-//! IDs and source files.
+//! PRL mutation routines return explicit missing-port errors.
 
 use std::error::Error;
 use std::fmt;

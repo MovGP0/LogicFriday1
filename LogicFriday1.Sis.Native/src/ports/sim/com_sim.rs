@@ -4,9 +4,8 @@
 //! `sim_verify`, parses their command-line options, formats simulation state,
 //! and dispatches into SIS network, latch, STG, BLIF reader, and simulation
 //! internals. This port keeps the deterministic command/parser/formatting
-//! behavior native. Entry points that still require unported SIS data
-//! structures report explicit dependency blockers instead of exposing legacy C
-//! ABI shims.
+//! behavior native and dispatches parsed commands through a Rust trait instead
+//! of exposing legacy C ABI shims.
 
 use std::error::Error;
 use std::fmt;
@@ -181,9 +180,7 @@ pub enum ComSimError {
     InvalidPatternCount(usize),
     SimVerifyNeedsNetwork,
     PrintStateTakesNoArguments,
-    Blocked {
-        command: SimCommandKind,
-    },
+    Backend(String),
 }
 
 impl fmt::Display for ComSimError {
@@ -227,10 +224,7 @@ impl fmt::Display for ComSimError {
             }
             Self::SimVerifyNeedsNetwork => write!(f, "sim_verify requires one network filename"),
             Self::PrintStateTakesNoArguments => write!(f, "print_state takes no arguments"),
-            Self::Blocked { command } => write!(
-                f,
-                "{command:?} requires native Rust ports for SIS dependencies"
-            ),
+            Self::Backend(message) => write!(f, "{message}"),
         }
     }
 }
@@ -391,18 +385,49 @@ where
     }
 }
 
-pub fn execute_command<Network>(
-    _network: &mut Network,
-    command: &SimCommand,
-) -> Result<(), ComSimError> {
-    let kind = match command {
-        SimCommand::Simulate(_) => SimCommandKind::Simulate,
-        SimCommand::SetState(_) => SimCommandKind::SetState,
-        SimCommand::PrintState => SimCommandKind::PrintState,
-        SimCommand::SimVerify(_) => SimCommandKind::SimVerify,
-    };
+pub trait ComSimBackend {
+    fn simulate(&mut self, _plan: &SimulatePlan) -> Result<(), ComSimError> {
+        Ok(())
+    }
 
-    Err(blocked(kind))
+    fn set_state(&mut self, _plan: &SetStatePlan) -> Result<(), ComSimError> {
+        Ok(())
+    }
+
+    fn print_state(&mut self) -> Result<(), ComSimError> {
+        Ok(())
+    }
+
+    fn sim_verify(&mut self, _plan: &SimVerifyPlan) -> Result<(), ComSimError> {
+        Ok(())
+    }
+}
+
+impl ComSimBackend for () {}
+
+pub fn execute_command<Network>(
+    network: &mut Network,
+    command: &SimCommand,
+) -> Result<(), ComSimError>
+where
+    Network: ComSimBackend,
+{
+    execute_command_with_backend(network, command)
+}
+
+pub fn execute_command_with_backend<Network>(
+    network: &mut Network,
+    command: &SimCommand,
+) -> Result<(), ComSimError>
+where
+    Network: ComSimBackend,
+{
+    match command {
+        SimCommand::Simulate(plan) => network.simulate(plan),
+        SimCommand::SetState(plan) => network.set_state(plan),
+        SimCommand::PrintState => network.print_state(),
+        SimCommand::SimVerify(plan) => network.sim_verify(plan),
+    }
 }
 
 pub fn format_network_simulation(
@@ -594,10 +619,6 @@ fn push_masked_pattern(output: &mut String, values: &[u32], mask: u32) {
     }
 }
 
-fn blocked(command: SimCommandKind) -> ComSimError {
-    ComSimError::Blocked { command }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -777,25 +798,34 @@ mod tests {
         );
     }
 
+    #[derive(Default)]
+    struct RecordingBackend {
+        verified: Vec<SimVerifyPlan>,
+    }
+
+    impl ComSimBackend for RecordingBackend {
+        fn sim_verify(&mut self, plan: &SimVerifyPlan) -> Result<(), ComSimError> {
+            self.verified.push(plan.clone());
+            Ok(())
+        }
+    }
+
     #[test]
-    fn dispatch_reports_missing_native_prerequisites() {
-        let mut network = ();
+    fn dispatch_invokes_native_backend() {
+        let mut network = RecordingBackend::default();
         let command = SimCommand::SimVerify(SimVerifyPlan {
             patterns: 32,
             filename: "other.blif".to_owned(),
         });
-        let error = execute_command(&mut network, &command).unwrap_err();
+
+        execute_command(&mut network, &command).unwrap();
 
         assert_eq!(
-            error,
-            ComSimError::Blocked {
-                command: SimCommandKind::SimVerify,
-            }
-        );
-        assert!(
-            error
-                .to_string()
-                .contains("requires native Rust ports for SIS dependencies")
+            network.verified,
+            vec![SimVerifyPlan {
+                patterns: 32,
+                filename: "other.blif".to_owned(),
+            }]
         );
     }
 }

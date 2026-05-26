@@ -3,7 +3,7 @@
 //! The C unit implements Nanni/Saxe feasibility retiming over an existing
 //! `re_graph`. This port keeps the behavior in owned Rust data structures and
 //! exposes explicit dependency errors for SIS graph integration that still
-//! belongs to sibling port beads. It intentionally does not expose legacy C ABI
+//! belongs to adjacent native ports. It intentionally does not expose legacy C ABI
 //! entry points.
 
 use std::collections::{HashSet, VecDeque};

@@ -5,8 +5,8 @@
 //! SIS implementation mutates `network_t` objects and relies on BDD, ntbdd,
 //! latch, node, array, and st_table APIs that are not all native Rust ports yet.
 //! This module ports the deterministic decision logic onto owned Rust data
-//! structures and makes SIS-bound entry points fail with explicit dependency
-//! bead/source information.
+//! structures and makes SIS-bound entry points fail with explicit native-port
+//! dependency errors.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::error::Error;

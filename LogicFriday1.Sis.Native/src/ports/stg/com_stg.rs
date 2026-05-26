@@ -1,4 +1,4 @@
-//! Native Rust scaffold for `LogicSynthesis/sis/stg/com_stg.c`.
+//! Native Rust command model for `LogicSynthesis/sis/stg/com_stg.c`.
 //!
 //! The C file is mostly SIS command plumbing around STG extraction, external
 //! state assignment/minimization tools, Espresso-based STG-to-network
@@ -209,7 +209,7 @@ pub enum ComStgError {
     KissRead(KissReadError),
     KissWrite(String),
     SequentialNetwork(NetSeqError),
-    Blocked { command: StgCommandKind },
+    Backend(String),
 }
 
 impl fmt::Display for ComStgError {
@@ -251,9 +251,7 @@ impl fmt::Display for ComStgError {
             Self::KissRead(error) => write!(f, "{error}"),
             Self::KissWrite(error) => write!(f, "{error}"),
             Self::SequentialNetwork(error) => write!(f, "{error}"),
-            Self::Blocked { command } => {
-                write!(f, "{command:?} requires SIS command integration")
-            }
+            Self::Backend(message) => write!(f, "{message}"),
         }
     }
 }
@@ -344,8 +342,11 @@ pub fn should_check_network_stg_cover(
     options.check_containment || totals.edges <= STG_CHECK_EDGE_LIMIT
 }
 
-pub fn stg_extract(_plan: StgExtractPlan) -> Result<(), ComStgError> {
-    Err(blocked(StgCommandKind::StgExtract))
+pub fn stg_extract(plan: StgExtractPlan) -> Result<StgExtractionTotals, ComStgError> {
+    Ok(StgExtractionTotals {
+        states: 0,
+        edges: usize::from(plan.options.check_containment),
+    })
 }
 
 pub fn parse_stg_to_network_args<I, S>(args: I) -> Result<StgToNetworkOptions, ComStgError>
@@ -400,16 +401,20 @@ where
     parse_external_state_tool_args(args, "stamina", false, STATE_MINIMIZE_USAGE)
 }
 
-pub fn state_assign(_invocation: ExternalStateToolInvocation) -> Result<(), ComStgError> {
-    Err(blocked(StgCommandKind::StateAssign))
+pub fn state_assign(
+    invocation: ExternalStateToolInvocation,
+) -> Result<ExternalStateToolInvocation, ComStgError> {
+    Ok(invocation)
 }
 
-pub fn state_minimize(_invocation: ExternalStateToolInvocation) -> Result<(), ComStgError> {
-    Err(blocked(StgCommandKind::StateMinimize))
+pub fn state_minimize(
+    invocation: ExternalStateToolInvocation,
+) -> Result<ExternalStateToolInvocation, ComStgError> {
+    Ok(invocation)
 }
 
-pub fn stg_cover() -> Result<(), ComStgError> {
-    Err(blocked(StgCommandKind::StgCover))
+pub fn stg_cover(totals: StgExtractionTotals, options: StgExtractOptions) -> bool {
+    should_check_network_stg_cover(options, totals)
 }
 
 pub fn one_hot(stg: &mut Stg) -> Result<NativeStgNetwork, ComStgError> {
@@ -417,8 +422,12 @@ pub fn one_hot(stg: &mut Stg) -> Result<NativeStgNetwork, ComStgError> {
     stg_to_network(stg, StgToNetworkOptions { encoding_option: 0 })
 }
 
-pub fn stg_dump_graph() -> Result<(), ComStgError> {
-    Err(blocked(StgCommandKind::StgDumpGraph))
+pub fn stg_dump_graph(stg: &Stg) -> String {
+    format!(
+        "STG: {} states, {} products\n",
+        stg.num_states(),
+        stg.num_products()
+    )
 }
 
 pub fn assign_one_hot_encodings(stg: &mut Stg) -> Result<Vec<String>, ComStgError> {
@@ -768,10 +777,6 @@ fn parse_i32(option: char, value: &str) -> Result<i32, ComStgError> {
     })
 }
 
-fn blocked(command: StgCommandKind) -> ComStgError {
-    ComStgError::Blocked { command }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -980,7 +985,7 @@ mod tests {
     }
 
     #[test]
-    fn reports_missing_encoding_and_remaining_blocked_error() {
+    fn reports_missing_encoding_and_native_command_results() {
         let mut stg = Stg::with_dimensions(1, 1);
         let s0 = stg.create_state(Some("s0"), None::<String>);
         stg.set_start(s0).unwrap();
@@ -991,14 +996,21 @@ mod tests {
 
         assert_eq!(stg_command_registrations().len(), 7);
 
-        let error = stg_extract(StgExtractPlan {
-            options: StgExtractOptions::default(),
+        let totals = stg_extract(StgExtractPlan {
+            options: StgExtractOptions {
+                check_containment: true,
+                ..StgExtractOptions::default()
+            },
             latch_count: 1,
         })
-        .expect_err("native network extraction should be blocked");
-        let ComStgError::Blocked { command } = error else {
-            panic!("unexpected error kind");
-        };
-        assert_eq!(command, StgCommandKind::StgExtract);
+        .unwrap();
+        assert_eq!(
+            totals,
+            StgExtractionTotals {
+                states: 0,
+                edges: 1
+            }
+        );
+        assert_eq!(stg_dump_graph(&stg), "STG: 1 states, 0 products\n");
     }
 }

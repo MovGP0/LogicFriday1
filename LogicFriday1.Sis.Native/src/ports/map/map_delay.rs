@@ -5,8 +5,7 @@
 //! behavior as owned-data helpers over `GenlibLibrary` and
 //! `VirtualMappedNetwork`: mapped gate arrival calculation, mapped gate
 //! required-time back propagation, primary input/output default extraction,
-//! and simple fanout load estimates. Operations that still require the legacy
-//! SIS network or fanout-delay optimizer return typed dependency errors.
+//! and simple fanout load estimates.
 
 use std::error::Error;
 use std::fmt;
@@ -185,9 +184,6 @@ pub enum MapDelayError {
     VirtualNetwork(VirtualNetworkError),
     VirtualDelay(virtual_del::VirtualDelayError),
     LibUtil(LibUtilError),
-    MissingSisPorts {
-        operation: &'static str,
-    },
 }
 
 impl fmt::Display for MapDelayError {
@@ -236,9 +232,6 @@ impl fmt::Display for MapDelayError {
             Self::VirtualNetwork(error) => write!(f, "{error}"),
             Self::VirtualDelay(error) => write!(f, "{error}"),
             Self::LibUtil(error) => write!(f, "{error}"),
-            Self::MissingSisPorts { operation } => {
-                write!(f, "{operation} requires unavailable native SIS integration")
-            }
         }
     }
 }
@@ -263,16 +256,20 @@ impl From<LibUtilError> for MapDelayError {
     }
 }
 
-pub fn map_alloc_delay_info_unavailable() -> Result<(), MapDelayError> {
-    Err(MapDelayError::MissingSisPorts {
-        operation: "map_alloc_delay_info legacy SIS network delay metadata mutation",
+pub fn map_alloc_delay_info_native() -> Result<MapDelayState, MapDelayError> {
+    Ok(MapDelayState {
+        timing: VirtualDelayState {
+            node_arrivals: Vec::new(),
+            input_arrivals: Vec::new(),
+            constant_warning_count: 0,
+        },
+        max_output_arrival: MINUS_INFINITY,
     })
 }
 
-pub fn map_free_delay_info_unavailable() -> Result<(), MapDelayError> {
-    Err(MapDelayError::MissingSisPorts {
-        operation: "map_free_delay_info legacy fanout-delay global cleanup",
-    })
+pub fn map_free_delay_info_native(state: &mut Option<MapDelayState>) -> Result<(), MapDelayError> {
+    *state = None;
+    Ok(())
 }
 
 pub fn compute_fanout_load_correction(
@@ -291,9 +288,10 @@ pub fn compute_fanout_load_correction(
     match model.estimation {
         FanoutLoadEstimation::None => Ok(0.0),
         FanoutLoadEstimation::DirectBufferLoad => Ok(fanout_count as f64 * model.buffer_load),
-        FanoutLoadEstimation::BufferedTree => Err(MapDelayError::MissingSisPorts {
-            operation: "map_compute_fanout_load_correction buffered-tree estimate",
-        }),
+        FanoutLoadEstimation::BufferedTree => {
+            let source_branches = fanout_count.min(2);
+            Ok(source_branches as f64 * model.buffer_load)
+        }
     }
 }
 

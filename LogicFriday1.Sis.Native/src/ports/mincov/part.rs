@@ -178,6 +178,27 @@ mod tests {
         assert_eq!(dest.write_pairs(), "4 1\n4 3\n");
     }
 
+    #[test]
+    fn missing_start_row_visits_only_the_requested_row() {
+        let matrix = matrix_from_pairs(&[(4, 1), (8, 2)]);
+
+        let visit = visit_component_from_row(&matrix, 99);
+
+        assert_eq!(visit.rows, set(&[99]));
+        assert!(visit.cols.is_empty());
+    }
+
+    #[test]
+    fn no_legacy_c_abi_tokens_or_source_dependency_metadata_are_present() {
+        let source = include_str!("part.rs");
+
+        assert!(!source.contains(concat!("no", "_", "mangle")));
+        assert!(!source.contains(concat!("pub ", "extern")));
+        assert!(!source.contains(concat!("extern ", "\"", "C", "\"")));
+        assert!(!source.contains(concat!("Logic", "Friday1-")));
+        assert!(!source.contains(concat!("bd ", "dep")));
+    }
+
     fn matrix_from_pairs(pairs: &[(usize, usize)]) -> SparseMatrix {
         let mut matrix = SparseMatrix::new();
         for (row, col) in pairs {

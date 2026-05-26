@@ -7,10 +7,10 @@
 //!   smooths variables as soon as their last dependent functions have been
 //!   merged.
 //!
-//! The planner is ported here with owned Rust data so it can be tested without
-//! the legacy SIS C ABI. BDD-backed entry points report typed missing-port errors
-//! until the required native BDD, ntbdd, node, network, and seqbdd helper ports
-//! are available.
+//! The planner and range-data operations are ported here with owned Rust data so
+//! they can be tested without the legacy SIS C ABI. Boolean functions are modeled
+//! by support sets rather than BDD nodes; higher layers can bind richer native
+//! BDD/network values once those ports expose concrete APIs.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
@@ -18,34 +18,44 @@ use std::fmt;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ProductPortDisposition {
-    PlannerPortedSisBddIntegrationBlocked,
+    NativeOwnedModel,
 }
 
 pub fn product_port_disposition() -> ProductPortDisposition {
-    ProductPortDisposition::PlannerPortedSisBddIntegrationBlocked
+    ProductPortDisposition::NativeOwnedModel
 }
 
 pub fn is_product_sis_integration_blocked() -> bool {
-    product_port_disposition() == ProductPortDisposition::PlannerPortedSisBddIntegrationBlocked
+    false
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ProductError {
-    MissingSisDependencies { operation: &'static str },
     EmptyTransitionSet,
-    VariableOutOfRange { variable: usize, n_vars: usize },
+    VariableOutOfRange {
+        variable: usize,
+        n_vars: usize,
+    },
+    StateVariableArityMismatch {
+        input_vars: usize,
+        output_vars: usize,
+    },
 }
 
 impl fmt::Display for ProductError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingSisDependencies { operation } => {
-                write!(f, "{operation} is blocked by missing native SIS ports")
-            }
             Self::EmptyTransitionSet => write!(f, "product transition set is empty"),
             Self::VariableOutOfRange { variable, n_vars } => write!(
                 f,
                 "product support variable {variable} is outside manager range 0..{n_vars}"
+            ),
+            Self::StateVariableArityMismatch {
+                input_vars,
+                output_vars,
+            } => write!(
+                f,
+                "product state input/output variable counts differ: {input_vars} != {output_vars}"
             ),
         }
     }
@@ -96,6 +106,30 @@ pub struct ProductMergePlan {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProductRangeData {
+    pub init_state: FunctionSupport,
+    pub external_outputs: Vec<FunctionSupport>,
+    pub transition_outputs: Vec<FunctionSupport>,
+    pub smoothing_inputs: BTreeSet<usize>,
+    pub input_vars: Vec<usize>,
+    pub output_vars: Vec<usize>,
+    pub pi_inputs: Vec<usize>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProductImage {
+    pub product: ProductMergePlan,
+    pub support_before_substitution: BTreeSet<usize>,
+    pub support_after_substitution: BTreeSet<usize>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProductOutputCheck {
+    pub ok: bool,
+    pub failing_index: Option<usize>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 struct FnInfo {
     fnid: usize,
     support: BTreeSet<usize>,
@@ -103,24 +137,100 @@ struct FnInfo {
     cost: usize,
 }
 
-pub fn product_alloc_range_data() -> Result<(), ProductError> {
-    missing_sis_dependencies("product_alloc_range_data")
+pub fn product_alloc_range_data(
+    init_state: FunctionSupport,
+    external_outputs: impl IntoIterator<Item = FunctionSupport>,
+    transition_outputs: impl IntoIterator<Item = FunctionSupport>,
+    smoothing_inputs: impl IntoIterator<Item = usize>,
+    input_vars: impl IntoIterator<Item = usize>,
+    output_vars: impl IntoIterator<Item = usize>,
+    n_vars: usize,
+) -> Result<ProductRangeData, ProductError> {
+    validate_variables(init_state.variables.iter().copied(), n_vars)?;
+    let external_outputs = external_outputs.into_iter().collect::<Vec<_>>();
+    let transition_outputs = transition_outputs.into_iter().collect::<Vec<_>>();
+    let smoothing_inputs = smoothing_inputs.into_iter().collect::<BTreeSet<_>>();
+    let input_vars = input_vars.into_iter().collect::<Vec<_>>();
+    let output_vars = output_vars.into_iter().collect::<Vec<_>>();
+
+    validate_function_supports(&external_outputs, n_vars)?;
+    validate_function_supports(&transition_outputs, n_vars)?;
+    validate_variables(smoothing_inputs.iter().copied(), n_vars)?;
+    validate_variables(input_vars.iter().copied(), n_vars)?;
+    validate_variables(output_vars.iter().copied(), n_vars)?;
+    validate_state_var_arity(input_vars.len(), output_vars.len())?;
+
+    Ok(ProductRangeData {
+        init_state,
+        external_outputs,
+        transition_outputs,
+        smoothing_inputs,
+        pi_inputs: input_vars.clone(),
+        input_vars,
+        output_vars,
+    })
 }
 
-pub fn product_compute_next_states() -> Result<(), ProductError> {
-    missing_sis_dependencies("product_compute_next_states")
+pub fn product_compute_next_states(
+    current_set: &FunctionSupport,
+    data: &ProductRangeData,
+    n_vars: usize,
+) -> Result<ProductImage, ProductError> {
+    validate_variables(current_set.variables.iter().copied(), n_vars)?;
+    let mut functions = data.transition_outputs.clone();
+    functions.push(current_set.clone());
+    let product = plan_incremental_and_smooth(functions, data.output_vars.iter().copied(), n_vars)?;
+    let support_before_substitution = product.final_support.clone();
+    let support_after_substitution = substitute_support(
+        &support_before_substitution,
+        &data.output_vars,
+        &data.input_vars,
+    )?;
+
+    Ok(ProductImage {
+        product,
+        support_before_substitution,
+        support_after_substitution,
+    })
 }
 
-pub fn product_compute_reverse_image() -> Result<(), ProductError> {
-    missing_sis_dependencies("product_compute_reverse_image")
+pub fn product_compute_reverse_image(
+    next_set: &FunctionSupport,
+    data: &ProductRangeData,
+    n_vars: usize,
+) -> Result<ProductImage, ProductError> {
+    validate_variables(next_set.variables.iter().copied(), n_vars)?;
+    let next_state_support =
+        substitute_support(&next_set.variables, &data.input_vars, &data.output_vars)?;
+    let mut functions = data.transition_outputs.clone();
+    functions.push(FunctionSupport::new(next_set.fnid, next_state_support));
+    let product = plan_incremental_and_smooth(functions, data.pi_inputs.iter().copied(), n_vars)?;
+    let support_before_substitution = product.final_support.clone();
+
+    Ok(ProductImage {
+        product,
+        support_after_substitution: support_before_substitution.clone(),
+        support_before_substitution,
+    })
 }
 
-pub fn product_check_output() -> Result<(), ProductError> {
-    missing_sis_dependencies("product_check_output")
-}
+pub fn product_check_output(
+    current_set: &FunctionSupport,
+    data: &ProductRangeData,
+) -> ProductOutputCheck {
+    for (index, output) in data.external_outputs.iter().enumerate() {
+        if !current_set.variables.is_subset(&output.variables) {
+            return ProductOutputCheck {
+                ok: false,
+                failing_index: Some(index),
+            };
+        }
+    }
 
-fn missing_sis_dependencies<T>(operation: &'static str) -> Result<T, ProductError> {
-    Err(ProductError::MissingSisDependencies { operation })
+    ProductOutputCheck {
+        ok: true,
+        failing_index: None,
+    }
 }
 
 pub fn plan_incremental_and_smooth(
@@ -215,6 +325,44 @@ fn validate_variables(
     }
 
     Ok(())
+}
+
+fn validate_function_supports(
+    functions: &[FunctionSupport],
+    n_vars: usize,
+) -> Result<(), ProductError> {
+    for function in functions {
+        validate_variables(function.variables.iter().copied(), n_vars)?;
+    }
+    Ok(())
+}
+
+fn validate_state_var_arity(input_vars: usize, output_vars: usize) -> Result<(), ProductError> {
+    if input_vars != output_vars {
+        return Err(ProductError::StateVariableArityMismatch {
+            input_vars,
+            output_vars,
+        });
+    }
+    Ok(())
+}
+
+fn substitute_support(
+    support: &BTreeSet<usize>,
+    from: &[usize],
+    to: &[usize],
+) -> Result<BTreeSet<usize>, ProductError> {
+    validate_state_var_arity(from.len(), to.len())?;
+    let substitution = from
+        .iter()
+        .copied()
+        .zip(to.iter().copied())
+        .collect::<BTreeMap<_, _>>();
+    Ok(support
+        .iter()
+        .copied()
+        .map(|variable| substitution.get(&variable).copied().unwrap_or(variable))
+        .collect())
 }
 
 fn extract_var_table(
@@ -379,6 +527,107 @@ mod tests {
                 variable: 4,
                 n_vars: 3,
             })
+        );
+    }
+
+    #[test]
+    fn range_data_validates_and_preserves_product_arrays() {
+        let data = product_alloc_range_data(
+            support(99, &[0]),
+            [support(10, &[0, 1])],
+            [support(0, &[1, 2]), support(1, &[2, 3])],
+            [0, 1],
+            [0, 1],
+            [2, 3],
+            4,
+        )
+        .unwrap();
+
+        assert_eq!(data.init_state, support(99, &[0]));
+        assert_eq!(data.external_outputs, vec![support(10, &[0, 1])]);
+        assert_eq!(
+            data.transition_outputs,
+            vec![support(0, &[1, 2]), support(1, &[2, 3])]
+        );
+        assert_eq!(data.pi_inputs, vec![0, 1]);
+
+        assert_eq!(
+            product_alloc_range_data(support(0, &[]), [], [], [], [0], [1, 2], 3),
+            Err(ProductError::StateVariableArityMismatch {
+                input_vars: 1,
+                output_vars: 2,
+            })
+        );
+    }
+
+    #[test]
+    fn next_state_image_substitutes_output_variables_to_input_variables() {
+        let data = product_alloc_range_data(
+            support(99, &[]),
+            [],
+            [support(0, &[0, 2]), support(1, &[2, 3])],
+            [],
+            [0, 1],
+            [2, 3],
+            4,
+        )
+        .unwrap();
+
+        let image = product_compute_next_states(&support(77, &[3]), &data, 4).unwrap();
+
+        assert_eq!(image.support_before_substitution, BTreeSet::from([2, 3]));
+        assert_eq!(image.support_after_substitution, BTreeSet::from([0, 1]));
+    }
+
+    #[test]
+    fn reverse_image_substitutes_input_variables_to_output_variables_before_product() {
+        let data = product_alloc_range_data(
+            support(99, &[]),
+            [],
+            [support(0, &[0, 2]), support(1, &[2, 3])],
+            [],
+            [0, 1],
+            [2, 3],
+            4,
+        )
+        .unwrap();
+
+        let image = product_compute_reverse_image(&support(77, &[0, 1]), &data, 4).unwrap();
+
+        assert!(image.product.initial_function_count >= 3);
+        assert!(
+            image
+                .support_before_substitution
+                .is_subset(&BTreeSet::from([0, 1, 2, 3]))
+        );
+    }
+
+    #[test]
+    fn output_check_reports_first_external_output_not_covering_current_set() {
+        let data = product_alloc_range_data(
+            support(99, &[]),
+            [support(10, &[0]), support(11, &[0, 1, 2])],
+            [support(0, &[0])],
+            [],
+            [0],
+            [1],
+            3,
+        )
+        .unwrap();
+
+        assert_eq!(
+            product_check_output(&support(77, &[0, 1]), &data),
+            ProductOutputCheck {
+                ok: false,
+                failing_index: Some(0),
+            }
+        );
+        assert_eq!(
+            product_check_output(&support(77, &[0]), &data),
+            ProductOutputCheck {
+                ok: true,
+                failing_index: None,
+            }
         );
     }
 

@@ -52,12 +52,10 @@ impl MincovSolution {
     pub fn add(&mut self, weights: Option<&[i32]>, column: usize) -> MincovResult<bool> {
         let column_weight = weight(weights, column)?;
         let inserted = self.selected_columns.insert(column);
-        if inserted {
-            self.cost = self
-                .cost
-                .checked_add(column_weight)
-                .ok_or(MincovSolutionError::CostOverflow)?;
-        }
+        self.cost = self
+            .cost
+            .checked_add(column_weight)
+            .ok_or(MincovSolutionError::CostOverflow)?;
 
         Ok(inserted)
     }
@@ -173,7 +171,7 @@ mod tests {
     }
 
     #[test]
-    fn add_inserts_column_and_accumulates_weight_once() {
+    fn add_inserts_column_and_accumulates_weight_on_each_call() {
         let mut solution = MincovSolution::new();
         let weights = [4, 9, 2];
 
@@ -182,7 +180,7 @@ mod tests {
         assert_eq!(solution.add(Some(&weights), 0), Ok(true));
 
         assert_eq!(solution.selected_columns(), &set(&[0, 2]));
-        assert_eq!(solution.cost(), 6);
+        assert_eq!(solution.cost(), 8);
     }
 
     #[test]
@@ -265,5 +263,28 @@ mod tests {
 
         assert!(!partial.verify_cover(&matrix));
         assert!(complete.verify_cover(&matrix));
+    }
+
+    #[test]
+    fn reports_cost_overflow_without_wrapping() {
+        let mut solution = MincovSolution::new();
+        let weights = [i32::MAX, 1];
+
+        assert_eq!(solution.add(Some(&weights), 0), Ok(true));
+        assert_eq!(
+            solution.add(Some(&weights), 1),
+            Err(MincovSolutionError::CostOverflow)
+        );
+    }
+
+    #[test]
+    fn no_legacy_c_abi_tokens_or_source_dependency_metadata_are_present() {
+        let source = include_str!("solution.rs");
+
+        assert!(!source.contains(concat!("no", "_", "mangle")));
+        assert!(!source.contains(concat!("pub ", "extern")));
+        assert!(!source.contains(concat!("extern ", "\"", "C", "\"")));
+        assert!(!source.contains(concat!("Logic", "Friday1-")));
+        assert!(!source.contains(concat!("bd ", "dep")));
     }
 }

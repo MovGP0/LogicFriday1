@@ -8,26 +8,22 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
-pub struct CoverMatrix
-{
+pub struct CoverMatrix {
     rows: BTreeMap<usize, BTreeSet<usize>>,
     cols: BTreeMap<usize, BTreeSet<usize>>,
 }
 
-impl CoverMatrix
-{
-    pub fn new() -> Self
-    {
+impl CoverMatrix {
+    pub fn new() -> Self {
         Self::default()
     }
 
-    pub fn from_rows(rows: impl IntoIterator<Item = (usize, impl IntoIterator<Item = usize>)>) -> Self
-    {
+    pub fn from_rows(
+        rows: impl IntoIterator<Item = (usize, impl IntoIterator<Item = usize>)>,
+    ) -> Self {
         let mut matrix = Self::new();
-        for (row, cols) in rows
-        {
-            for col in cols
-            {
+        for (row, cols) in rows {
+            for col in cols {
                 matrix.insert(row, col);
             }
         }
@@ -35,176 +31,138 @@ impl CoverMatrix
         matrix
     }
 
-    pub fn insert(&mut self, row: usize, col: usize) -> bool
-    {
+    pub fn insert(&mut self, row: usize, col: usize) -> bool {
         let inserted = self.rows.entry(row).or_default().insert(col);
-        if inserted
-        {
+        if inserted {
             self.cols.entry(col).or_default().insert(row);
         }
 
         inserted
     }
 
-    pub fn row(&self, row: usize) -> Option<&BTreeSet<usize>>
-    {
+    pub fn row(&self, row: usize) -> Option<&BTreeSet<usize>> {
         self.rows.get(&row)
     }
 
-    pub fn col(&self, col: usize) -> Option<&BTreeSet<usize>>
-    {
+    pub fn col(&self, col: usize) -> Option<&BTreeSet<usize>> {
         self.cols.get(&col)
     }
 
-    pub fn rows(&self) -> impl Iterator<Item = (usize, &BTreeSet<usize>)> + '_
-    {
+    pub fn rows(&self) -> impl Iterator<Item = (usize, &BTreeSet<usize>)> + '_ {
         self.rows.iter().map(|(row, cols)| (*row, cols))
     }
 
-    pub fn contains(&self, row: usize, col: usize) -> bool
-    {
+    pub fn contains(&self, row: usize, col: usize) -> bool {
         self.rows.get(&row).is_some_and(|cols| cols.contains(&col))
     }
 
-    pub fn delete_row(&mut self, row: usize) -> bool
-    {
-        let Some(cols) = self.rows.remove(&row) else
-        {
+    pub fn delete_row(&mut self, row: usize) -> bool {
+        let Some(cols) = self.rows.remove(&row) else {
             return false;
         };
 
-        for col in cols
-        {
+        for col in cols {
             self.remove_row_from_col(row, col);
         }
 
         true
     }
 
-    pub fn delete_col(&mut self, col: usize) -> bool
-    {
-        let Some(rows) = self.cols.remove(&col) else
-        {
+    pub fn delete_col(&mut self, col: usize) -> bool {
+        let Some(rows) = self.cols.remove(&col) else {
             return false;
         };
 
-        for row in rows
-        {
+        for row in rows {
             self.remove_col_from_row(row, col);
         }
 
         true
     }
 
-    pub fn row_count(&self) -> usize
-    {
+    pub fn row_count(&self) -> usize {
         self.rows.len()
     }
 
-    pub fn col_count(&self) -> usize
-    {
+    pub fn col_count(&self) -> usize {
         self.cols.len()
     }
 
-    fn remove_col_from_row(&mut self, row: usize, col: usize)
-    {
-        let should_remove = if let Some(cols) = self.rows.get_mut(&row)
-        {
+    fn remove_col_from_row(&mut self, row: usize, col: usize) {
+        let should_remove = if let Some(cols) = self.rows.get_mut(&row) {
             cols.remove(&col);
             cols.is_empty()
-        }
-        else
-        {
+        } else {
             false
         };
 
-        if should_remove
-        {
+        if should_remove {
             self.rows.remove(&row);
         }
     }
 
-    fn remove_row_from_col(&mut self, row: usize, col: usize)
-    {
-        let should_remove = if let Some(rows) = self.cols.get_mut(&col)
-        {
+    fn remove_row_from_col(&mut self, row: usize, col: usize) {
+        let should_remove = if let Some(rows) = self.cols.get_mut(&col) {
             rows.remove(&row);
             rows.is_empty()
-        }
-        else
-        {
+        } else {
             false
         };
 
-        if should_remove
-        {
+        if should_remove {
             self.cols.remove(&col);
         }
     }
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
-pub struct CoverSolution
-{
+pub struct CoverSolution {
     columns: BTreeSet<usize>,
     pub cost: i32,
 }
 
-impl CoverSolution
-{
-    pub fn new() -> Self
-    {
+impl CoverSolution {
+    pub fn new() -> Self {
         Self::default()
     }
 
-    pub fn from_columns(columns: impl IntoIterator<Item = usize>, weights: Option<&[i32]>) -> Self
-    {
+    pub fn from_columns(columns: impl IntoIterator<Item = usize>, weights: Option<&[i32]>) -> Self {
         let mut solution = Self::new();
-        for col in columns
-        {
+        for col in columns {
             solution.add(weights, col);
         }
 
         solution
     }
 
-    pub fn add(&mut self, weights: Option<&[i32]>, col: usize) -> bool
-    {
+    pub fn add(&mut self, weights: Option<&[i32]>, col: usize) -> bool {
         let inserted = self.columns.insert(col);
-        if inserted
-        {
-            self.cost += weight(weights, col);
-        }
+        self.cost += weight(weights, col);
 
         inserted
     }
 
-    pub fn contains(&self, col: usize) -> bool
-    {
+    pub fn contains(&self, col: usize) -> bool {
         self.columns.contains(&col)
     }
 
-    pub fn intersects(&self, row: &BTreeSet<usize>) -> bool
-    {
+    pub fn intersects(&self, row: &BTreeSet<usize>) -> bool {
         self.columns.iter().any(|col| row.contains(col))
     }
 
-    pub fn columns(&self) -> &BTreeSet<usize>
-    {
+    pub fn columns(&self) -> &BTreeSet<usize> {
         &self.columns
     }
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
-pub struct GimpelStats
-{
+pub struct GimpelStats {
     pub gimpel_count: usize,
     pub gimpel: usize,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct GimpelApplication
-{
+pub struct GimpelApplication {
     pub primary_row: usize,
     pub secondary_row: usize,
     pub degree_two_col: usize,
@@ -212,8 +170,7 @@ pub struct GimpelApplication
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum GimpelReduction
-{
+pub enum GimpelReduction {
     NotApplicable,
     Applied {
         application: GimpelApplication,
@@ -242,8 +199,7 @@ where
         &mut GimpelStats,
     ) -> Option<CoverSolution>,
 {
-    let Some(application) = find_gimpel_application(matrix) else
-    {
+    let Some(application) = find_gimpel_application(matrix) else {
         return GimpelReduction::NotApplicable;
     };
 
@@ -260,12 +216,9 @@ where
         .map(|rows| rows.iter().copied().collect::<Vec<_>>())
         .unwrap_or_default();
 
-    for row in other_col_rows
-    {
-        if row != application.primary_row
-        {
-            for col in &save_secondary
-            {
+    for row in other_col_rows {
+        if row != application.primary_row {
+            for col in &save_secondary {
                 matrix.insert(row, *col);
             }
         }
@@ -281,14 +234,10 @@ where
     let mut best = solve_reduced(matrix, select, weights, lb - 1, bound - 1, depth, stats);
     stats.gimpel -= 1;
 
-    if let Some(solution) = &mut best
-    {
-        if solution.intersects(&save_secondary)
-        {
+    if let Some(solution) = &mut best {
+        if solution.intersects(&save_secondary) {
             solution.add(weights, application.other_col);
-        }
-        else
-        {
+        } else {
             solution.add(weights, application.degree_two_col);
         }
     }
@@ -296,12 +245,9 @@ where
     GimpelReduction::Applied { application, best }
 }
 
-fn find_gimpel_application(matrix: &CoverMatrix) -> Option<GimpelApplication>
-{
-    for (primary_row, row_cols) in matrix.rows()
-    {
-        if row_cols.len() != 2
-        {
+fn find_gimpel_application(matrix: &CoverMatrix) -> Option<GimpelApplication> {
+    for (primary_row, row_cols) in matrix.rows() {
+        if row_cols.len() != 2 {
             continue;
         }
 
@@ -309,13 +255,11 @@ fn find_gimpel_application(matrix: &CoverMatrix) -> Option<GimpelApplication>
         let first_col = cols.next().expect("two-column row has a first column");
         let second_col = cols.next().expect("two-column row has a second column");
 
-        if matrix.col(first_col).is_some_and(|col| col.len() == 2)
-        {
+        if matrix.col(first_col).is_some_and(|col| col.len() == 2) {
             return build_application(matrix, primary_row, first_col, second_col);
         }
 
-        if matrix.col(second_col).is_some_and(|col| col.len() == 2)
-        {
+        if matrix.col(second_col).is_some_and(|col| col.len() == 2) {
             return build_application(matrix, primary_row, second_col, first_col);
         }
     }
@@ -328,8 +272,7 @@ fn build_application(
     primary_row: usize,
     degree_two_col: usize,
     other_col: usize,
-) -> Option<GimpelApplication>
-{
+) -> Option<GimpelApplication> {
     let secondary_row = matrix
         .col(degree_two_col)?
         .iter()
@@ -344,19 +287,19 @@ fn build_application(
     })
 }
 
-fn weight(weights: Option<&[i32]>, col: usize) -> i32
-{
-    weights.and_then(|values| values.get(col)).copied().unwrap_or(1)
+fn weight(weights: Option<&[i32]>, col: usize) -> i32 {
+    weights
+        .and_then(|values| values.get(col))
+        .copied()
+        .unwrap_or(1)
 }
 
 #[cfg(test)]
-mod tests
-{
+mod tests {
     use super::*;
 
     #[test]
-    fn returns_not_applicable_without_two_column_degree_two_pattern()
-    {
+    fn returns_not_applicable_without_two_column_degree_two_pattern() {
         let mut matrix = CoverMatrix::from_rows([
             (0, vec![1, 2]),
             (1, vec![1, 3]),
@@ -384,8 +327,7 @@ mod tests
     }
 
     #[test]
-    fn merges_secondary_columns_deletes_pattern_and_lifts_other_column()
-    {
+    fn merges_secondary_columns_deletes_pattern_and_lifts_other_column() {
         let mut matrix = CoverMatrix::from_rows([
             (0, vec![1, 2]),
             (1, vec![1, 3, 4]),
@@ -419,8 +361,7 @@ mod tests
             },
         );
 
-        let GimpelReduction::Applied { application, best } = reduction else
-        {
+        let GimpelReduction::Applied { application, best } = reduction else {
             panic!("expected Gimpel reduction to apply");
         };
 
@@ -442,9 +383,9 @@ mod tests
     }
 
     #[test]
-    fn lifts_degree_two_column_when_secondary_row_is_uncovered()
-    {
-        let mut matrix = CoverMatrix::from_rows([(0, vec![1, 2]), (1, vec![1, 3]), (2, vec![2, 4])]);
+    fn lifts_degree_two_column_when_secondary_row_is_uncovered() {
+        let mut matrix =
+            CoverMatrix::from_rows([(0, vec![1, 2]), (1, vec![1, 3]), (2, vec![2, 4])]);
         let select = CoverSolution::new();
         let weights = [1, 9, 7, 1, 1];
         let mut stats = GimpelStats::default();
@@ -460,8 +401,7 @@ mod tests
             |_, _, weights, _, _, _, _| Some(CoverSolution::from_columns([4], weights)),
         );
 
-        let GimpelReduction::Applied { best, .. } = reduction else
-        {
+        let GimpelReduction::Applied { best, .. } = reduction else {
             panic!("expected Gimpel reduction to apply");
         };
 
@@ -472,8 +412,35 @@ mod tests
     }
 
     #[test]
-    fn flips_columns_when_second_primary_column_has_degree_two()
-    {
+    fn lift_charges_column_weight_even_when_reduced_solution_already_selected_it() {
+        let mut matrix =
+            CoverMatrix::from_rows([(0, vec![1, 2]), (1, vec![1, 3]), (2, vec![2, 4])]);
+        let select = CoverSolution::new();
+        let weights = [1, 9, 7, 1, 1];
+        let mut stats = GimpelStats::default();
+
+        let reduction = gimpel_reduce(
+            &mut matrix,
+            &select,
+            Some(&weights),
+            0,
+            20,
+            0,
+            &mut stats,
+            |_, _, weights, _, _, _, _| Some(CoverSolution::from_columns([1], weights)),
+        );
+
+        let GimpelReduction::Applied { best, .. } = reduction else {
+            panic!("expected Gimpel reduction to apply");
+        };
+
+        let best = best.expect("reduced solver should produce a solution");
+        assert!(best.contains(1));
+        assert_eq!(best.cost, 18);
+    }
+
+    #[test]
+    fn flips_columns_when_second_primary_column_has_degree_two() {
         let mut matrix = CoverMatrix::from_rows([
             (0, vec![1, 2]),
             (1, vec![1, 3]),
@@ -509,9 +476,9 @@ mod tests
     }
 
     #[test]
-    fn leaves_lift_step_unapplied_when_reduced_solver_fails()
-    {
-        let mut matrix = CoverMatrix::from_rows([(0, vec![1, 2]), (1, vec![1, 3]), (2, vec![2, 4])]);
+    fn leaves_lift_step_unapplied_when_reduced_solver_fails() {
+        let mut matrix =
+            CoverMatrix::from_rows([(0, vec![1, 2]), (1, vec![1, 3]), (2, vec![2, 4])]);
         let select = CoverSolution::new();
         let mut stats = GimpelStats::default();
 
@@ -526,8 +493,7 @@ mod tests
             |_, _, _, _, _, _, _| None,
         );
 
-        let GimpelReduction::Applied { best, .. } = reduction else
-        {
+        let GimpelReduction::Applied { best, .. } = reduction else {
             panic!("expected Gimpel reduction to apply");
         };
 
@@ -536,8 +502,7 @@ mod tests
         assert_eq!(stats.gimpel, 0);
     }
 
-    fn set(values: &[usize]) -> BTreeSet<usize>
-    {
+    fn set(values: &[usize]) -> BTreeSet<usize> {
         values.iter().copied().collect()
     }
 }

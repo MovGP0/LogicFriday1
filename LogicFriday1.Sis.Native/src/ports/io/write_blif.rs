@@ -1241,4 +1241,18 @@ mod tests {
             Err(BlifError::CoverWidthMismatch { .. })
         ));
     }
+
+    #[test]
+    fn no_legacy_c_abi_or_dependency_metadata_tokens_are_present() {
+        let source = include_str!("write_blif.rs");
+
+        assert!(!source.contains(concat!("no", "_", "mangle")));
+        assert!(!source.contains(concat!("pub ", "extern")));
+        assert!(!source.contains(concat!("extern ", "\"", "C", "\"")));
+        assert!(!source.contains(concat!("REQUIRED", "_")));
+        assert!(!source.contains(concat!("Port", "Dependency")));
+        assert!(!source.contains(concat!("be", "ad", "_", "id")));
+        assert!(!source.contains(concat!("source", "_", "file")));
+        assert!(!source.contains(concat!("Logic", "Friday", "1", "-", "8", "j", "8")));
+    }
 }

@@ -6,9 +6,7 @@
 //! by level while keeping the packed cube literal bits aligned.
 //!
 //! This module ports the independent data and algorithmic behavior into a
-//! small Rust graph model. Binding directly to the native SIS graph model is
-//! intentionally left as an operation-level integration error instead of a C
-//! ABI export.
+//! small Rust graph model without exposing a C ABI export.
 
 use std::collections::{HashSet, VecDeque};
 use std::error::Error;
@@ -20,15 +18,15 @@ pub const BARRAY_LEN: usize = 16;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum LevelPortDisposition {
-    BlockedByNativeSisGraphIntegration,
+    NativeOwnedModel,
 }
 
 pub fn level_port_disposition() -> LevelPortDisposition {
-    LevelPortDisposition::BlockedByNativeSisGraphIntegration
+    LevelPortDisposition::NativeOwnedModel
 }
 
 pub fn level_port_is_blocked() -> bool {
-    level_port_disposition() == LevelPortDisposition::BlockedByNativeSisGraphIntegration
+    false
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -39,7 +37,6 @@ pub enum LevelOperation {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum LevelError {
-    MissingNativeIntegration { operation: LevelOperation },
     UnknownNode { node: usize },
     UnknownFanin { node: usize, fanin: usize },
     NonInputLatchEndpoint { node: usize, latch_end: usize },
@@ -47,21 +44,9 @@ pub enum LevelError {
     TooManyFaninsForBarray { node: usize, fanins: usize },
 }
 
-impl LevelError {
-    pub const fn missing_native_integration(operation: LevelOperation) -> Self {
-        Self::MissingNativeIntegration { operation }
-    }
-}
-
 impl fmt::Display for LevelError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingNativeIntegration { operation } => {
-                write!(
-                    f,
-                    "{operation:?} requires native SIS graph integration before it can run"
-                )
-            }
             Self::UnknownNode { node } => write!(f, "unknown node id {node}"),
             Self::UnknownFanin { node, fanin } => {
                 write!(f, "node {node} has unknown fanin {fanin}")
@@ -84,16 +69,15 @@ impl fmt::Display for LevelError {
 
 impl Error for LevelError {}
 
-pub fn level_circuit() -> Result<(), LevelError> {
-    Err(LevelError::missing_native_integration(
-        LevelOperation::LevelCircuit,
-    ))
+pub fn level_circuit(circuit: &LevelCircuit) -> Result<Levelization, LevelError> {
+    levelize_circuit(circuit)
 }
 
-pub fn rearrange_gate_inputs() -> Result<(), LevelError> {
-    Err(LevelError::missing_native_integration(
-        LevelOperation::RearrangeGateInputs,
-    ))
+pub fn rearrange_gate_inputs(
+    circuit: &mut LevelCircuit,
+    data: &mut [NodeData],
+) -> Result<(), LevelError> {
+    rearrange_gate_inputs_in_model(circuit, data)
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -642,19 +626,24 @@ mod tests {
     }
 
     #[test]
-    fn scaffold_reports_missing_native_integration() {
-        assert!(level_port_is_blocked());
-        assert_eq!(
-            level_circuit(),
-            Err(LevelError::MissingNativeIntegration {
-                operation: LevelOperation::LevelCircuit,
-            })
-        );
-        assert_eq!(
-            rearrange_gate_inputs(),
-            Err(LevelError::MissingNativeIntegration {
-                operation: LevelOperation::RearrangeGateInputs,
-            })
-        );
+    fn public_entrypoints_run_owned_model() {
+        assert!(!level_port_is_blocked());
+
+        let nodes = vec![
+            LevelNode::primary_input(),
+            LevelNode::primary_input(),
+            LevelNode::internal(vec![0, 1], vec![Literal::One, Literal::Zero]),
+        ];
+        let mut circuit = LevelCircuit::new(nodes, vec![0, 1], vec![])
+            .with_derived_fanouts()
+            .unwrap();
+
+        let mut result = level_circuit(&circuit).unwrap();
+        assert_eq!(result.data[2].level, 1);
+
+        result.data[0].level = 2;
+        result.data[1].level = 1;
+        rearrange_gate_inputs(&mut circuit, &mut result.data).unwrap();
+        assert_eq!(circuit.nodes[2].fanins, vec![1, 0]);
     }
 }

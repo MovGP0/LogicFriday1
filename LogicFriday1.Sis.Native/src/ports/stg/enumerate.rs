@@ -201,15 +201,15 @@ pub struct EnumerationResult {
     pub unfinished_states: Vec<Vec<u8>>,
 }
 
-pub fn enumerate_sequential_circuit(request: &EnumerationRequest) -> Result<(), EnumerateError> {
-    if request.max_depth > MAX_ELENGTH {
-        return Err(EnumerateError::DepthLimit {
-            requested: request.max_depth,
-            max: MAX_ELENGTH,
-        });
-    }
-
-    Err(EnumerateError::MissingNativeCircuitModel)
+pub fn enumerate_sequential_circuit<F>(
+    request: &EnumerationRequest,
+    initial_state: &[u8],
+    simulate: F,
+) -> Result<EnumerationResult, EnumerateError>
+where
+    F: FnMut(&[u8], &[u8]) -> Result<Option<CircuitObservation>, EnumerateError>,
+{
+    enumerate_from_initial_state(request, initial_state, simulate)
 }
 
 pub fn enumerate_from_initial_state<F>(
@@ -528,7 +528,6 @@ pub enum EnumerateError {
     TooManyPrimaryInputs { inputs: usize },
     TooManyLatchesForCompleteTable { latches: usize, max: usize },
     UnresolvedNextStateBit { index: usize },
-    MissingNativeCircuitModel,
     Stg(StgError),
 }
 
@@ -594,12 +593,6 @@ impl fmt::Display for EnumerateError {
             Self::UnresolvedNextStateBit { index } => {
                 write!(f, "next-state bit {index} remained unresolved")
             }
-            Self::MissingNativeCircuitModel => {
-                write!(
-                    f,
-                    "sequential circuit enumeration requires a native circuit simulator callback"
-                )
-            }
             Self::Stg(error) => write!(f, "{error}"),
         }
     }
@@ -660,18 +653,24 @@ mod tests {
     }
 
     #[test]
-    fn recursive_enumeration_reports_unported_dependencies() {
+    fn sequential_circuit_entrypoint_uses_native_simulator_callback() {
         let request = EnumerationRequest {
-            latch_count: 2,
+            latch_count: 1,
             primary_input_count: 1,
             primary_output_count: 1,
             max_depth: MAX_ELENGTH,
         };
 
-        assert_eq!(
-            enumerate_sequential_circuit(&request),
-            Err(EnumerateError::MissingNativeCircuitModel)
-        );
+        let result = enumerate_sequential_circuit(&request, &[0], |_state, inputs| {
+            Ok(Some(CircuitObservation::new(
+                vec![LogicValue::from_bool(inputs[0] == 1)],
+                vec![LogicValue::from_bool(inputs[0] == 0)],
+            )))
+        })
+        .unwrap();
+
+        assert_eq!(result.stg.num_states(), 2);
+        assert_eq!(result.stg.num_products(), 4);
     }
 
     #[test]

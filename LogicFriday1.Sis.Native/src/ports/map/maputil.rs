@@ -139,6 +139,9 @@ pub fn summarize_diagnostics(result: &MapInterfaceResult) -> MapperDiagnosticSum
             MapDiagnostic::SopPrimitiveReplacementPath => {
                 summary.replacement_path = true;
             }
+            MapDiagnostic::FullTreeMatchingApproximatedByPrimitiveLowering => {
+                summary.replacement_path = true;
+            }
             MapDiagnostic::FalseOutputRowsIgnored { count, .. } => {
                 summary.false_output_rows_ignored += count;
             }

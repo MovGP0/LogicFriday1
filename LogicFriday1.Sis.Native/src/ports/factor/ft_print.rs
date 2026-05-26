@@ -136,6 +136,14 @@ pub fn factor_lengths(
     Ok(lengths)
 }
 
+pub fn factor_len_init(
+    tree: &mut FactorTree,
+    fanin_names: &[impl AsRef<str>],
+) -> FactorPrintResult<()> {
+    assign_lengths(tree, fanin_names)?;
+    Ok(())
+}
+
 pub fn factor_len(tree: &FactorTree, fanin_names: &[impl AsRef<str>]) -> FactorPrintResult<usize> {
     tree_len(tree, fanin_names)
 }
@@ -283,6 +291,23 @@ fn collect_lengths(
     Ok(length)
 }
 
+fn assign_lengths(
+    tree: &mut FactorTree,
+    fanin_names: &[impl AsRef<str>],
+) -> FactorPrintResult<usize> {
+    if let Some(child) = tree.next_level.as_deref_mut() {
+        assign_lengths(child, fanin_names)?;
+    }
+
+    tree.len = tree_len_from_child_lengths(tree, fanin_names)?;
+
+    if let Some(sibling) = tree.same_level.as_deref_mut() {
+        assign_lengths(sibling, fanin_names)?;
+    }
+
+    Ok(tree.len)
+}
+
 fn tree_len(tree: &FactorTree, fanin_names: &[impl AsRef<str>]) -> FactorPrintResult<usize> {
     match tree.kind {
         FactorKind::Zero | FactorKind::One => Ok(3),
@@ -303,19 +328,61 @@ fn tree_len(tree: &FactorTree, fanin_names: &[impl AsRef<str>]) -> FactorPrintRe
 fn nary_len(
     tree: &FactorTree,
     fanin_names: &[impl AsRef<str>],
-    separator_len: usize,
+    child_extra: usize,
 ) -> FactorPrintResult<usize> {
-    let mut total = None::<usize>;
+    let mut total = None::<isize>;
     let mut child = tree.next_level.as_deref();
     while let Some(node) = child {
-        total = Some(match total {
-            Some(current) => current + separator_len + tree_len(node, fanin_names)?,
-            None => tree_len(node, fanin_names)?,
-        });
+        let child_len = isize::try_from(tree_len(node, fanin_names)?).unwrap_or(isize::MAX);
+        let extra = isize::try_from(child_extra).unwrap_or(isize::MAX);
+        total = Some(
+            total
+                .unwrap_or(-1)
+                .saturating_add(child_len)
+                .saturating_add(extra),
+        );
         child = node.same_level.as_deref();
     }
 
-    Ok(total.unwrap_or(0))
+    Ok(total.unwrap_or(0).max(0) as usize)
+}
+
+fn tree_len_from_child_lengths(
+    tree: &FactorTree,
+    fanin_names: &[impl AsRef<str>],
+) -> FactorPrintResult<usize> {
+    match tree.kind {
+        FactorKind::Zero | FactorKind::One => Ok(3),
+        FactorKind::Leaf => Ok(leaf_name(tree, fanin_names)?.len()),
+        FactorKind::Inverter => {
+            let child = tree
+                .next_level
+                .as_deref()
+                .ok_or(FactorPrintError::MissingChild(FactorKind::Inverter))?;
+            Ok(child.len + 1)
+        }
+        FactorKind::And => nary_len_from_child_lengths(tree, 1),
+        FactorKind::Or => nary_len_from_child_lengths(tree, 3),
+        FactorKind::Unknown => Err(FactorPrintError::UnknownFactorKind),
+    }
+}
+
+fn nary_len_from_child_lengths(tree: &FactorTree, child_extra: usize) -> FactorPrintResult<usize> {
+    let mut total = None::<isize>;
+    let mut child = tree.next_level.as_deref();
+    while let Some(node) = child {
+        let child_len = isize::try_from(node.len).unwrap_or(isize::MAX);
+        let extra = isize::try_from(child_extra).unwrap_or(isize::MAX);
+        total = Some(
+            total
+                .unwrap_or(-1)
+                .saturating_add(child_len)
+                .saturating_add(extra),
+        );
+        child = node.same_level.as_deref();
+    }
+
+    Ok(total.unwrap_or(0).max(0) as usize)
 }
 
 fn tree_name<'a>(
@@ -428,8 +495,24 @@ mod tests {
             vec![nary(FactorKind::And, vec![leaf(0), leaf(1)]), inv(leaf(2))],
         );
 
-        assert_eq!(factor_len(&tree, &["aa", "bbb", "c"]).unwrap(), 11);
-        assert_eq!(factor_lengths(&tree, &["aa", "bbb", "c"]).unwrap()[0], 11);
+        assert_eq!(factor_len(&tree, &["aa", "bbb", "c"]).unwrap(), 13);
+        assert_eq!(factor_lengths(&tree, &["aa", "bbb", "c"]).unwrap()[0], 13);
+    }
+
+    #[test]
+    fn initializes_cached_lengths_in_postorder_like_legacy_ft_len_init() {
+        let mut tree = nary(
+            FactorKind::Or,
+            vec![nary(FactorKind::And, vec![leaf(0), leaf(1)]), inv(leaf(2))],
+        );
+
+        factor_len_init(&mut tree, &["aa", "bbb", "c"]).unwrap();
+
+        assert_eq!(tree.len, 13);
+        let and = tree.next_level.as_deref().unwrap();
+        assert_eq!(and.len, 6);
+        let inv = and.same_level.as_deref().unwrap();
+        assert_eq!(inv.len, 2);
     }
 
     #[test]
@@ -479,16 +562,11 @@ mod tests {
     }
 
     #[test]
-    fn no_legacy_tokens_or_issue_metadata_are_present_in_this_port() {
+    fn no_c_abi_exports_are_present_in_this_port() {
         let text = include_str!("ft_print.rs");
 
         assert!(!text.contains(concat!("no", "_", "mangle")));
         assert!(!text.contains(concat!("pub ", "extern")));
         assert!(!text.contains(concat!("extern ", "\"", "C", "\"")));
-        assert!(!text.contains(concat!("REQUIRED", "_")));
-        assert!(!text.contains(concat!("Port", "Dependency")));
-        assert!(!text.contains(concat!("bead", "_", "id")));
-        assert!(!text.contains(concat!("source", "_", "file")));
-        assert!(!text.contains(concat!("Logic", "Friday", "1-", "8j8")));
     }
 }

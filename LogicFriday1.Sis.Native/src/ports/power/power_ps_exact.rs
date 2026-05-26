@@ -4,8 +4,8 @@
 //! transition input probabilities, solves it exactly, and projects state
 //! probabilities onto present-state latch-output lines. This module ports that
 //! algorithm to owned Rust data structures. Direct SIS `network_t`, `stg`,
-//! `st_table`, and `spMatrix` integration remains blocked on the dependency
-//! beads reported below.
+//! `st_table`, and `spMatrix` integration remains represented by explicit
+//! dependency errors.
 
 use std::collections::BTreeMap;
 use std::error::Error;

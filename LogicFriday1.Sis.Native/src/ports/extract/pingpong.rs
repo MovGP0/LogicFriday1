@@ -630,4 +630,16 @@ mod tests {
         assert!(update_best(rect1, rect2.clone(), &mut best));
         assert_eq!(best, rect2);
     }
+
+    #[test]
+    fn no_legacy_abi_or_tracking_tokens_are_present() {
+        let source = include_str!("pingpong.rs");
+
+        assert!(!source.contains(concat!("no", "_", "mangle")));
+        assert!(!source.contains(concat!("pub ", "extern")));
+        assert!(!source.contains(concat!("extern ", "\"", "C", "\"")));
+        assert!(!source.contains(concat!("REQUIRED", "_")));
+        assert!(!source.contains(concat!("Port", "Dependency")));
+        assert!(!source.contains(concat!("Logic", "Friday", "1-", "8j8")));
+    }
 }

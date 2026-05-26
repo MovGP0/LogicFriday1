@@ -6,7 +6,7 @@
 //! probabilities into `power_info_t`.  This port keeps the graph rewrite and
 //! final accumulation behavior on owned Rust data structures.  Direct SIS
 //! `network_t`, `latch_t`, `st_table`, and BDD integration remains blocked by
-//! the dependency beads listed below.
+//! native integration work outside this owned-data model.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;

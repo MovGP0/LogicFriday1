@@ -207,6 +207,33 @@ mod tests {
         );
     }
 
+    #[test]
+    fn clone_preserves_rectangle_contents_like_rect_dup() {
+        let mut rectangle = Rectangle::with_parts([2, 0], [5, 1]);
+        rectangle.set_value(17);
+
+        let clone = rectangle.clone();
+        rectangle.set_value(3);
+
+        assert_eq!(clone.rows(), &BTreeSet::from([0, 2]));
+        assert_eq!(clone.cols(), &BTreeSet::from([1, 5]));
+        assert_eq!(clone.value(), 17);
+    }
+
+    #[test]
+    fn no_legacy_c_abi_or_tracking_metadata_tokens_are_present_in_this_port() {
+        let source = include_str!("rect.rs");
+
+        assert!(!source.contains(concat!("no", "_", "mangle")));
+        assert!(!source.contains(concat!("pub ", "extern")));
+        assert!(!source.contains(concat!("extern ", "\"", "C", "\"")));
+        assert!(!source.contains(concat!("REQUIRED", "_")));
+        assert!(!source.contains(concat!("Port", "Dependency")));
+        assert!(!source.contains(concat!("b", "ead", "_", "id")));
+        assert!(!source.contains(concat!("source", "_", "file")));
+        assert!(!source.contains(concat!("Logic", "Friday", "1-", "8j8")));
+    }
+
     fn matrix_from_pairs(pairs: &[(usize, usize)]) -> SparseMatrix {
         let mut matrix = SparseMatrix::new();
         for (row, col) in pairs {

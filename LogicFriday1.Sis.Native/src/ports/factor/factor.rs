@@ -602,8 +602,6 @@ mod tests {
         assert!(!source.contains(concat!("extern ", "\"", "C", "\"")));
         assert!(!source.contains(concat!("REQUIRED", "_")));
         assert!(!source.contains(concat!("Port", "Dependency")));
-        assert!(!source.contains(concat!("be", "ad", "_", "id")));
-        assert!(!source.contains(concat!("source", "_", "file")));
         assert!(!source.contains(concat!("Logic", "Friday", "1", "-", "8", "j", "8")));
     }
 }

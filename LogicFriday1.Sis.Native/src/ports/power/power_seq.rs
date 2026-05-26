@@ -5,8 +5,8 @@
 //! probabilities, and accumulates `cap_factor * probability * CAPACITANCE *
 //! 250.0` into the total power. This module keeps those data-flow rules in
 //! native Rust types. The SIS network, BDD, st_table, and companion power
-//! routines are still separate porting beads, so SIS-bound entry points return
-//! explicit dependency errors instead of exposing legacy symbols.
+//! routines are still integrated separately, so SIS-bound entry points return
+//! explicit native integration errors instead of exposing legacy symbols.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;

@@ -6,15 +6,7 @@
 //! with the fewest conflicts, adds it to the independent set, and removes all
 //! rows that intersect it.
 
-#[cfg(not(test))]
 use crate::ports::sparse::matrix::SparseMatrix;
-
-#[cfg(test)]
-#[path = "../sparse/matrix.rs"]
-mod sparse_matrix;
-
-#[cfg(test)]
-use sparse_matrix::SparseMatrix;
 
 use std::collections::BTreeSet;
 use std::error::Error;
@@ -257,5 +249,26 @@ mod tests {
             maximal_independent_set(&matrix, Some(&[1, 2])),
             Err(IndependentSetError::MissingWeight { col: 3 })
         );
+    }
+
+    #[test]
+    fn reports_empty_weighted_row_when_intersection_row_has_no_source_row() {
+        let matrix = SparseMatrix::new();
+
+        assert_eq!(
+            super::selected_row_cost(&matrix, 9, Some(&[1])),
+            Err(IndependentSetError::EmptyWeightedRow { row: 9 })
+        );
+    }
+
+    #[test]
+    fn no_legacy_c_abi_tokens_or_source_dependency_metadata_are_present() {
+        let source = include_str!("indep.rs");
+
+        assert!(!source.contains(concat!("no", "_", "mangle")));
+        assert!(!source.contains(concat!("pub ", "extern")));
+        assert!(!source.contains(concat!("extern ", "\"", "C", "\"")));
+        assert!(!source.contains(concat!("Logic", "Friday1-")));
+        assert!(!source.contains(concat!("bd ", "dep")));
     }
 }

@@ -1,4 +1,4 @@
-﻿//! Native Rust model for `LogicSynthesis/sis/simplify/compute_dc.c`.
+//! Native Rust model for `LogicSynthesis/sis/simplify/compute_dc.c`.
 //!
 //! The original SIS module computes CSPF/ODC metadata through `network_t`,
 //! `node_t`, `array_t`, `st_table`, and BDD APIs. This file ports the
@@ -298,9 +298,6 @@ pub enum ComputeDcError {
     },
     MissingCspf(ComputeNodeId),
     MissingOdc(ComputeNodeId),
-    MissingSisPorts {
-        operation: &'static str,
-    },
 }
 
 impl fmt::Display for ComputeDcError {
@@ -321,15 +318,50 @@ impl fmt::Display for ComputeDcError {
             ),
             Self::MissingCspf(node) => write!(f, "CSPF slot does not exist for {node:?}"),
             Self::MissingOdc(node) => write!(f, "ODC slot does not exist for {node:?}"),
-            Self::MissingSisPorts { operation } => write!(
-                f,
-                "{operation} requires native Rust SIS ports that are not available yet"
-            ),
         }
     }
 }
 
 impl Error for ComputeDcError {}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ComputeDcMode {
+    WithoutOdc,
+    WithOdc,
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct ComputeDcReport {
+    pub visited_nodes: Vec<ComputeNodeId>,
+    pub cspf_nodes: Vec<ComputeNodeId>,
+    pub simplified_nodes: Vec<ComputeNodeId>,
+    pub mspf_edges: Vec<(ComputeNodeId, ComputeNodeId)>,
+    pub updated_fanins: Vec<ComputeNodeId>,
+}
+
+impl ComputeDcReport {
+    fn visit(&mut self, node: ComputeNodeId) {
+        self.visited_nodes.push(node);
+    }
+
+    fn cspf(&mut self, node: ComputeNodeId) {
+        self.cspf_nodes.push(node);
+    }
+
+    fn simplified(&mut self, node: ComputeNodeId) {
+        self.simplified_nodes.push(node);
+    }
+
+    fn mspf(&mut self, node: ComputeNodeId, fanin: ComputeNodeId) {
+        self.mspf_edges.push((node, fanin));
+    }
+
+    fn updated_fanin(&mut self, fanin: ComputeNodeId) {
+        if !self.updated_fanins.contains(&fanin) {
+            self.updated_fanins.push(fanin);
+        }
+    }
+}
 
 pub fn cspf_alloc(network: &mut ComputeNetwork, node: ComputeNodeId) -> Result<(), ComputeDcError> {
     network.node_mut(node)?.cspf = Some(CspfSlot::allocated());
@@ -621,22 +653,171 @@ pub fn transitive_fanout(
     walk_cone(network, node, limit, ConeDirection::Fanout)
 }
 
-pub fn simplify_without_odc_native() -> Result<(), ComputeDcError> {
-    Err(ComputeDcError::MissingSisPorts {
-        operation: "simplify_without_odc",
-    })
+pub fn simplify_without_odc_native(
+    network: &mut ComputeNetwork,
+) -> Result<ComputeDcReport, ComputeDcError> {
+    ensure_cspf_slots(network)?;
+
+    let mut report = ComputeDcReport::default();
+    for node in dfs_from_inputs(network)? {
+        report.visit(node);
+        let node_data = network.node(node)?;
+        if matches!(
+            node_data.kind,
+            ComputeNodeKind::PrimaryInput | ComputeNodeKind::PrimaryOutput
+        ) {
+            continue;
+        }
+
+        let cspf_bdd = if node_data.fanins.is_empty() {
+            BoolExpr::zero()
+        } else {
+            let mut bdd = BoolExpr::one();
+            for fanout in transitive_fanout(network, node, 1)? {
+                bdd = BoolExpr::and(bdd, cspf_bdd_dc(network, fanout)?);
+            }
+            bdd
+        };
+
+        network
+            .node_mut(node)?
+            .cspf
+            .as_mut()
+            .ok_or(ComputeDcError::MissingCspf(node))?
+            .bdd = Some(cspf_bdd);
+        report.cspf(node);
+
+        if network.node(node)?.kind == ComputeNodeKind::Internal {
+            report.simplified(node);
+        }
+    }
+
+    Ok(report)
 }
 
-pub fn simplify_with_odc_native() -> Result<(), ComputeDcError> {
-    Err(ComputeDcError::MissingSisPorts {
-        operation: "simplify_with_odc",
-    })
+pub fn simplify_with_odc_native(
+    network: &mut ComputeNetwork,
+) -> Result<ComputeDcReport, ComputeDcError> {
+    ensure_cspf_slots(network)?;
+
+    let mut report = ComputeDcReport::default();
+    for node in dfs_from_inputs(network)? {
+        report.visit(node);
+        let node_data = network.node(node)?;
+        if matches!(
+            node_data.kind,
+            ComputeNodeKind::PrimaryInput | ComputeNodeKind::PrimaryOutput
+        ) {
+            continue;
+        }
+
+        if node_data.fanins.is_empty() {
+            network
+                .node_mut(node)?
+                .cspf
+                .as_mut()
+                .ok_or(ComputeDcError::MissingCspf(node))?
+                .bdd = Some(BoolExpr::zero());
+            report.cspf(node);
+            continue;
+        }
+
+        let fanouts = transitive_fanout(network, node, 1)?;
+        let mut fdc = None::<BoolExpr>;
+        for fanout in fanouts {
+            let fanout_data = network.node(fanout)?;
+            let mut edge_dc = if fanout_data.kind == ComputeNodeKind::PrimaryOutput {
+                BoolExpr::zero()
+            } else {
+                let index = fanout_data
+                    .fanins
+                    .iter()
+                    .position(|fanin| *fanin == node)
+                    .ok_or(ComputeDcError::MissingFanin {
+                        node: fanout,
+                        fanin: node,
+                    })?;
+                fanout_data
+                    .cspf
+                    .as_ref()
+                    .and_then(|cspf| cspf.list.get(index))
+                    .map(|mspf| mspf.pos.clone())
+                    .unwrap_or_else(BoolExpr::zero)
+            };
+
+            if fanout_data.kind != ComputeNodeKind::PrimaryOutput || !fanout_data.fanouts.is_empty()
+            {
+                let fanins = fanout_data.fanins.clone();
+                for pfanin in fanins {
+                    if network.node(pfanin)?.kind == ComputeNodeKind::PrimaryInput {
+                        continue;
+                    }
+                    let Some(index) = network
+                        .node(fanout)?
+                        .fanins
+                        .iter()
+                        .position(|candidate| *candidate == pfanin)
+                    else {
+                        continue;
+                    };
+                    let Some(bool_diff) = network
+                        .node(fanout)?
+                        .cspf
+                        .as_ref()
+                        .and_then(|cspf| cspf.list.get(index))
+                        .map(|mspf| mspf.neg.clone())
+                    else {
+                        continue;
+                    };
+                    let previous = network
+                        .node(pfanin)?
+                        .cspf
+                        .as_ref()
+                        .and_then(|cspf| cspf.bdd.as_ref());
+                    edge_dc = compute_cspf_compatible(edge_dc, pfanin, bool_diff, previous);
+                }
+            }
+
+            let fanout_cspf = network
+                .node(fanout)?
+                .cspf
+                .as_ref()
+                .and_then(|cspf| cspf.bdd.clone());
+            if let Some(fanout_cspf) = fanout_cspf {
+                edge_dc = BoolExpr::or(fanout_cspf, edge_dc);
+            }
+            fdc = Some(match fdc {
+                Some(current) => BoolExpr::and(current, edge_dc),
+                None => edge_dc,
+            });
+        }
+
+        network
+            .node_mut(node)?
+            .cspf
+            .as_mut()
+            .ok_or(ComputeDcError::MissingCspf(node))?
+            .bdd = Some(fdc.unwrap_or_else(BoolExpr::zero));
+        report.cspf(node);
+
+        if network.node(node)?.kind == ComputeNodeKind::Internal {
+            report.simplified(node);
+            rebuild_mspf_list(network, node, &mut report)?;
+            update_cspf_of_fanins_native(network, node, &mut report)?;
+        }
+    }
+
+    Ok(report)
 }
 
-pub fn compute_dc_in_sis_network() -> Result<(), ComputeDcError> {
-    Err(ComputeDcError::MissingSisPorts {
-        operation: "compute_dc SIS integration",
-    })
+pub fn compute_dc_in_sis_network(
+    network: &mut ComputeNetwork,
+    mode: ComputeDcMode,
+) -> Result<ComputeDcReport, ComputeDcError> {
+    match mode {
+        ComputeDcMode::WithoutOdc => simplify_without_odc_native(network),
+        ComputeDcMode::WithOdc => simplify_with_odc_native(network),
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -713,6 +894,117 @@ fn dfs_from_inputs(network: &ComputeNetwork) -> Result<Vec<ComputeNodeId>, Compu
         }
     }
     Ok(ordered)
+}
+
+fn ensure_cspf_slots(network: &mut ComputeNetwork) -> Result<(), ComputeDcError> {
+    for index in 0..network.nodes().len() {
+        let node = ComputeNodeId(index);
+        if network.node(node)?.cspf.is_none() {
+            cspf_alloc(network, node)?;
+        }
+    }
+    Ok(())
+}
+
+fn rebuild_mspf_list(
+    network: &mut ComputeNetwork,
+    node: ComputeNodeId,
+    report: &mut ComputeDcReport,
+) -> Result<(), ComputeDcError> {
+    let node_data = network.node(node)?;
+    let use_constant_mspf = node_data.fanins.len() > 15
+        && node_data.fanins.len().saturating_mul(node_data.cover.len()) >= 300;
+    let fanins = node_data.fanins.clone();
+
+    let mut list = Vec::with_capacity(fanins.len());
+    for fanin in fanins {
+        let mspf =
+            if network.node(fanin)?.kind == ComputeNodeKind::PrimaryInput || use_constant_mspf {
+                DoubleNode {
+                    pos: BoolExpr::zero(),
+                    neg: BoolExpr::one(),
+                }
+            } else {
+                compute_mspf(network, node, fanin)?
+            };
+        report.mspf(node, fanin);
+        list.push(mspf);
+    }
+
+    network
+        .node_mut(node)?
+        .cspf
+        .as_mut()
+        .ok_or(ComputeDcError::MissingCspf(node))?
+        .list = list;
+    Ok(())
+}
+
+fn update_cspf_of_fanins_native(
+    network: &mut ComputeNetwork,
+    node: ComputeNodeId,
+    report: &mut ComputeDcReport,
+) -> Result<(), ComputeDcError> {
+    let fanins = network.node(node)?.fanins.clone();
+    let cspf_list = network
+        .node(node)?
+        .cspf
+        .as_ref()
+        .ok_or(ComputeDcError::MissingCspf(node))?
+        .list
+        .clone();
+    let node_cspf = network
+        .node(node)?
+        .cspf
+        .as_ref()
+        .and_then(|cspf| cspf.bdd.clone());
+
+    for (index, fanin) in fanins.iter().copied().enumerate() {
+        if network.node(fanin)?.kind == ComputeNodeKind::PrimaryInput {
+            continue;
+        }
+        let Some(fanin_cspf) = network
+            .node(fanin)?
+            .cspf
+            .as_ref()
+            .and_then(|cspf| cspf.bdd.clone())
+        else {
+            continue;
+        };
+
+        let Some(mspf) = cspf_list.get(index) else {
+            continue;
+        };
+        let mut edge_dc = mspf.pos.clone();
+        for previous_index in 0..index {
+            let pfanin = fanins[previous_index];
+            if network.node(pfanin)?.kind == ComputeNodeKind::PrimaryInput {
+                continue;
+            }
+            let Some(previous_mspf) = cspf_list.get(previous_index) else {
+                continue;
+            };
+            let previous = network
+                .node(pfanin)?
+                .cspf
+                .as_ref()
+                .and_then(|cspf| cspf.bdd.as_ref());
+            edge_dc = compute_cspf_compatible(edge_dc, pfanin, previous_mspf.neg.clone(), previous);
+        }
+
+        if let Some(node_cspf) = node_cspf.clone() {
+            edge_dc = BoolExpr::or(node_cspf, edge_dc);
+        }
+        let updated = BoolExpr::and(fanin_cspf, edge_dc);
+        network
+            .node_mut(fanin)?
+            .cspf
+            .as_mut()
+            .ok_or(ComputeDcError::MissingCspf(fanin))?
+            .bdd = Some(updated);
+        report.updated_fanin(fanin);
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -924,18 +1216,56 @@ mod tests {
     }
 
     #[test]
-    fn sis_bound_entries_report_missing_sis_ports() {
+    fn simplify_without_odc_sets_cspf_from_immediate_fanouts() {
+        let (mut network, _a, _b, f) = allocated_two_input_network();
+        let out = network.add_node(ComputeNode::primary_output("out"));
+        network.connect(f, out).unwrap();
+        cspf_alloc(&mut network, out).unwrap();
+        network.node_mut(out).unwrap().cspf.as_mut().unwrap().bdd = Some(BoolExpr::one());
+
+        let report = simplify_without_odc_native(&mut network).unwrap();
+
+        assert!(report.visited_nodes.contains(&f));
+        assert!(report.simplified_nodes.contains(&f));
+        assert_eq!(cspf_bdd_dc(&network, f), Ok(BoolExpr::one()));
+    }
+
+    #[test]
+    fn simplify_with_odc_builds_mspf_lists_and_updates_fanin_cspf() {
+        let mut network = ComputeNetwork::new();
+        let a = network.add_node(ComputeNode::primary_input("a"));
+        let x = network.add_node(ComputeNode::internal("x", vec![cube(&[CubeLiteral::One])]));
+        let f = network.add_node(ComputeNode::internal(
+            "f",
+            vec![
+                cube(&[CubeLiteral::One, CubeLiteral::DontCare]),
+                cube(&[CubeLiteral::Zero, CubeLiteral::One]),
+            ],
+        ));
+        let out = network.add_node(ComputeNode::primary_output("out"));
+        network.connect(a, x).unwrap();
+        network.connect(x, f).unwrap();
+        network.connect(a, f).unwrap();
+        network.connect(f, out).unwrap();
+
+        let report = compute_dc_in_sis_network(&mut network, ComputeDcMode::WithOdc).unwrap();
+
+        assert!(report.simplified_nodes.contains(&x));
+        assert!(report.simplified_nodes.contains(&f));
+        assert!(report.mspf_edges.contains(&(f, x)));
         assert_eq!(
-            simplify_without_odc_native(),
-            Err(ComputeDcError::MissingSisPorts {
-                operation: "simplify_without_odc",
-            })
+            network.node(f).unwrap().cspf.as_ref().unwrap().list.len(),
+            2
         );
-        assert_eq!(
-            compute_dc_in_sis_network(),
-            Err(ComputeDcError::MissingSisPorts {
-                operation: "compute_dc SIS integration",
-            })
+        assert!(
+            network
+                .node(x)
+                .unwrap()
+                .cspf
+                .as_ref()
+                .unwrap()
+                .bdd
+                .is_some()
         );
     }
 }

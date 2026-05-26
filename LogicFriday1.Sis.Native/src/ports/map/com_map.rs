@@ -3,7 +3,7 @@
 //! The SIS C command registers `map`, parses mapper flags, checks that a
 //! technology library has been loaded, and then dispatches into the mapper.
 //! The network/library mapper is still represented by other native porting
-//! beads, so this module intentionally ports the deterministic command model
+//! modules, so this module intentionally ports the deterministic command model
 //! only. It exposes no legacy C ABI entry points.
 
 use std::error::Error;

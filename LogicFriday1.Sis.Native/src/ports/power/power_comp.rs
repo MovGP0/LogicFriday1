@@ -4,7 +4,7 @@
 //! SIS builds the BDD elsewhere and supplies CMU BDD pointers, `st_table`
 //! caches, state-probability tables, and Espresso `pset` values. This port
 //! keeps the scanner behavior over an owned Rust BDD and reports explicit
-//! dependency beads for SIS-bound adapters.
+//! native integration errors for SIS-bound adapters.
 
 use std::collections::HashMap;
 use std::error::Error;

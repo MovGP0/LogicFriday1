@@ -7,7 +7,10 @@
 
 #![allow(dead_code)]
 
-use std::collections::BTreeMap;
+use super::ddivisor::{
+    DoubleCubeDivisorSet, DoubleCubeDivisorType, DoubleCubeExtractOptions,
+    extract_double_cube_divisors,
+};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TwoCubeNodeFunction {
@@ -141,6 +144,7 @@ pub struct DoubleCubeOccurrence {
     first_cube: usize,
     second_cube: usize,
     base_length: usize,
+    phase: usize,
 }
 
 impl DoubleCubeOccurrence {
@@ -154,6 +158,10 @@ impl DoubleCubeOccurrence {
 
     pub fn base_length(&self) -> usize {
         self.base_length
+    }
+
+    pub fn phase(&self) -> usize {
+        self.phase
     }
 }
 
@@ -217,36 +225,39 @@ pub fn two_cube_kernels(node: &TwoCubeNode) -> Vec<DoubleCubeDivisor> {
         return Vec::new();
     }
 
-    let mut divisors = BTreeMap::<(Cube, Cube), Vec<DoubleCubeOccurrence>>::new();
-    for first_index in 0..node.cubes.len() {
-        for second_index in (first_index + 1)..node.cubes.len() {
-            let first = &node.cubes[first_index];
-            let second = &node.cubes[second_index];
-            let base = first.common_literals(second);
-            let mut residual1 = first.without_literals(&base);
-            let mut residual2 = second.without_literals(&base);
+    let rows = node.cubes().iter().map(cube_to_columns).collect::<Vec<_>>();
+    let mut divisor_set = DoubleCubeDivisorSet::new();
+    extract_double_cube_divisors(
+        &rows,
+        0,
+        0,
+        &mut divisor_set,
+        DoubleCubeExtractOptions::unrestricted(),
+        || false,
+    );
 
-            if residual2.literal_count() < residual1.literal_count()
-                || (residual1.literal_count() == residual2.literal_count() && residual2 < residual1)
-            {
-                std::mem::swap(&mut residual1, &mut residual2);
-            }
+    divisor_set
+        .divisors()
+        .iter()
+        .map(|divisor| {
+            let cube1 = columns_to_cube(divisor.cube1());
+            let cube2 = columns_to_cube(divisor.cube2());
+            let occurrences = divisor
+                .occurrence_indices()
+                .iter()
+                .map(|cell_index| {
+                    let cell = &divisor_set.cells()[*cell_index];
+                    DoubleCubeOccurrence {
+                        first_cube: cell.cube1_row(),
+                        second_cube: cell.cube2_row(),
+                        base_length: cell.base_length(),
+                        phase: cell.phase(),
+                    }
+                })
+                .collect::<Vec<_>>();
+            let weight =
+                compute_divisor_weight(&rows, divisor.divisor_type(), &cube1, &cube2, &occurrences);
 
-            divisors
-                .entry((residual1, residual2))
-                .or_default()
-                .push(DoubleCubeOccurrence {
-                    first_cube: first_index,
-                    second_cube: second_index,
-                    base_length: base.len(),
-                });
-        }
-    }
-
-    divisors
-        .into_iter()
-        .map(|((cube1, cube2), occurrences)| {
-            let weight = compute_divisor_weight(node, &cube1, &cube2, &occurrences);
             DoubleCubeDivisor {
                 cube1,
                 cube2,
@@ -305,7 +316,8 @@ pub fn best_two_cube_kernel_by_weight(node: &TwoCubeNode) -> Option<TwoCubeNode>
 }
 
 fn compute_divisor_weight(
-    node: &TwoCubeNode,
+    rows: &[Vec<usize>],
+    divisor_type: DoubleCubeDivisorType,
     cube1: &Cube,
     cube2: &Cube,
     occurrences: &[DoubleCubeOccurrence],
@@ -319,21 +331,55 @@ fn compute_divisor_weight(
         (occurrence_count - 1) * (cube1.literal_count() + cube2.literal_count()) as isize;
 
     extracted_literal_saving + common_base_saving - occurrence_count
-        + complementary_single_literal_weight(node, cube1, cube2)
+        + complementary_single_literal_weight(rows, divisor_type, cube1, cube2)
 }
 
-fn complementary_single_literal_weight(node: &TwoCubeNode, cube1: &Cube, cube2: &Cube) -> isize {
-    if cube1.literal_count() != 1 || cube2.literal_count() != 1 {
+fn complementary_single_literal_weight(
+    rows: &[Vec<usize>],
+    divisor_type: DoubleCubeDivisorType,
+    cube1: &Cube,
+    cube2: &Cube,
+) -> isize {
+    if divisor_type != DoubleCubeDivisorType::D112
+        || cube1.literal_count() != 1
+        || cube2.literal_count() != 1
+    {
         return 0;
     }
 
-    let complement1 = cube1.literals()[0].complement();
-    let complement2 = cube2.literals()[0].complement();
+    let complement1 = literal_to_column(cube1.literals()[0].complement());
+    let complement2 = literal_to_column(cube2.literals()[0].complement());
 
-    node.cubes()
-        .iter()
-        .filter(|cube| cube.contains(complement1) && cube.contains(complement2))
+    rows.iter()
+        .filter(|row| {
+            row.binary_search(&complement1).is_ok() && row.binary_search(&complement2).is_ok()
+        })
         .count() as isize
+}
+
+fn cube_to_columns(cube: &Cube) -> Vec<usize> {
+    cube.literals()
+        .iter()
+        .copied()
+        .map(literal_to_column)
+        .collect()
+}
+
+fn columns_to_cube(columns: &[usize]) -> Cube {
+    Cube::new(columns.iter().copied().map(column_to_literal))
+}
+
+fn literal_to_column(literal: CubeLiteral) -> usize {
+    literal.variable() * 2 + usize::from(!literal.phase())
+}
+
+fn column_to_literal(column: usize) -> CubeLiteral {
+    let variable = column / 2;
+    if column % 2 == 0 {
+        CubeLiteral::positive(variable)
+    } else {
+        CubeLiteral::negative(variable)
+    }
 }
 
 #[cfg(test)]
@@ -384,6 +430,30 @@ mod tests {
             .expect("expected shared divisor");
 
         assert_eq!(divisor.occurrences().len(), 2);
+        assert_eq!(divisor.weight(), 2);
+    }
+
+    #[test]
+    fn coalesces_d222_complement_phase_like_legacy_divisor_set() {
+        let node = TwoCubeNode::sop([
+            Cube::new([CubeLiteral::positive(0), CubeLiteral::positive(1)]),
+            Cube::new([CubeLiteral::negative(0), CubeLiteral::negative(1)]),
+            Cube::new([CubeLiteral::negative(0), CubeLiteral::positive(1)]),
+            Cube::new([CubeLiteral::positive(0), CubeLiteral::negative(1)]),
+        ]);
+
+        let divisor = two_cube_kernels(&node)
+            .into_iter()
+            .find(|divisor| {
+                divisor.cube1() == &Cube::new([CubeLiteral::positive(0), CubeLiteral::positive(1)])
+                    && divisor.cube2()
+                        == &Cube::new([CubeLiteral::negative(0), CubeLiteral::negative(1)])
+            })
+            .expect("expected D222 divisor");
+
+        assert_eq!(divisor.occurrences().len(), 2);
+        assert_eq!(divisor.occurrences()[0].phase(), 0);
+        assert_eq!(divisor.occurrences()[1].phase(), 1);
         assert_eq!(divisor.weight(), 2);
     }
 
@@ -453,5 +523,17 @@ mod tests {
         });
 
         assert_eq!(best, None);
+    }
+
+    #[test]
+    fn no_legacy_abi_or_tracking_tokens_are_present() {
+        let source = include_str!("gen_2c_kernel.rs");
+
+        assert!(!source.contains(concat!("no", "_", "mangle")));
+        assert!(!source.contains(concat!("pub ", "extern")));
+        assert!(!source.contains(concat!("extern ", "\"", "C", "\"")));
+        assert!(!source.contains(concat!("REQUIRED", "_")));
+        assert!(!source.contains(concat!("Port", "Dependency")));
+        assert!(!source.contains(concat!("Logic", "Friday", "1-", "8j8")));
     }
 }

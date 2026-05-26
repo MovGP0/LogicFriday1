@@ -9,6 +9,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
 use std::fmt;
 
+use crate::ports::extract::pingpong::{
+    CostTable, PingPongMatrix, Rectangle as PingPongRectangle, ping_pong,
+};
+
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct SisIndex(pub i32);
 
@@ -124,7 +128,6 @@ impl SubkernelRectangle {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum BestSubkernelError {
-    PingPongUnavailable,
     MissingRowCost { row: usize },
     MissingColumnCost { column: usize },
     MissingMatrixCell { row: usize, column: usize },
@@ -133,9 +136,6 @@ pub enum BestSubkernelError {
 impl fmt::Display for BestSubkernelError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::PingPongUnavailable => {
-                write!(f, "ping-pong subkernel selection has not been ported yet")
-            }
             Self::MissingRowCost { row } => write!(f, "missing row cost for row {row}"),
             Self::MissingColumnCost { column } => {
                 write!(f, "missing column cost for column {column}")
@@ -158,13 +158,43 @@ pub fn choose_subkernel(
     option: SubkernelOption,
 ) -> BestSubkernelResult<SubkernelRectangle> {
     match option {
-        SubkernelOption::PingPong => Err(BestSubkernelError::PingPongUnavailable),
+        SubkernelOption::PingPong => Ok(choose_ping_pong(matrix, row_costs, column_costs)),
         SubkernelOption::SumOfProducts => {
             best_subkernel(matrix, row_costs, column_costs, score_sum_of_products)
         }
         SubkernelOption::Factored => {
             best_subkernel(matrix, row_costs, column_costs, score_factored)
         }
+    }
+}
+
+fn choose_ping_pong(
+    matrix: &KernelCubeMatrix,
+    row_costs: &[i32],
+    column_costs: &[i32],
+) -> SubkernelRectangle {
+    let ping_pong_matrix = ping_pong_matrix_from_kernel_cube(matrix);
+    let row_cost = CostTable::new(row_costs.to_vec());
+    let column_cost = CostTable::new(column_costs.to_vec());
+    ping_pong_rectangle_to_subkernel(ping_pong(&ping_pong_matrix, &row_cost, &column_cost))
+}
+
+fn ping_pong_matrix_from_kernel_cube(matrix: &KernelCubeMatrix) -> PingPongMatrix {
+    let mut ping_pong_matrix = PingPongMatrix::new();
+    for (row, columns) in &matrix.rows {
+        for (column, cell) in columns {
+            ping_pong_matrix.insert(*row, *column, cell.value);
+        }
+    }
+
+    ping_pong_matrix
+}
+
+fn ping_pong_rectangle_to_subkernel(rectangle: PingPongRectangle) -> SubkernelRectangle {
+    SubkernelRectangle {
+        rows: rectangle.rows().clone(),
+        columns: rectangle.cols().clone(),
+        value: rectangle.value(),
     }
 }
 
@@ -479,13 +509,20 @@ mod tests {
     }
 
     #[test]
-    fn ping_pong_selection_reports_the_unported_native_dependency() {
-        let matrix = KernelCubeMatrix::new();
+    fn ping_pong_selection_delegates_to_native_ping_pong_port() {
+        let mut matrix = KernelCubeMatrix::new();
+        matrix.insert(0, 0, cell(3, 1));
+        matrix.insert(0, 1, cell(3, 1));
+        matrix.insert(1, 0, cell(3, 2));
+        matrix.insert(1, 1, cell(3, 2));
+        matrix.insert(2, 1, cell(1, 3));
 
-        assert_eq!(
-            choose_subkernel(&matrix, &[], &[], SubkernelOption::PingPong),
-            Err(BestSubkernelError::PingPongUnavailable)
-        );
+        let rectangle =
+            choose_subkernel(&matrix, &[1, 1, 1], &[1, 1], SubkernelOption::PingPong).unwrap();
+
+        assert_eq!(rectangle.rows(), &BTreeSet::from([0, 1]));
+        assert_eq!(rectangle.columns(), &BTreeSet::from([0, 1]));
+        assert_eq!(rectangle.value(), 8);
     }
 
     #[test]

@@ -5,8 +5,8 @@
 //! normalization, and dispatch to the concrete combinational/sequential/
 //! pipeline/dynamic engines. This port keeps the table-building behavior on
 //! explicit Rust data structures. Direct dispatch from a legacy SIS `network_t`
-//! remains gated with bead/source dependency errors until the callee ports and
-//! SIS object model are available.
+//! remains gated with native integration errors until the SIS object model is
+//! available.
 
 use std::collections::HashMap;
 use std::error::Error;

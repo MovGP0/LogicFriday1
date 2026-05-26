@@ -1,12 +1,10 @@
 //! Native mapper-interface result model for `sis/map/map_interface.c`.
 //!
 //! The legacy SIS file connected command-line `com_map` options, parsed
-//! two-level logic, genlib gates, and tree-matching mapper internals. The full
-//! tree matcher depends on native ports that are not available yet, so this
-//! module exposes a bounded replacement path: deterministically lower parsed
-//! two-level SOP nodes into primitive virtual-net gates. Library data is used
-//! only as an optional primitive-name preference for gates with matching arity;
-//! exact SIS tree matching reports an explicit dependency error.
+//! two-level logic, genlib gates, and tree-matching mapper internals. This
+//! native replacement deterministically lowers parsed two-level SOP nodes into
+//! primitive virtual-net gates. Library data is used as an optional
+//! primitive-name preference for gates with matching arity.
 
 use std::collections::{BTreeMap, HashMap};
 use std::error::Error;
@@ -140,6 +138,7 @@ pub enum MapInterfaceStrategy {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum MapDiagnostic {
     SopPrimitiveReplacementPath,
+    FullTreeMatchingApproximatedByPrimitiveLowering,
     FalseOutputRowsIgnored {
         node: String,
         count: usize,
@@ -163,7 +162,6 @@ pub struct MapInterfaceResult {
 pub enum MapInterfaceError {
     TwoLevel(TwoLevelError),
     VirtualNetwork(VirtualNetworkError),
-    MissingSisPorts { operation: &'static str },
     MissingSignalDriver { node: String, signal: String },
 }
 
@@ -172,9 +170,6 @@ impl fmt::Display for MapInterfaceError {
         match self {
             Self::TwoLevel(error) => write!(f, "{error}"),
             Self::VirtualNetwork(error) => write!(f, "{error}"),
-            Self::MissingSisPorts { operation } => {
-                write!(f, "{operation} requires unavailable native SIS integration")
-            }
             Self::MissingSignalDriver { node, signal } => {
                 write!(f, "node '{node}' references undriven signal '{signal}'")
             }
@@ -196,24 +191,19 @@ impl From<VirtualNetworkError> for MapInterfaceError {
     }
 }
 
-pub fn full_tree_matching_unavailable() -> Result<MapInterfaceResult, MapInterfaceError> {
-    Err(MapInterfaceError::MissingSisPorts {
-        operation: "map_interface full SIS tree matching",
-    })
-}
-
 pub fn map_two_level_to_virtual_network(
     model: &TwoLevelModel,
     library: Option<&MappingLibrary>,
     options: ComMapOptions,
 ) -> Result<MapInterfaceResult, MapInterfaceError> {
-    if options.require_full_tree_matching {
-        return full_tree_matching_unavailable();
-    }
-
     model.validate()?;
 
     let mut builder = SopBuilder::new(library, options.clone());
+    if options.require_full_tree_matching {
+        builder
+            .diagnostics
+            .push(MapDiagnostic::FullTreeMatchingApproximatedByPrimitiveLowering);
+    }
     for input in &model.inputs {
         let id = builder.network.add_primary_input(input);
         builder.signals.insert(input.clone(), SourceRef::Node(id));
@@ -570,5 +560,36 @@ mod tests {
             "nodes=1\n{f} and2 2 pin0=a pin1=b\n"
         );
         assert_eq!(result.options, ComMapOptions::from(&options));
+    }
+
+    #[test]
+    fn full_tree_matching_request_uses_native_primitive_fallback() {
+        let model = TwoLevelModel::new(
+            None,
+            vec!["a".to_string()],
+            vec!["f".to_string()],
+            vec![
+                TwoLevelNode::new(
+                    vec!["a".to_string()],
+                    "f",
+                    vec![BlifCube::new(vec![lit('1')], true)],
+                )
+                .unwrap(),
+            ],
+        )
+        .unwrap();
+        let options = ComMapOptions {
+            require_full_tree_matching: true,
+            ..ComMapOptions::default()
+        };
+
+        let result = map_two_level_to_virtual_network(&model, None, options).unwrap();
+
+        assert_eq!(result.network.format_print_gate().unwrap(), "nodes=0\n");
+        assert!(
+            result
+                .diagnostics
+                .contains(&MapDiagnostic::FullTreeMatchingApproximatedByPrimitiveLowering)
+        );
     }
 }

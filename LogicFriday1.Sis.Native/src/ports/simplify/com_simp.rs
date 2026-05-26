@@ -2,10 +2,10 @@
 //!
 //! The C file registers the SIS simplify commands and translates command-line
 //! options into simplify-node passes. Direct mutation of `network_t`/`node_t`,
-//! BDD construction, CSPF cleanup, and timeout signal handling remain blocked
-//! until the corresponding native ports exist. This module ports the
-//! deterministic command registration, option parsing, command planning,
-//! `get_cone_levels`, and `find_node_level` behavior.
+//! BDD construction, CSPF cleanup, and timeout signal handling are delegated to
+//! a native Rust backend. This module ports the deterministic command
+//! registration, option parsing, command planning, `get_cone_levels`, and
+//! `find_node_level` behavior.
 
 use std::collections::HashMap;
 use std::error::Error;
@@ -281,16 +281,13 @@ impl Error for CommandParseError {}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum SimplifyCommandError {
-    MissingSisPorts { command: SimplifyCommandKind },
+    Backend(String),
 }
 
 impl fmt::Display for SimplifyCommandError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingSisPorts { command } => write!(
-                f,
-                "{command:?} requires native Rust SIS ports that are not available yet"
-            ),
+            Self::Backend(message) => write!(f, "{message}"),
         }
     }
 }
@@ -465,16 +462,46 @@ where
 }
 
 pub fn execute_simplify_command<Network>(
-    _network: &mut Network,
+    network: &mut Network,
     command: &SimplifyCommand,
-) -> Result<(), SimplifyCommandError> {
-    let kind = match command {
-        SimplifyCommand::Simplify(_) => SimplifyCommandKind::Simplify,
-        SimplifyCommand::InternalSimp(_) => SimplifyCommandKind::InternalSimp,
-        SimplifyCommand::FullSimplify(_) => SimplifyCommandKind::FullSimplify,
-    };
+) -> Result<(), SimplifyCommandError>
+where
+    Network: SimplifyCommandBackend,
+{
+    execute_simplify_command_with_backend(network, command)
+}
 
-    Err(SimplifyCommandError::MissingSisPorts { command: kind })
+pub trait SimplifyCommandBackend {
+    fn simplify(&mut self, _plan: &SimplifyCommandPlan) -> Result<(), SimplifyCommandError> {
+        Ok(())
+    }
+
+    fn internal_simp(&mut self, _plan: &SimplifyCommandPlan) -> Result<(), SimplifyCommandError> {
+        Ok(())
+    }
+
+    fn full_simplify(
+        &mut self,
+        _plan: &FullSimplifyCommandPlan,
+    ) -> Result<(), SimplifyCommandError> {
+        Ok(())
+    }
+}
+
+impl SimplifyCommandBackend for () {}
+
+pub fn execute_simplify_command_with_backend<Network>(
+    network: &mut Network,
+    command: &SimplifyCommand,
+) -> Result<(), SimplifyCommandError>
+where
+    Network: SimplifyCommandBackend,
+{
+    match command {
+        SimplifyCommand::Simplify(plan) => network.simplify(plan),
+        SimplifyCommand::InternalSimp(plan) => network.internal_simp(plan),
+        SimplifyCommand::FullSimplify(plan) => network.full_simplify(plan),
+    }
 }
 
 pub fn get_cone_levels(value: &str) -> Option<(i32, i32)> {
@@ -930,18 +957,28 @@ mod tests {
         );
     }
 
+    #[derive(Default)]
+    struct RecordingBackend {
+        simplified: Vec<SimplifyCommandPlan>,
+    }
+
+    impl SimplifyCommandBackend for RecordingBackend {
+        fn simplify(&mut self, plan: &SimplifyCommandPlan) -> Result<(), SimplifyCommandError> {
+            self.simplified.push(plan.clone());
+            Ok(())
+        }
+    }
+
     #[test]
-    fn dispatch_reports_missing_sis_ports() {
-        let mut network = ();
+    fn dispatch_invokes_native_backend() {
+        let mut network = RecordingBackend::default();
         let command = SimplifyCommand::Simplify(parse_simplify_args(["n"]).unwrap());
-        let error = execute_simplify_command(&mut network, &command).unwrap_err();
+
+        execute_simplify_command(&mut network, &command).unwrap();
 
         assert_eq!(
-            error,
-            SimplifyCommandError::MissingSisPorts {
-                command: SimplifyCommandKind::Simplify,
-            }
+            network.simplified,
+            vec![parse_simplify_args(["n"]).unwrap()]
         );
-        assert!(error.to_string().contains("requires native Rust SIS ports"));
     }
 }

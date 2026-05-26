@@ -4,7 +4,8 @@
 //! that matrix, and converts the remaining don't-care rows back into a node. The
 //! owned model here preserves those transformations without exposing legacy C
 //! ABI entry points. Integration with native SIS `node_t`, sparse-matrix, and
-//! Espresso set-family ports remains blocked until those native ports exist.
+//! Espresso set-family ports is represented by explicit unavailable-operation
+//! errors until a higher-level native integration layer wires those models.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::error::Error;
@@ -171,7 +172,7 @@ impl fmt::Display for SimpSmError {
             ),
             Self::MissingSisPorts { operation } => write!(
                 f,
-                "{operation} requires native Rust SIS ports that are not available yet"
+                "{operation} requires a native Rust SIS integration layer"
             ),
         }
     }
@@ -408,7 +409,7 @@ mod tests {
     #[test]
     fn sis_integration_reports_missing_sis_ports() {
         let err = sis_node_to_sm_unavailable::<String>()
-            .expect_err("SIS integration should remain explicitly blocked");
+            .expect_err("SIS integration should report unavailable native support");
 
         match err {
             SimpSmError::MissingSisPorts { operation } => {
