@@ -1,7 +1,10 @@
 pub mod command;
 pub mod decomp;
 pub mod factor;
+pub mod gcd;
+pub mod genlib;
 pub mod graph;
+pub mod graphics;
 pub mod io;
 pub mod latch;
 pub mod linsolv;

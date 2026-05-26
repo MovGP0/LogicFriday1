@@ -1,4 +1,7 @@
+pub mod com_io;
+pub mod plot_blif;
 pub mod read_blif;
+pub mod read_kiss;
 pub mod read_pla;
 pub mod read_slif;
 pub mod read_util;
