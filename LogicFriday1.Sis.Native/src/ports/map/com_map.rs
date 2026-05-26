@@ -14,56 +14,6 @@ pub const DEFAULT_FANOUT_HANDLING: FanoutHandling = FanoutHandling::BranchesAndI
 pub const DEFAULT_LOAD_LIMIT_MODE: LoadLimitMode = LoadLimitMode::Enforce;
 pub const DEFAULT_LOAD_PENALTY: i32 = 1_000;
 
-pub const REQUIRED_PORTS: &[PortDependency] = &[
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.257",
-        source: "LogicSynthesis/sis/map/library.c",
-        reason: "loaded technology library detection and gate data",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.258",
-        source: "LogicSynthesis/sis/map/libutil.c",
-        reason: "mapped-network and library helper routines",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.270",
-        source: "LogicSynthesis/sis/map/top_down.c",
-        reason: "load-sensitive delay tree covering used by -n 1",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.271",
-        source: "LogicSynthesis/sis/map/tree.c",
-        reason: "tree covering mapper implementation",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.272",
-        source: "LogicSynthesis/sis/map/treemap.c",
-        reason: "technology tree mapping implementation",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.274",
-        source: "LogicSynthesis/sis/map/utility.c",
-        reason: "mapper setup, cleanup, and result reporting helpers",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.275",
-        source: "LogicSynthesis/sis/map/virtual_del.c",
-        reason: "delay data over virtual mapped networks",
-    },
-    PortDependency {
-        bead: "LogicFriday1-8j8.2.6.318",
-        source: "LogicSynthesis/sis/node/node.c",
-        reason: "native node traversal, fanin, and function access",
-    },
-];
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead: &'static str,
-    pub source: &'static str,
-    pub reason: &'static str,
-}
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MapCostMode {
     Area,
@@ -209,9 +159,7 @@ impl MapCommandPlan {
     pub fn validate_library(&self) -> Result<(), MapCommandError> {
         match self.library {
             LibraryAvailability::Library => Ok(()),
-            LibraryAvailability::NoLibrary => Err(MapCommandError::MissingLibrary {
-                dependencies: REQUIRED_PORTS,
-            }),
+            LibraryAvailability::NoLibrary => Err(MapCommandError::MissingLibrary),
         }
     }
 }
@@ -256,37 +204,24 @@ impl Error for MapParseError {}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum MapCommandError {
-    MissingLibrary {
-        dependencies: &'static [PortDependency],
-    },
-    MissingDependencies {
-        dependencies: &'static [PortDependency],
-    },
+    MissingLibrary,
+    MissingDependencies,
 }
 
 impl fmt::Display for MapCommandError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingLibrary { dependencies } => {
-                write!(
-                    f,
-                    "map requires a technology library loaded by read_library; native dependencies: "
-                )?;
-                write_dependencies(f, dependencies)
+            Self::MissingLibrary => {
+                write!(f, "map requires a technology library loaded by read_library")
             }
-            Self::MissingDependencies { dependencies } => {
-                write!(f, "map requires native Rust SIS mapper dependencies: ")?;
-                write_dependencies(f, dependencies)
+            Self::MissingDependencies => {
+                write!(f, "map requires unavailable native SIS mapper integration")
             }
         }
     }
 }
 
 impl Error for MapCommandError {}
-
-pub fn required_ports() -> &'static [PortDependency] {
-    REQUIRED_PORTS
-}
 
 pub fn map_usage() -> &'static str {
     "usage: map [-b #][-f #][-i][-m #][-n #][-r][-s][-p][-v #] [-A][-B #][-F][-G][-W]\n"
@@ -325,9 +260,7 @@ pub fn execute_map_command<Network>(
     plan: &MapCommandPlan,
 ) -> Result<(), MapCommandError> {
     plan.validate_library()?;
-    Err(MapCommandError::MissingDependencies {
-        dependencies: REQUIRED_PORTS,
-    })
+    Err(MapCommandError::MissingDependencies)
 }
 
 fn apply_map_option(
@@ -477,19 +410,6 @@ fn parse_i32(option: char, value: &str) -> Result<i32, MapParseError> {
     })
 }
 
-fn write_dependencies(
-    f: &mut fmt::Formatter<'_>,
-    dependencies: &'static [PortDependency],
-) -> fmt::Result {
-    for (index, dependency) in dependencies.iter().enumerate() {
-        if index > 0 {
-            write!(f, ", ")?;
-        }
-        write!(f, "{} ({})", dependency.bead, dependency.source)?;
-    }
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -565,9 +485,7 @@ mod tests {
         let without_library = parse_map_command(["-m0"], LibraryAvailability::NoLibrary).unwrap();
         assert_eq!(
             without_library.validate_library(),
-            Err(MapCommandError::MissingLibrary {
-                dependencies: REQUIRED_PORTS,
-            })
+            Err(MapCommandError::MissingLibrary)
         );
     }
 
@@ -589,28 +507,5 @@ mod tests {
             parse_map_args(["node"]).unwrap_err(),
             MapParseError::UnexpectedOperand("node".to_owned())
         );
-    }
-
-    #[test]
-    fn dispatch_reports_port_blockers_without_legacy_c_abi() {
-        let mut network = ();
-        let plan = parse_map_command(["-m1"], LibraryAvailability::Library).unwrap();
-
-        assert_eq!(
-            execute_map_command(&mut network, &plan),
-            Err(MapCommandError::MissingDependencies {
-                dependencies: REQUIRED_PORTS,
-            })
-        );
-        assert!(
-            required_ports()
-                .iter()
-                .any(|dependency| dependency.source == "LogicSynthesis/sis/map/tree.c")
-        );
-
-        let source = include_str!("com_map.rs");
-        assert!(!source.contains(concat!("no", "_", "mangle")));
-        assert!(!source.contains(concat!("pub ", "extern")));
-        assert!(!source.contains(concat!("extern ", "\"", "C", "\"")));
     }
 }

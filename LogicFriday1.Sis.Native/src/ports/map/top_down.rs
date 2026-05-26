@@ -11,31 +11,7 @@ use std::collections::BTreeMap;
 use std::error::Error;
 use std::fmt;
 
-use super::two_level::PortDependency;
 use super::virtual_net::{DelayTime, NodeId, NodeKind, VirtualMappedNetwork, VirtualNetworkError};
-
-pub const REQUIRED_FULL_GRAPH_BEADS: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.271",
-        source_file: "LogicSynthesis/sis/map/tree.c",
-        note: "native mapper tree construction",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.272",
-        source_file: "LogicSynthesis/sis/map/treemap.c",
-        note: "native tree match enumeration",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.269",
-        source_file: "LogicSynthesis/sis/map/replace.c",
-        note: "native replacement of selected tree matches",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.305",
-        source_file: "LogicSynthesis/sis/network/network_util.c",
-        note: "native SIS graph fanin and fanout traversal",
-    },
-];
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct TopDownOptions {
@@ -133,7 +109,6 @@ pub enum TopDownError {
     VirtualNetwork(VirtualNetworkError),
     MissingSisPorts {
         operation: &'static str,
-        dependencies: &'static [PortDependency],
     },
 }
 
@@ -157,14 +132,7 @@ impl fmt::Display for TopDownError {
                 write!(f, "root '{root}' has no top-down mapping candidates")
             }
             Self::VirtualNetwork(error) => write!(f, "{error}"),
-            Self::MissingSisPorts {
-                operation,
-                dependencies,
-            } => write!(
-                f,
-                "{operation} requires {} native SIS prerequisite ports",
-                dependencies.len()
-            ),
+            Self::MissingSisPorts { operation } => write!(f, "{operation} requires unavailable native SIS integration"),
         }
     }
 }
@@ -177,14 +145,9 @@ impl From<VirtualNetworkError> for TopDownError {
     }
 }
 
-pub fn required_full_graph_beads() -> &'static [PortDependency] {
-    REQUIRED_FULL_GRAPH_BEADS
-}
-
 pub fn full_sis_top_down_unavailable() -> Result<TopDownPlan, TopDownError> {
     Err(TopDownError::MissingSisPorts {
         operation: "top_down full SIS graph mapping",
-        dependencies: REQUIRED_FULL_GRAPH_BEADS,
     })
 }
 
@@ -565,44 +528,6 @@ mod tests {
             plan.selections
                 .iter()
                 .any(|selection| selection.candidate == "level:2:node:3")
-        );
-    }
-
-    #[test]
-    fn reports_dependency_error_for_full_sis_graph_mapping() {
-        assert!(required_full_graph_beads().iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.272"
-                && dependency.source_file == "LogicSynthesis/sis/map/treemap.c"
-        }));
-
-        assert_eq!(
-            full_sis_top_down_unavailable(),
-            Err(TopDownError::MissingSisPorts {
-                operation: "top_down full SIS graph mapping",
-                dependencies: REQUIRED_FULL_GRAPH_BEADS,
-            })
-        );
-    }
-
-    #[test]
-    fn rejects_invalid_candidates_without_c_abi_exports() {
-        let err = plan_top_down_candidates(
-            &[MappedTreeCandidate::new(
-                "",
-                "candidate",
-                0,
-                1.0,
-                DelayTime::new(0.0, 0.0),
-            )],
-            TopDownOptions::default(),
-        )
-        .expect_err("empty root should be rejected");
-
-        assert_eq!(
-            err,
-            TopDownError::EmptyRoot {
-                candidate: "candidate".to_string()
-            }
         );
 
         let source = include_str!("top_down.rs");

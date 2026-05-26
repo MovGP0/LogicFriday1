@@ -14,25 +14,6 @@ use super::library::{GenlibGate, GenlibLibrary};
 use super::tree::{
     MapperTree, MapperTreeError, MapperTreeNode, MapperTreeNodeId, PrimitiveGateKind,
 };
-use super::two_level::PortDependency;
-
-pub const REQUIRED_FULL_TREEMAP_BEADS: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.263",
-        source_file: "LogicSynthesis/sis/map/match.c",
-        note: "native complete genlib pattern compilation and phase-aware matching",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.270",
-        source_file: "LogicSynthesis/sis/map/top_down.c",
-        note: "native top-down cover commitment",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.269",
-        source_file: "LogicSynthesis/sis/map/replace.c",
-        note: "native network replacement using selected tree matches",
-    },
-];
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct TreeMapLimits {
@@ -189,7 +170,6 @@ pub enum TreeMapError {
     Tree(MapperTreeError),
     MissingSisPorts {
         operation: &'static str,
-        dependencies: &'static [PortDependency],
     },
     TooManyCandidates {
         max: usize,
@@ -226,14 +206,7 @@ impl fmt::Display for TreeMapError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Tree(error) => write!(f, "{error}"),
-            Self::MissingSisPorts {
-                operation,
-                dependencies,
-            } => write!(
-                f,
-                "{operation} requires {} native SIS prerequisite ports",
-                dependencies.len()
-            ),
+            Self::MissingSisPorts { operation } => write!(f, "{operation} requires unavailable native SIS integration"),
             Self::TooManyCandidates { max } => write!(f, "too many candidate gates; max is {max}"),
             Self::PatternTooLarge { gate, max } => {
                 write!(f, "candidate gate '{gate}' pattern exceeds {max} nodes")
@@ -271,14 +244,9 @@ impl From<MapperTreeError> for TreeMapError {
     }
 }
 
-pub fn required_full_treemap_beads() -> &'static [PortDependency] {
-    REQUIRED_FULL_TREEMAP_BEADS
-}
-
 pub fn full_sis_tree_mapping_unavailable() -> Result<TreeCover, TreeMapError> {
     Err(TreeMapError::MissingSisPorts {
         operation: "treemap full SIS tree mapping",
-        dependencies: REQUIRED_FULL_TREEMAP_BEADS,
     })
 }
 
@@ -705,31 +673,6 @@ mod tests {
                 .map(|node| node.index())
                 .collect::<Vec<_>>(),
             vec![0, 1, 2]
-        );
-    }
-
-    #[test]
-    fn reports_uncoverable_nodes_and_full_sis_dependencies() {
-        let library = CandidateLibrary::new(vec![
-            CandidateGate::new(
-                "and2",
-                pattern(PrimitiveGateKind::And, vec![leaf("x"), leaf("y")]),
-                1.0,
-            )
-            .unwrap(),
-        ])
-        .unwrap();
-
-        let error = select_lowest_cost_cover(&sample_tree(), &library, TreeMapLimits::default())
-            .expect_err("root OR should not be coverable");
-        assert!(matches!(error, TreeMapError::UncoverableNode { node } if node.index() == 4));
-
-        assert_eq!(
-            full_sis_tree_mapping_unavailable(),
-            Err(TreeMapError::MissingSisPorts {
-                operation: "treemap full SIS tree mapping",
-                dependencies: REQUIRED_FULL_TREEMAP_BEADS,
-            })
         );
     }
 

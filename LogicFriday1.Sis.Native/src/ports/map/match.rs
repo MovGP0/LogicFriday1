@@ -16,25 +16,6 @@ use super::library::{GenlibGate, GenlibLibrary};
 use super::tree::{
     MapperTree, MapperTreeError, MapperTreeNode, MapperTreeNodeId, PrimitiveGateKind,
 };
-use super::two_level::PortDependency;
-
-pub const REQUIRED_FULL_MATCH_BEADS: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.267",
-        source_file: "LogicSynthesis/sis/map/prim.c",
-        note: "native primitive graph nodes, edges, and isomorphic fanin metadata",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-        note: "native SIS node fanin, fanout, and mapper binding storage",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.262",
-        source_file: "LogicSynthesis/sis/map/maputil.c",
-        note: "native mapper binding lifecycle and internal fanout policy",
-    },
-];
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct MatchLimits {
@@ -256,7 +237,6 @@ pub enum MatchError {
     Tree(MapperTreeError),
     MissingSisPorts {
         operation: &'static str,
-        dependencies: &'static [PortDependency],
     },
     TooManyPatterns {
         max: usize,
@@ -294,14 +274,7 @@ impl fmt::Display for MatchError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Tree(error) => write!(f, "{error}"),
-            Self::MissingSisPorts {
-                operation,
-                dependencies,
-            } => write!(
-                f,
-                "{operation} requires {} native SIS prerequisite ports",
-                dependencies.len()
-            ),
+            Self::MissingSisPorts { operation } => write!(f, "{operation} requires unavailable native SIS integration"),
             Self::TooManyPatterns { max } => write!(f, "too many match patterns; max is {max}"),
             Self::TooManyMatches { max } => write!(f, "too many tree matches; max is {max}"),
             Self::PatternTooLarge { gate, max } => {
@@ -337,14 +310,9 @@ impl From<MapperTreeError> for MatchError {
     }
 }
 
-pub fn required_full_match_beads() -> &'static [PortDependency] {
-    REQUIRED_FULL_MATCH_BEADS
-}
-
 pub fn full_sis_graph_matching_unavailable() -> Result<Vec<TreeMatch>, MatchError> {
     Err(MatchError::MissingSisPorts {
         operation: "match full SIS graph matching",
-        dependencies: REQUIRED_FULL_MATCH_BEADS,
     })
 }
 
@@ -840,29 +808,6 @@ mod tests {
         assert_eq!(matches.len(), 1);
         assert_eq!(matches[0].gate, "and_inv");
         assert_eq!(matches[0].root.index(), 3);
-    }
-
-    #[test]
-    fn reports_limits_validation_and_full_sis_dependencies() {
-        let error = MatchGate::new(
-            "bad",
-            MatchPattern::gate_with_arity(
-                PrimitiveGateKind::Buffer,
-                MatchArity::Exact(2),
-                Vec::new(),
-            ),
-            1.0,
-        )
-        .expect_err("invalid primitive arity should be rejected");
-        assert!(matches!(error, MatchError::InvalidArity { .. }));
-
-        assert_eq!(
-            full_sis_graph_matching_unavailable(),
-            Err(MatchError::MissingSisPorts {
-                operation: "match full SIS graph matching",
-                dependencies: REQUIRED_FULL_MATCH_BEADS,
-            })
-        );
     }
 
     #[test]

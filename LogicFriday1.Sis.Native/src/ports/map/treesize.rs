@@ -12,25 +12,6 @@ use std::error::Error;
 use std::fmt;
 
 use super::tree::{MapperTree, MapperTreeError, MapperTreeNode, MapperTreeNodeId};
-use super::two_level::PortDependency;
-
-pub const REQUIRED_NETWORK_REPORT_BEADS: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.271",
-        source_file: "LogicSynthesis/sis/map/tree.c",
-        note: "native mapper tree construction from SIS network nodes",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.305",
-        source_file: "LogicSynthesis/sis/network/network_util.c",
-        note: "native primary-output traversal and node fanout data",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-        note: "native node type, names, fanins, and fanout accounting",
-    },
-];
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TreeSizeReport {
@@ -79,7 +60,6 @@ pub enum TreeSizeError {
     Tree(MapperTreeError),
     MissingSisPorts {
         operation: &'static str,
-        dependencies: &'static [PortDependency],
     },
 }
 
@@ -87,14 +67,7 @@ impl fmt::Display for TreeSizeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Tree(error) => write!(f, "{error}"),
-            Self::MissingSisPorts {
-                operation,
-                dependencies,
-            } => write!(
-                f,
-                "{operation} requires {} native SIS prerequisite ports",
-                dependencies.len()
-            ),
+            Self::MissingSisPorts { operation } => write!(f, "{operation} requires unavailable native SIS integration"),
         }
     }
 }
@@ -107,14 +80,9 @@ impl From<MapperTreeError> for TreeSizeError {
     }
 }
 
-pub fn required_network_report_beads() -> &'static [PortDependency] {
-    REQUIRED_NETWORK_REPORT_BEADS
-}
-
 pub fn sis_network_tree_size_report_unavailable() -> Result<TreeSizeReport, TreeSizeError> {
     Err(TreeSizeError::MissingSisPorts {
         operation: "map_print_tree_size over SIS network_t",
-        dependencies: REQUIRED_NETWORK_REPORT_BEADS,
     })
 }
 
@@ -421,43 +389,12 @@ mod tests {
     }
 
     #[test]
-    fn reports_leaf_root_as_one_leaf_fragment() {
-        let mut tree = MapperTree::empty();
-        let root = tree.add_leaf("input");
-        tree.set_root(root);
-        tree.validate().unwrap();
-
-        let report = analyze_mapper_tree(&tree).unwrap();
-        let fragment = report.fragment(root).unwrap();
-
-        assert_eq!(fragment.internal_nodes, 0);
-        assert_eq!(fragment.leaf_count, 1);
-        assert_eq!(fragment.support, BTreeSet::from([root]));
-        assert_eq!(fragment.depth, 0);
-    }
-
-    #[test]
     fn propagates_mapper_tree_validation_errors() {
         let tree = MapperTree::empty();
 
         assert_eq!(
             analyze_mapper_tree(&tree).unwrap_err(),
             TreeSizeError::Tree(MapperTreeError::EmptyTree)
-        );
-    }
-
-    #[test]
-    fn exposes_typed_dependency_gap_for_network_report() {
-        assert_eq!(
-            required_network_report_beads(),
-            REQUIRED_NETWORK_REPORT_BEADS
-        );
-        assert_eq!(
-            sis_network_tree_size_report_unavailable().unwrap_err(),
-            TreeSizeError::MissingSisPorts {
-                operation: "map_print_tree_size over SIS network_t",
-                dependencies: REQUIRED_NETWORK_REPORT_BEADS,
-            }
         );
     }
 

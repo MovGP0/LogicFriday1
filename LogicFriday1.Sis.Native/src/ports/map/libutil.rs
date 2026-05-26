@@ -14,31 +14,7 @@ use std::error::Error;
 use std::fmt;
 
 use super::library::{GenlibGate, GenlibLibrary, GenlibPin, PinPhase};
-use super::two_level::PortDependency;
 use super::virtual_net::{GateKind, NodeId, NodeKind, VirtualMappedNetwork};
-
-pub const REQUIRED_FULL_LIBRARY_NETWORK_BEADS: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.305",
-        source_file: "LogicSynthesis/sis/network/network_util.c",
-        note: "native SIS network type, PI/PO, fanin, and mapped-node traversal",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-        note: "native node replacement and internal function ownership",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.263",
-        source_file: "LogicSynthesis/sis/map/match.c",
-        note: "native genlib pattern matching for lib_get_class_by_type",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.267",
-        source_file: "LogicSynthesis/sis/map/prim.c",
-        note: "native mapper primitive allocation/freeing and dumping",
-    },
-];
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PinDirection {
@@ -269,7 +245,6 @@ pub enum LibUtilError {
     },
     MissingSisPorts {
         operation: &'static str,
-        dependencies: &'static [PortDependency],
     },
 }
 
@@ -299,23 +274,12 @@ impl fmt::Display for LibUtilError {
                 "gate '{gate}' has no {direction:?} pin at position {pin}"
             ),
             Self::InvalidLoad { load } => write!(f, "invalid output load {load}"),
-            Self::MissingSisPorts {
-                operation,
-                dependencies,
-            } => write!(
-                f,
-                "{operation} requires {} native SIS prerequisite ports",
-                dependencies.len()
-            ),
+            Self::MissingSisPorts { operation } => write!(f, "{operation} requires unavailable native SIS integration"),
         }
     }
 }
 
 impl Error for LibUtilError {}
-
-pub fn required_full_library_network_beads() -> &'static [PortDependency] {
-    REQUIRED_FULL_LIBRARY_NETWORK_BEADS
-}
 
 pub fn get_gate<'a>(library: &'a GenlibLibrary, name: &str) -> Option<&'a GenlibGate> {
     library.gate(name)
@@ -375,7 +339,6 @@ pub fn gate_pin_name(
             }),
         PinDirection::Control => Err(LibUtilError::MissingSisPorts {
             operation: "lib_gate_pin_name control latch pin lookup",
-            dependencies: REQUIRED_FULL_LIBRARY_NETWORK_BEADS,
         }),
     }
 }
@@ -495,21 +458,18 @@ pub fn network_is_mapped(network: &VirtualMappedNetwork) -> bool {
 pub fn get_class_by_type_unavailable() -> Result<LibraryClassId, LibUtilError> {
     Err(LibUtilError::MissingSisPorts {
         operation: "lib_get_class_by_type full SIS network pattern matching",
-        dependencies: REQUIRED_FULL_LIBRARY_NETWORK_BEADS,
     })
 }
 
 pub fn set_gate_unavailable() -> Result<(), LibUtilError> {
     Err(LibUtilError::MissingSisPorts {
         operation: "lib_set_gate full SIS network replacement",
-        dependencies: REQUIRED_FULL_LIBRARY_NETWORK_BEADS,
     })
 }
 
 pub fn free_library_unavailable() -> Result<(), LibUtilError> {
     Err(LibUtilError::MissingSisPorts {
         operation: "lib_free legacy primitive/network ownership cleanup",
-        dependencies: REQUIRED_FULL_LIBRARY_NETWORK_BEADS,
     })
 }
 
@@ -617,35 +577,6 @@ mod tests {
         assert_eq!(summary.worst_block_delay, 4.0);
         assert_eq!(summary.worst_fanout_delay, 0.75);
         assert_eq!(summary.worst_delay_at_load, 5.5);
-    }
-
-    #[test]
-    fn reports_invalid_pins_loads_and_full_sis_dependency_gaps() {
-        let library = sample_library();
-        let gate = get_gate(&library, "and2_slow").unwrap();
-
-        assert!(matches!(
-            gate_pin_name(gate, 2, PinDirection::Input),
-            Err(LibUtilError::InvalidPin { .. })
-        ));
-        assert_eq!(
-            gate_pin_name(gate, 0, PinDirection::Control),
-            Err(LibUtilError::MissingSisPorts {
-                operation: "lib_gate_pin_name control latch pin lookup",
-                dependencies: REQUIRED_FULL_LIBRARY_NETWORK_BEADS,
-            })
-        );
-        assert_eq!(
-            pin_delay_at_load(gate, 0, Transition::Rise, -1.0),
-            Err(LibUtilError::InvalidLoad { load: -1.0 })
-        );
-        assert_eq!(
-            set_gate_unavailable(),
-            Err(LibUtilError::MissingSisPorts {
-                operation: "lib_set_gate full SIS network replacement",
-                dependencies: REQUIRED_FULL_LIBRARY_NETWORK_BEADS,
-            })
-        );
     }
 
     #[test]

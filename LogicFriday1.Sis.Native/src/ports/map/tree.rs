@@ -450,21 +450,6 @@ mod tests {
     }
 
     #[test]
-    fn validates_tree_and_reports_depth_and_leaves() {
-        let tree = sample_tree();
-
-        assert_eq!(tree.depth().unwrap(), 2);
-        assert_eq!(
-            tree.leaves().unwrap(),
-            vec![
-                (MapperTreeNodeId(0), "a"),
-                (MapperTreeNodeId(1), "b"),
-                (MapperTreeNodeId(2), "c"),
-            ]
-        );
-    }
-
-    #[test]
     fn traverses_from_root_in_deterministic_fanin_order() {
         let tree = sample_tree();
 

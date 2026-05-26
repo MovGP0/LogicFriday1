@@ -10,36 +10,6 @@
 use std::error::Error;
 use std::fmt;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub note: &'static str,
-}
-
-pub const REQUIRED_FULL_FANOUT_EST_BEADS: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.276",
-        source_file: "LogicSynthesis/sis/map/virtual_net.c",
-        note: "native fanin/fanout graph storage and mapper annotations",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.247",
-        source_file: "LogicSynthesis/sis/map/fanout_delay.c",
-        note: "native delay PWL source registration and gate bucket computation",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.248",
-        source_file: "LogicSynthesis/sis/map/fanout_tree.c",
-        note: "native fanout tree extraction, source load calculation, and saved links",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.258",
-        source_file: "LogicSynthesis/sis/map/libutil.c",
-        note: "complete native genlib inverter and default load selection",
-    },
-];
-
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct DelayTime {
     pub rise: f64,
@@ -429,14 +399,9 @@ pub fn select_non_inverter_load(
         .ok_or(FanoutEstimateError::MissingNonInverterCandidate)
 }
 
-pub fn required_full_fanout_est_beads() -> &'static [PortDependency] {
-    REQUIRED_FULL_FANOUT_EST_BEADS
-}
-
 pub fn require_full_graph_integration<T>() -> Result<T, FanoutEstimateError> {
     Err(FanoutEstimateError::MissingPortDependencies {
         operation: "full SIS graph fanout estimation",
-        dependencies: REQUIRED_FULL_FANOUT_EST_BEADS,
     })
 }
 
@@ -624,7 +589,6 @@ pub enum FanoutEstimateError {
     },
     MissingPortDependencies {
         operation: &'static str,
-        dependencies: &'static [PortDependency],
     },
 }
 
@@ -716,14 +680,7 @@ impl fmt::Display for FanoutEstimateError {
             }
             Self::MissingPortDependencies {
                 operation,
-                dependencies,
-            } => {
-                write!(
-                    f,
-                    "{operation} requires {} native port dependencies",
-                    dependencies.len()
-                )
-            }
+            } => write!(f, "{operation} requires unavailable native SIS integration"),
         }
     }
 }
@@ -850,17 +807,5 @@ mod tests {
         let selected = select_non_inverter_load(&[1.0, 2.5, 4.0], 3.0).unwrap();
 
         assert_eq!(selected, 2.5);
-    }
-
-    #[test]
-    fn require_full_graph_integration_reports_dependencies() {
-        let error = require_full_graph_integration::<()>().unwrap_err();
-
-        match error {
-            FanoutEstimateError::MissingPortDependencies { dependencies, .. } => {
-                assert_eq!(dependencies, REQUIRED_FULL_FANOUT_EST_BEADS);
-            }
-            _ => panic!("unexpected error {error:?}"),
-        }
     }
 }

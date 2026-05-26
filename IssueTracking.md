@@ -21,6 +21,20 @@ bd close <id>         # Complete work
 bd dolt push          # Push beads data to remote
 ```
 
+## Dependency Tracking
+
+Use Beads dependency edges for all task/blocker relationships. If one bead cannot be completed until another bead is implemented, record that relationship with `bd dep add <blocked-id> <blocker-id>` and verify it with `bd blocked` or `bd dep list`.
+
+Do not encode issue-tracker dependency metadata in source files. Rust/C#/other source code must not contain constants or helper structs such as `REQUIRED_PORT_DEPENDENCIES`, `REQUIRED_SIS_DEPENDENCIES`, `REQUIRED_PORTS`, `REQUIRED_*_BEADS`, `bead_id`, or `source_file` that exist only to track Beads prerequisites. Keep source code focused on runtime behavior and diagnostics; keep planning, prerequisites, and blocking relationships in Beads.
+
+When porting SIS modules, document unresolved prerequisite ports by:
+
+1. Creating or identifying the bead for each prerequisite source file.
+2. Adding `bd dep add <blocked-id> <blocker-id>` for each blocking relationship.
+3. Using `bd blocked --parent <parent-id>` and `bd dep cycles` to verify the dependency graph.
+4. Adding a `bd comment` or `bd note` only for human rationale; do not duplicate dependency lists in source.
+5. Exporting the JSONL snapshot when needed with `bd export -o .beads/issues.jsonl`.
+
 ## Non-Interactive Shell Commands
 
 **ALWAYS use non-interactive flags** with file operations to avoid hanging on confirmation prompts.

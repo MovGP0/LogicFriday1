@@ -11,28 +11,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
 use std::fmt;
 
-use super::two_level::PortDependency;
 use super::virtual_net::{
     GateKind, NodeId, NodeKind, SourceRef, VirtualMappedNetwork, VirtualNetworkError,
 };
-
-pub const REQUIRED_FULL_NETWORK_MUTATION_BEADS: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-        note: "native node creation, duplication, substitution, and deletion",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.304",
-        source_file: "LogicSynthesis/sis/network/netmake.c",
-        note: "native network construction and fanin/fanout rewiring",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.305",
-        source_file: "LogicSynthesis/sis/network/network_util.c",
-        note: "native network mutation utilities used by replacement",
-    },
-];
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MappedGateReplacement {
@@ -223,7 +204,6 @@ pub enum ReplacementPlanError {
     },
     MissingSisPorts {
         operation: &'static str,
-        dependencies: &'static [PortDependency],
     },
 }
 
@@ -263,14 +243,7 @@ impl fmt::Display for ReplacementPlanError {
                 user.index(),
                 dependency.index()
             ),
-            Self::MissingSisPorts {
-                operation,
-                dependencies,
-            } => write!(
-                f,
-                "{operation} requires {} native SIS prerequisite ports",
-                dependencies.len()
-            ),
+            Self::MissingSisPorts { operation } => write!(f, "{operation} requires unavailable native SIS integration"),
         }
     }
 }
@@ -283,14 +256,9 @@ impl From<VirtualNetworkError> for ReplacementPlanError {
     }
 }
 
-pub fn required_full_network_mutation_beads() -> &'static [PortDependency] {
-    REQUIRED_FULL_NETWORK_MUTATION_BEADS
-}
-
 pub fn full_sis_network_mutation_unavailable() -> Result<(), ReplacementPlanError> {
     Err(ReplacementPlanError::MissingSisPorts {
         operation: "replace mapped covers in a full SIS network",
-        dependencies: REQUIRED_FULL_NETWORK_MUTATION_BEADS,
     })
 }
 
@@ -390,17 +358,6 @@ mod tests {
             Err(ReplacementPlanError::RootDoesNotReplaceOriginal {
                 original: n1,
                 root: a,
-            })
-        );
-    }
-
-    #[test]
-    fn reports_dependency_error_for_full_network_mutation() {
-        assert_eq!(
-            full_sis_network_mutation_unavailable(),
-            Err(ReplacementPlanError::MissingSisPorts {
-                operation: "replace mapped covers in a full SIS network",
-                dependencies: REQUIRED_FULL_NETWORK_MUTATION_BEADS,
             })
         );
     }

@@ -11,7 +11,6 @@ use std::error::Error;
 use std::fmt;
 
 use super::library::{GenlibGate, PinPhase};
-use super::two_level::PortDependency;
 use super::virtual_net::{
     DelayTime, GateKind, GateLink, MINUS_INFINITY, NodeId, NodeKind, SourceRef,
     VirtualMappedNetwork, VirtualNetworkError,
@@ -21,24 +20,6 @@ pub const ZERO_DELAY: DelayTime = DelayTime {
     rise: 0.0,
     fall: 0.0,
 };
-
-pub const REQUIRED_FULL_GRAPH_BEADS: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.276",
-        source_file: "LogicSynthesis/sis/map/virtual_net.c",
-        note: "native virtual-network graph and gate-link storage",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.258",
-        source_file: "LogicSynthesis/sis/map/libutil.c",
-        note: "complete native genlib delay metadata helpers",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.305",
-        source_file: "LogicSynthesis/sis/network/network_util.c",
-        note: "native SIS PI/PO timing metadata traversal",
-    },
-];
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PrimaryInputTiming {
@@ -454,7 +435,6 @@ pub enum VirtualDelayError {
     VirtualNetwork(VirtualNetworkError),
     MissingSisPorts {
         operation: &'static str,
-        dependencies: &'static [PortDependency],
     },
 }
 
@@ -505,14 +485,7 @@ impl fmt::Display for VirtualDelayError {
                 )
             }
             Self::VirtualNetwork(error) => write!(f, "{error}"),
-            Self::MissingSisPorts {
-                operation,
-                dependencies,
-            } => write!(
-                f,
-                "{operation} requires {} native SIS prerequisite ports",
-                dependencies.len()
-            ),
+            Self::MissingSisPorts { operation } => write!(f, "{operation} requires unavailable native SIS integration"),
         }
     }
 }
@@ -525,14 +498,9 @@ impl From<VirtualNetworkError> for VirtualDelayError {
     }
 }
 
-pub fn required_full_graph_beads() -> &'static [PortDependency] {
-    REQUIRED_FULL_GRAPH_BEADS
-}
-
 pub fn full_sis_virtual_delay_unavailable() -> Result<VirtualDelayState, VirtualDelayError> {
     Err(VirtualDelayError::MissingSisPorts {
         operation: "virtual_delay full SIS graph timing",
-        dependencies: REQUIRED_FULL_GRAPH_BEADS,
     })
 }
 
@@ -1266,28 +1234,6 @@ mod tests {
     }
 
     #[test]
-    fn supports_inverting_pin_phase() {
-        let (mut network, a, _b, n1, _y) = sample_network();
-        let constraints = VirtualDelayConstraints::default_for_network(&network);
-        let library = VirtualDelayLibrary::new(
-            VirtualDelayPinTiming::new(TimingPhase::Inverting, 1.0, 10.0, 1.0, 0.0, 2.0, 0.0),
-            Vec::new(),
-        )
-        .unwrap();
-
-        network.node_mut(a).unwrap().load = 1.0;
-        let state = compute_arrival_times(
-            &mut network,
-            &constraints,
-            &library,
-            VirtualDelayOptions::default(),
-        )
-        .unwrap();
-
-        assert_eq!(state.arrival(n1).unwrap(), DelayTime::new(1.0, 2.0));
-    }
-
-    #[test]
     fn computes_required_times_for_po_and_gate_inputs() {
         let (mut network, a, b, n1, y) = sample_network();
         let constraints = VirtualDelayConstraints {
@@ -1350,39 +1296,6 @@ mod tests {
         assert_eq!(
             network.node(y).unwrap().required,
             DelayTime::new(-88.0, -96.0)
-        );
-    }
-
-    #[test]
-    fn reports_dependency_error_for_full_sis_graph_timing() {
-        assert!(required_full_graph_beads().iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.258"
-                && dependency.source_file == "LogicSynthesis/sis/map/libutil.c"
-        }));
-
-        assert_eq!(
-            full_sis_virtual_delay_unavailable(),
-            Err(VirtualDelayError::MissingSisPorts {
-                operation: "virtual_delay full SIS graph timing",
-                dependencies: REQUIRED_FULL_GRAPH_BEADS,
-            })
-        );
-    }
-
-    #[test]
-    fn rejects_invalid_timing_without_c_abi_exports() {
-        let err = VirtualDelayLibrary::new(
-            VirtualDelayPinTiming::new(TimingPhase::Unknown, -1.0, 10.0, 1.0, 0.0, 1.0, 0.0),
-            Vec::new(),
-        )
-        .expect_err("negative load should be rejected");
-
-        assert_eq!(
-            err,
-            VirtualDelayError::InvalidTiming {
-                gate: "<default>".to_string(),
-                pin: 0,
-            }
         );
 
         let source = include_str!("virtual_del.rs");

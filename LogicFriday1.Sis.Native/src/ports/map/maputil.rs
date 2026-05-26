@@ -13,33 +13,9 @@ use std::fmt;
 
 use super::com_map::{FanoutHandling, LoadLimitMode, MapCostMode, MapOptions, TreeCovering};
 use super::map_interface::{MapDiagnostic, MapInterfaceResult, MapInterfaceStrategy};
-use super::two_level::PortDependency;
 use super::virtual_net::{
     GateKind, NodeId, NodeKind, SourceRef, VirtualMappedNetwork, VirtualNetworkError,
 };
-
-pub const REQUIRED_FULL_NETWORK_MUTATION_BEADS: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-        note: "native node creation, substitution, fanin/fanout traversal, and deletion",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.304",
-        source_file: "LogicSynthesis/sis/network/netmake.c",
-        note: "native network construction and rewiring",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.305",
-        source_file: "LogicSynthesis/sis/network/network_util.c",
-        note: "native SIS network traversal and mutation utilities",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.269",
-        source_file: "LogicSynthesis/sis/map/replace.c",
-        note: "native mapped-cover replacement plan application",
-    },
-];
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MapperOptionSummary {
@@ -104,7 +80,6 @@ pub enum MapUtilError {
     VirtualNetwork(VirtualNetworkError),
     MissingSisPorts {
         operation: &'static str,
-        dependencies: &'static [PortDependency],
     },
 }
 
@@ -112,14 +87,7 @@ impl fmt::Display for MapUtilError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::VirtualNetwork(error) => write!(f, "{error}"),
-            Self::MissingSisPorts {
-                operation,
-                dependencies,
-            } => write!(
-                f,
-                "{operation} requires {} native SIS prerequisite ports",
-                dependencies.len()
-            ),
+            Self::MissingSisPorts { operation } => write!(f, "{operation} requires unavailable native SIS integration"),
         }
     }
 }
@@ -132,14 +100,9 @@ impl From<VirtualNetworkError> for MapUtilError {
     }
 }
 
-pub fn required_full_network_mutation_beads() -> &'static [PortDependency] {
-    REQUIRED_FULL_NETWORK_MUTATION_BEADS
-}
-
 pub fn full_sis_network_mutation_unavailable() -> Result<(), MapUtilError> {
     Err(MapUtilError::MissingSisPorts {
         operation: "maputil full SIS network mutation",
-        dependencies: REQUIRED_FULL_NETWORK_MUTATION_BEADS,
     })
 }
 
@@ -411,20 +374,6 @@ mod tests {
         assert_eq!(summary.false_output_rows_ignored, 2);
         assert_eq!(summary.library_primitive_selections, 2);
         assert_eq!(summary.library_gate_use["nand2"], 2);
-    }
-
-    #[test]
-    fn returns_typed_dependency_error_for_full_network_mutation() {
-        let error = full_sis_network_mutation_unavailable().unwrap_err();
-
-        assert_eq!(
-            error,
-            MapUtilError::MissingSisPorts {
-                operation: "maputil full SIS network mutation",
-                dependencies: REQUIRED_FULL_NETWORK_MUTATION_BEADS,
-            }
-        );
-        assert_eq!(required_full_network_mutation_beads().len(), 4);
     }
 
     #[test]

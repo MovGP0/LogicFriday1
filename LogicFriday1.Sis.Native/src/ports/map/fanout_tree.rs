@@ -9,31 +9,7 @@ use std::collections::BTreeSet;
 use std::error::Error;
 use std::fmt;
 
-use super::two_level::PortDependency;
 use super::virtual_net::DelayTime;
-
-pub const REQUIRED_FULL_FANOUT_TREE_BEADS: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.248",
-        source_file: "LogicSynthesis/sis/map/fanout_delay.c",
-        note: "native buffer/source delay, load, area, and polarity tables",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.250",
-        source_file: "LogicSynthesis/sis/map/fanout_est.c",
-        note: "native multi-fanout bucket extraction and PWL delay integration",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.255",
-        source_file: "LogicSynthesis/sis/map/gate_link.c",
-        note: "native gate-link ownership and pin fanout-index persistence",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.305",
-        source_file: "LogicSynthesis/sis/network/network_util.c",
-        note: "native network mutation for materializing selected fanout trees",
-    },
-];
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct FanoutTreeNodeId(usize);
@@ -767,7 +743,6 @@ pub enum FanoutTreeError {
     },
     MissingSisPorts {
         operation: &'static str,
-        dependencies: &'static [PortDependency],
     },
 }
 
@@ -852,28 +827,16 @@ impl fmt::Display for FanoutTreeError {
                     "fanout tree area mismatch: expected {expected}, actual {actual}"
                 )
             }
-            Self::MissingSisPorts {
-                operation,
-                dependencies,
-            } => write!(
-                f,
-                "{operation} requires {} native SIS prerequisite ports",
-                dependencies.len()
-            ),
+            Self::MissingSisPorts { operation } => write!(f, "{operation} requires unavailable native SIS integration"),
         }
     }
 }
 
 impl Error for FanoutTreeError {}
 
-pub fn required_full_fanout_tree_beads() -> &'static [PortDependency] {
-    REQUIRED_FULL_FANOUT_TREE_BEADS
-}
-
 pub fn materialize_full_sis_fanout_tree_unavailable() -> Result<(), FanoutTreeError> {
     Err(FanoutTreeError::MissingSisPorts {
         operation: "fanout_tree full SIS network materialization",
-        dependencies: REQUIRED_FULL_FANOUT_TREE_BEADS,
     })
 }
 
@@ -1204,22 +1167,6 @@ mod tests {
         assert_eq!(
             FanoutPolarity::Positive.propagate_through(BufferPolarity::Inverting),
             FanoutPolarity::Negative
-        );
-    }
-
-    #[test]
-    fn reports_dependency_error_for_full_sis_materialization() {
-        assert!(required_full_fanout_tree_beads().iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.248"
-                && dependency.source_file == "LogicSynthesis/sis/map/fanout_delay.c"
-        }));
-
-        assert_eq!(
-            materialize_full_sis_fanout_tree_unavailable(),
-            Err(FanoutTreeError::MissingSisPorts {
-                operation: "fanout_tree full SIS network materialization",
-                dependencies: REQUIRED_FULL_FANOUT_TREE_BEADS,
-            })
         );
     }
 

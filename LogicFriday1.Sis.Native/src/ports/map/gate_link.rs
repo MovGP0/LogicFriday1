@@ -10,7 +10,6 @@ use std::collections::BTreeMap;
 use std::error::Error;
 use std::fmt;
 
-use super::two_level::PortDependency;
 use super::virtual_net::{
     DelayTime, GateLink, GateLinkKey, NodeId, SourceRef, VirtualMappedNetwork, VirtualNetworkError,
 };
@@ -19,24 +18,6 @@ pub const PLUS_INFINITY: DelayTime = DelayTime {
     rise: f64::INFINITY,
     fall: f64::INFINITY,
 };
-
-pub const REQUIRED_FULL_GATE_LINK_BEADS: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.276",
-        source_file: "LogicSynthesis/sis/map/virtual_net.c",
-        note: "native virtual mapped-network nodes, bindings, and reverse-link storage",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.257",
-        source_file: "LogicSynthesis/sis/map/map_delay.c",
-        note: "native mapper wire-load model used by gate_link_compute_load",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-        note: "native SIS node identity and fanin metadata for full graph integration",
-    },
-];
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum GateLinkError {
@@ -61,7 +42,6 @@ pub enum GateLinkError {
     VirtualNetwork(VirtualNetworkError),
     MissingSisPorts {
         operation: &'static str,
-        dependencies: &'static [PortDependency],
     },
 }
 
@@ -87,14 +67,7 @@ impl fmt::Display for GateLinkError {
                 node.index()
             ),
             Self::VirtualNetwork(error) => write!(f, "{error}"),
-            Self::MissingSisPorts {
-                operation,
-                dependencies,
-            } => write!(
-                f,
-                "{operation} requires {} native SIS prerequisite ports",
-                dependencies.len()
-            ),
+            Self::MissingSisPorts { operation } => write!(f, "{operation} requires unavailable native SIS integration"),
         }
     }
 }
@@ -159,14 +132,9 @@ impl GateLinkCollection {
     }
 }
 
-pub fn required_full_gate_link_beads() -> &'static [PortDependency] {
-    REQUIRED_FULL_GATE_LINK_BEADS
-}
-
 pub fn full_sis_gate_link_unavailable() -> Result<GateLinkCollection, GateLinkError> {
     Err(GateLinkError::MissingSisPorts {
         operation: "gate_link full SIS graph integration",
-        dependencies: REQUIRED_FULL_GATE_LINK_BEADS,
     })
 }
 
@@ -477,20 +445,6 @@ mod tests {
             }
         );
         assert!(collection.is_empty());
-    }
-
-    #[test]
-    fn exposes_typed_dependency_gap_for_full_sis_integration() {
-        assert_eq!(
-            full_sis_gate_link_unavailable(),
-            Err(GateLinkError::MissingSisPorts {
-                operation: "gate_link full SIS graph integration",
-                dependencies: REQUIRED_FULL_GATE_LINK_BEADS,
-            })
-        );
-        assert!(required_full_gate_link_beads().iter().any(|dependency| {
-            dependency.source_file == "LogicSynthesis/sis/map/map_delay.c"
-        }));
     }
 
     #[test]

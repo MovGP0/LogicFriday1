@@ -12,31 +12,12 @@ use std::fmt;
 
 use super::library::{GenlibGate, PinPhase};
 use super::pwl::{PiecewiseLinear, PiecewisePoint};
-use super::two_level::PortDependency;
 use super::virtual_net::{DelayTime, MINUS_INFINITY};
 
 pub const ZERO_DELAY: DelayTime = DelayTime {
     rise: 0.0,
     fall: 0.0,
 };
-
-pub const REQUIRED_SOURCE_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.258",
-        source_file: "LogicSynthesis/sis/map/libutil.c",
-        note: "complete native genlib delay metadata and class lookup",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.276",
-        source_file: "LogicSynthesis/sis/map/virtual_net.c",
-        note: "native mapped-node and gate-link ownership",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.305",
-        source_file: "LogicSynthesis/sis/network/network_util.c",
-        note: "native primary-input timing metadata traversal",
-    },
-];
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum FanoutPolarity {
@@ -437,7 +418,6 @@ pub enum FanoutSource<T> {
     Pwl(PwlSource<T>),
     MissingNativeSource {
         name: String,
-        dependencies: &'static [PortDependency],
     },
 }
 
@@ -769,16 +749,14 @@ impl<T> FanoutDelayModel<T> {
                 }
                 match source {
                     FanoutSource::Pwl(source) => Ok(select_active_pwl(&source.delay, load)),
-                    FanoutSource::MissingNativeSource { dependencies, .. } => {
+                    FanoutSource::MissingNativeSource { .. } => {
                         Err(FanoutDelayError::MissingSisPorts {
                             operation: "fanout-delay native source PWL extraction",
-                            dependencies,
                         })
                     }
                     FanoutSource::PrimaryInput(_) | FanoutSource::Internal(_) => {
                         Err(FanoutDelayError::MissingSisPorts {
                             operation: "fanout-delay source PWL extraction",
-                            dependencies: REQUIRED_SOURCE_DEPENDENCIES,
                         })
                     }
                 }
@@ -916,10 +894,9 @@ impl<T> FanoutDelayModel<T> {
                     })?,
                 ))
             }
-            FanoutSource::MissingNativeSource { dependencies, .. } => {
+            FanoutSource::MissingNativeSource { .. } => {
                 Err(FanoutDelayError::MissingSisPorts {
                     operation: "fanout-delay native source load-dependent timing",
-                    dependencies,
                 })
             }
         }
@@ -1034,7 +1011,6 @@ pub enum FanoutDelayError {
     },
     MissingSisPorts {
         operation: &'static str,
-        dependencies: &'static [PortDependency],
     },
 }
 
@@ -1109,28 +1085,16 @@ impl fmt::Display for FanoutDelayError {
                 f,
                 "inverter-count search window [{from}, {to}] is invalid for max {max_n}"
             ),
-            Self::MissingSisPorts {
-                operation,
-                dependencies,
-            } => write!(
-                f,
-                "{operation} requires {} native SIS prerequisite ports",
-                dependencies.len()
-            ),
+            Self::MissingSisPorts { operation } => write!(f, "{operation} requires unavailable native SIS integration"),
         }
     }
 }
 
 impl Error for FanoutDelayError {}
 
-pub fn required_source_dependencies() -> &'static [PortDependency] {
-    REQUIRED_SOURCE_DEPENDENCIES
-}
-
 pub fn sis_bound_source_unavailable(operation: &'static str) -> Result<(), FanoutDelayError> {
     Err(FanoutDelayError::MissingSisPorts {
         operation,
-        dependencies: REQUIRED_SOURCE_DEPENDENCIES,
     })
 }
 
@@ -1379,29 +1343,6 @@ mod tests {
             .unwrap_err();
 
         assert_eq!(err, FanoutDelayError::PositiveSourceAfterNegative);
-    }
-
-    #[test]
-    fn returns_dependency_error_for_missing_native_source() {
-        let mut model = FanoutDelayModel::<()>::from_buffers(
-            [buffer("buf", BufferKind::NonInverting, delay(1.0, 1.0))],
-            FanoutDelayOptions::default(),
-        )
-        .unwrap();
-        let source_index = model
-            .add_source(
-                FanoutSource::MissingNativeSource {
-                    name: "sis-node".to_string(),
-                    dependencies: REQUIRED_SOURCE_DEPENDENCIES,
-                },
-                FanoutPolarity::Positive,
-            )
-            .unwrap();
-
-        let err = model
-            .forward_load_dependent(ZERO_DELAY, source_index, 1.0)
-            .unwrap_err();
-        assert!(matches!(err, FanoutDelayError::MissingSisPorts { .. }));
     }
 
     #[test]

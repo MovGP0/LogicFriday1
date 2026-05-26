@@ -10,7 +10,6 @@
 use std::error::Error;
 use std::fmt;
 
-use super::two_level::PortDependency;
 use super::virtual_net::{DelayTime, GateLink, NodeId, VirtualMappedNetwork, VirtualNetworkError};
 
 pub const MINUS_INFINITY: DelayTime = DelayTime {
@@ -31,24 +30,6 @@ pub const SINGLE_SOURCE_INIT_VALUE: SingleSource = SingleSource {
     fanout_count: 0,
     area: 0.0,
 };
-
-pub const REQUIRED_FANOUT_UTILITY_BEADS: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.250",
-        source_file: "LogicSynthesis/sis/map/fanout_delay.c",
-        note: "native fanout gate delay catalog and backward load-dependent delay evaluation",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.267",
-        source_file: "LogicSynthesis/sis/map/fanout_tree.c",
-        note: "native fanout tree storage used by concrete fanout algorithms",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.276",
-        source_file: "LogicSynthesis/sis/map/virtual_net.c",
-        note: "native virtual-network gate links for extracting owned fanout sinks",
-    },
-];
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Polarity {
@@ -391,7 +372,6 @@ pub enum FanoutUtilError {
     VirtualNetwork(VirtualNetworkError),
     MissingSisPorts {
         operation: &'static str,
-        dependencies: &'static [PortDependency],
     },
 }
 
@@ -424,14 +404,7 @@ impl fmt::Display for FanoutUtilError {
                 sink.index()
             ),
             Self::VirtualNetwork(error) => write!(f, "{error}"),
-            Self::MissingSisPorts {
-                operation,
-                dependencies,
-            } => write!(
-                f,
-                "{operation} requires {} native SIS prerequisite ports",
-                dependencies.len()
-            ),
+            Self::MissingSisPorts { operation } => write!(f, "{operation} requires unavailable native SIS integration"),
         }
     }
 }
@@ -444,15 +417,10 @@ impl From<VirtualNetworkError> for FanoutUtilError {
     }
 }
 
-pub fn required_fanout_utility_beads() -> &'static [PortDependency] {
-    REQUIRED_FANOUT_UTILITY_BEADS
-}
-
 pub fn full_sis_fanout_optimization_unavailable<Tree>()
 -> Result<FanoutOptimizationResult<Tree>, FanoutUtilError> {
     Err(FanoutUtilError::MissingSisPorts {
         operation: "fanout_util full SIS fanout optimization",
-        dependencies: REQUIRED_FANOUT_UTILITY_BEADS,
     })
 }
 
@@ -794,32 +762,5 @@ mod tests {
         assert_eq!(info.total_count(), 1);
         assert_eq!(info.sinks(Polarity::X)[0].sink, gate);
         assert_eq!(info.sinks(Polarity::X)[0].pin, 0);
-    }
-
-    #[test]
-    fn reports_typed_dependency_error_for_full_sis_path() {
-        assert!(required_fanout_utility_beads().iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.250"
-                && dependency.source_file == "LogicSynthesis/sis/map/fanout_delay.c"
-        }));
-
-        let error = full_sis_fanout_optimization_unavailable::<()>().unwrap_err();
-
-        assert_eq!(
-            error,
-            FanoutUtilError::MissingSisPorts {
-                operation: "fanout_util full SIS fanout optimization",
-                dependencies: REQUIRED_FANOUT_UTILITY_BEADS,
-            }
-        );
-    }
-
-    #[test]
-    fn has_no_legacy_c_abi_exports() {
-        let source = include_str!("fanout_util.rs");
-
-        assert!(!source.contains(concat!("no", "_", "mangle")));
-        assert!(!source.contains(concat!("pub ", "extern")));
-        assert!(!source.contains(concat!("extern ", "\"", "C", "\"")));
     }
 }

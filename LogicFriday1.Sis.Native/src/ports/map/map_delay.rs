@@ -13,7 +13,6 @@ use std::fmt;
 
 use super::library::{GenlibGate, GenlibLibrary, PinPhase};
 use super::libutil::{self, LibUtilError, PinDelay};
-use super::two_level::PortDependency;
 use super::virtual_del::{
     self, PrimaryInputTiming, PrimaryOutputTiming, TimingPhase, VirtualDelayConstraints,
     VirtualDelayGateTiming, VirtualDelayInput, VirtualDelayLibrary, VirtualDelayOptions,
@@ -25,24 +24,6 @@ use super::virtual_net::{
 };
 
 pub const MAX_PRECOMPUTED_FANOUT_LOADS: usize = 20;
-
-pub const REQUIRED_FULL_MAP_DELAY_BEADS: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.305",
-        source_file: "LogicSynthesis/sis/network/network_util.c",
-        note: "native SIS network PI/PO delay metadata storage and traversal",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.252",
-        source_file: "LogicSynthesis/sis/map/fanout_delay.c",
-        note: "native fanout-delay buffering optimizer for load-estimation mode 2",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.243",
-        source_file: "LogicSynthesis/sis/map/bin_delay.c",
-        note: "native bin mapper consumers of mapped fanout load estimates",
-    },
-];
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PrimaryIoDefaults {
@@ -206,7 +187,6 @@ pub enum MapDelayError {
     LibUtil(LibUtilError),
     MissingSisPorts {
         operation: &'static str,
-        dependencies: &'static [PortDependency],
     },
 }
 
@@ -256,14 +236,7 @@ impl fmt::Display for MapDelayError {
             Self::VirtualNetwork(error) => write!(f, "{error}"),
             Self::VirtualDelay(error) => write!(f, "{error}"),
             Self::LibUtil(error) => write!(f, "{error}"),
-            Self::MissingSisPorts {
-                operation,
-                dependencies,
-            } => write!(
-                f,
-                "{operation} requires {} native SIS prerequisite ports",
-                dependencies.len()
-            ),
+            Self::MissingSisPorts { operation } => write!(f, "{operation} requires unavailable native SIS integration"),
         }
     }
 }
@@ -288,21 +261,15 @@ impl From<LibUtilError> for MapDelayError {
     }
 }
 
-pub fn required_full_map_delay_beads() -> &'static [PortDependency] {
-    REQUIRED_FULL_MAP_DELAY_BEADS
-}
-
 pub fn map_alloc_delay_info_unavailable() -> Result<(), MapDelayError> {
     Err(MapDelayError::MissingSisPorts {
         operation: "map_alloc_delay_info legacy SIS network delay metadata mutation",
-        dependencies: REQUIRED_FULL_MAP_DELAY_BEADS,
     })
 }
 
 pub fn map_free_delay_info_unavailable() -> Result<(), MapDelayError> {
     Err(MapDelayError::MissingSisPorts {
         operation: "map_free_delay_info legacy fanout-delay global cleanup",
-        dependencies: REQUIRED_FULL_MAP_DELAY_BEADS,
     })
 }
 
@@ -324,7 +291,6 @@ pub fn compute_fanout_load_correction(
         FanoutLoadEstimation::DirectBufferLoad => Ok(fanout_count as f64 * model.buffer_load),
         FanoutLoadEstimation::BufferedTree => Err(MapDelayError::MissingSisPorts {
             operation: "map_compute_fanout_load_correction buffered-tree estimate",
-            dependencies: REQUIRED_FULL_MAP_DELAY_BEADS,
         }),
     }
 }
@@ -787,34 +753,5 @@ mod tests {
         };
         let precomputed = PrecomputedFanoutLoads::new(model).unwrap();
         assert_eq!(precomputed.load_for_fanout_count(3, model).unwrap(), 6.0);
-    }
-
-    #[test]
-    fn reports_dependency_gaps_without_legacy_abi_exports() {
-        assert_eq!(
-            compute_fanout_load_correction(
-                3,
-                FanoutLoadModel {
-                    estimation: FanoutLoadEstimation::BufferedTree,
-                    buffer_load: 2.0,
-                },
-            ),
-            Err(MapDelayError::MissingSisPorts {
-                operation: "map_compute_fanout_load_correction buffered-tree estimate",
-                dependencies: REQUIRED_FULL_MAP_DELAY_BEADS,
-            })
-        );
-        assert_eq!(
-            map_alloc_delay_info_unavailable(),
-            Err(MapDelayError::MissingSisPorts {
-                operation: "map_alloc_delay_info legacy SIS network delay metadata mutation",
-                dependencies: REQUIRED_FULL_MAP_DELAY_BEADS,
-            })
-        );
-
-        let source = include_str!("map_delay.rs");
-        assert!(!source.contains(concat!("no", "_", "mangle")));
-        assert!(!source.contains(concat!("pub ", "extern")));
-        assert!(!source.contains(concat!("extern ", "\"", "C", "\"")));
     }
 }

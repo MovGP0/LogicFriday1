@@ -14,31 +14,8 @@ use std::fmt;
 
 use super::com_map::{MapOptions, TreeCovering};
 use super::library::{GenlibGate, GenlibLibrary};
-use super::two_level::{BlifLiteral, PortDependency, TwoLevelError, TwoLevelModel, TwoLevelNode};
+use super::two_level::{BlifLiteral, TwoLevelError, TwoLevelModel, TwoLevelNode};
 use super::virtual_net::{GateKind, SourceRef, VirtualMappedNetwork, VirtualNetworkError};
-
-pub const REQUIRED_TREE_MATCHING_BEADS: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.271",
-        source_file: "LogicSynthesis/sis/map/tree.c",
-        note: "native mapper tree construction and traversal",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.272",
-        source_file: "LogicSynthesis/sis/map/treemap.c",
-        note: "native library tree matching",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.270",
-        source_file: "LogicSynthesis/sis/map/top_down.c",
-        note: "native top-down mapper selection",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.269",
-        source_file: "LogicSynthesis/sis/map/replace.c",
-        note: "native network replacement with matched library gates",
-    },
-];
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MapPrimitive {
@@ -188,7 +165,6 @@ pub enum MapInterfaceError {
     VirtualNetwork(VirtualNetworkError),
     MissingSisPorts {
         operation: &'static str,
-        dependencies: &'static [PortDependency],
     },
     MissingSignalDriver {
         node: String,
@@ -201,14 +177,7 @@ impl fmt::Display for MapInterfaceError {
         match self {
             Self::TwoLevel(error) => write!(f, "{error}"),
             Self::VirtualNetwork(error) => write!(f, "{error}"),
-            Self::MissingSisPorts {
-                operation,
-                dependencies,
-            } => write!(
-                f,
-                "{operation} requires {} native SIS prerequisite ports",
-                dependencies.len()
-            ),
+            Self::MissingSisPorts { operation } => write!(f, "{operation} requires unavailable native SIS integration"),
             Self::MissingSignalDriver { node, signal } => {
                 write!(f, "node '{node}' references undriven signal '{signal}'")
             }
@@ -230,14 +199,9 @@ impl From<VirtualNetworkError> for MapInterfaceError {
     }
 }
 
-pub fn required_tree_matching_beads() -> &'static [PortDependency] {
-    REQUIRED_TREE_MATCHING_BEADS
-}
-
 pub fn full_tree_matching_unavailable() -> Result<MapInterfaceResult, MapInterfaceError> {
     Err(MapInterfaceError::MissingSisPorts {
         operation: "map_interface full SIS tree matching",
-        dependencies: REQUIRED_TREE_MATCHING_BEADS,
     })
 }
 
@@ -609,41 +573,5 @@ mod tests {
             "nodes=1\n{f} and2 2 pin0=a pin1=b\n"
         );
         assert_eq!(result.options, ComMapOptions::from(&options));
-    }
-
-    #[test]
-    fn returns_dependency_error_for_full_tree_matching() {
-        let model = TwoLevelModel::new(
-            None,
-            vec!["a".to_string()],
-            vec!["f".to_string()],
-            vec![
-                TwoLevelNode::new(
-                    vec!["a".to_string()],
-                    "f",
-                    vec![BlifCube::new(vec![lit('1')], true)],
-                )
-                .unwrap(),
-            ],
-        )
-        .unwrap();
-
-        let error = map_two_level_to_virtual_network(
-            &model,
-            None,
-            ComMapOptions {
-                require_full_tree_matching: true,
-                ..Default::default()
-            },
-        )
-        .expect_err("full tree matching should report dependencies");
-
-        assert_eq!(
-            error,
-            MapInterfaceError::MissingSisPorts {
-                operation: "map_interface full SIS tree matching",
-                dependencies: REQUIRED_TREE_MATCHING_BEADS,
-            }
-        );
     }
 }

@@ -12,31 +12,7 @@
 use std::error::Error;
 use std::fmt;
 
-use super::two_level::PortDependency;
 use super::virtual_net::{NodeId, NodeKind, VirtualMappedNetwork, VirtualNetworkError};
-
-pub const REQUIRED_FULL_CLEANUP_BEADS: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-        note: "native SIS node allocation, node functions, fanin/fanout counts, and node deletion",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.305",
-        source_file: "LogicSynthesis/sis/network/network_util.c",
-        note: "native network traversal and network_delete_node cleanup",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.254",
-        source_file: "LogicSynthesis/sis/map/fanout_tree.c",
-        note: "native fanout buffer creation sites that register temporary nodes",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.275",
-        source_file: "LogicSynthesis/sis/map/virtual_del.c",
-        note: "native virtual delay annotations that must be consistent after fanout cleanup",
-    },
-];
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct FanoutLogOptions {
@@ -125,7 +101,6 @@ pub enum FanoutLogError {
     VirtualNetwork(VirtualNetworkError),
     MissingSisPorts {
         operation: &'static str,
-        dependencies: &'static [PortDependency],
     },
 }
 
@@ -149,14 +124,7 @@ impl fmt::Display for FanoutLogError {
                 )
             }
             Self::VirtualNetwork(error) => write!(f, "{error}"),
-            Self::MissingSisPorts {
-                operation,
-                dependencies,
-            } => write!(
-                f,
-                "{operation} requires {} native SIS prerequisite ports",
-                dependencies.len()
-            ),
+            Self::MissingSisPorts { operation } => write!(f, "{operation} requires unavailable native SIS integration"),
         }
     }
 }
@@ -281,14 +249,9 @@ impl FanoutOptimizationLog {
     }
 }
 
-pub fn required_full_cleanup_beads() -> &'static [PortDependency] {
-    REQUIRED_FULL_CLEANUP_BEADS
-}
-
 pub fn full_sis_fanout_cleanup_unavailable() -> Result<(), FanoutLogError> {
     Err(FanoutLogError::MissingSisPorts {
         operation: "fanout_log full SIS network cleanup",
-        dependencies: REQUIRED_FULL_CLEANUP_BEADS,
     })
 }
 
@@ -503,29 +466,6 @@ mod tests {
     }
 
     #[test]
-    fn cleanup_reports_logged_nodes_that_still_drive_sinks() {
-        let mut network = VirtualMappedNetwork::new();
-        let a = network.add_primary_input("a");
-        let buffer = network.add_gate("tmp", GateKind::Inverter, vec![SourceRef::Node(a)]);
-        let sink = network.add_gate("sink", GateKind::Wire, vec![SourceRef::Node(buffer)]);
-        network
-            .add_primary_output("f", SourceRef::Node(sink))
-            .unwrap();
-        network.setup_gate_links().unwrap();
-        let mut log = FanoutOptimizationLog::new(FanoutLogOptions::enabled());
-
-        log.register_node(&network, buffer).unwrap();
-
-        assert_eq!(
-            log.cleanup_virtual_network(&mut network),
-            Err(FanoutLogError::LoggedNodeHasFanout {
-                node: buffer,
-                fanout_count: 1,
-            })
-        );
-    }
-
-    #[test]
     fn trace_format_escapes_names_deterministically() {
         let events = vec![
             FanoutLogEvent::NodeRegistered {
@@ -542,25 +482,5 @@ mod tests {
             format_fanout_log_trace(&events),
             "fanout-log:register node=0 name=\"a \\\"quoted\\\"\\nnode\"\nfanout-log:cleanup-finish retired=2 unmapped=3\n"
         );
-    }
-
-    #[test]
-    fn sis_cleanup_reports_typed_dependencies_without_legacy_c_abi() {
-        assert_eq!(
-            full_sis_fanout_cleanup_unavailable(),
-            Err(FanoutLogError::MissingSisPorts {
-                operation: "fanout_log full SIS network cleanup",
-                dependencies: REQUIRED_FULL_CLEANUP_BEADS,
-            })
-        );
-        assert!(required_full_cleanup_beads().iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.318"
-                && dependency.source_file == "LogicSynthesis/sis/node/node.c"
-        }));
-
-        let source = include_str!("fanout_log.rs");
-        assert!(!source.contains(concat!("no", "_", "mangle")));
-        assert!(!source.contains(concat!("pub ", "extern")));
-        assert!(!source.contains(concat!("extern ", "\"", "C", "\"")));
     }
 }

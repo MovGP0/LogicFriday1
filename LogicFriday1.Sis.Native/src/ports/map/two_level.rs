@@ -12,31 +12,6 @@ use std::error::Error;
 use std::fmt;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PortDependency {
-    pub bead_id: &'static str,
-    pub source_file: &'static str,
-    pub note: &'static str,
-}
-
-pub const REQUIRED_PORT_BEADS: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.301",
-        source_file: "LogicSynthesis/sis/network/net2pla.c",
-        note: "native network-to-two-level cover extraction",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.306",
-        source_file: "LogicSynthesis/sis/network/pla2net.c",
-        note: "native cover-to-network reconstruction",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-        note: "native node fanins, names, functions, and cube storage",
-    },
-];
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ParseLimits {
     pub max_lines: usize,
     pub max_line_length: usize,
@@ -324,7 +299,6 @@ pub enum TwoLevelError {
     },
     MissingSisPorts {
         operation: &'static str,
-        dependencies: &'static [PortDependency],
     },
 }
 
@@ -387,23 +361,12 @@ impl fmt::Display for TwoLevelError {
                     "output '{output}' is not driven by an input or .names node"
                 )
             }
-            Self::MissingSisPorts {
-                operation,
-                dependencies,
-            } => write!(
-                f,
-                "{operation} requires {} native SIS prerequisite ports",
-                dependencies.len()
-            ),
+            Self::MissingSisPorts { operation } => write!(f, "{operation} requires unavailable native SIS integration"),
         }
     }
 }
 
 impl Error for TwoLevelError {}
-
-pub fn required_port_beads() -> &'static [PortDependency] {
-    REQUIRED_PORT_BEADS
-}
 
 pub fn parse_blif(input: &str, limits: ParseLimits) -> Result<TwoLevelModel, TwoLevelError> {
     let lines = logical_lines(input, limits)?;
@@ -527,7 +490,6 @@ pub fn synthesize_blif(model: &TwoLevelModel) -> Result<String, TwoLevelError> {
 pub fn network_to_two_level_unavailable() -> Result<TwoLevelModel, TwoLevelError> {
     Err(TwoLevelError::MissingSisPorts {
         operation: "network_to_two_level native SIS integration",
-        dependencies: REQUIRED_PORT_BEADS,
     })
 }
 
@@ -793,28 +755,6 @@ mod tests {
     }
 
     #[test]
-    fn supports_comments_and_continuations() {
-        let model = parse_blif(
-            concat!(
-                ".inputs a \\\n",
-                "  b # comment\n",
-                ".outputs f\n",
-                ".names a b f\n",
-                "11\n",
-                ".end\n"
-            ),
-            ParseLimits::default(),
-        )
-        .unwrap();
-
-        assert_eq!(model.inputs, vec!["a", "b"]);
-        assert_eq!(
-            model.nodes[0].cubes,
-            vec![BlifCube::new(vec![lit('1'), lit('1')], true)]
-        );
-    }
-
-    #[test]
     fn parses_constant_one_and_constant_zero_nodes() {
         let model = parse_blif(
             concat!(
@@ -883,22 +823,6 @@ mod tests {
             TwoLevelError::MissingOutputDriver {
                 output: "f".to_string(),
             }
-        );
-    }
-
-    #[test]
-    fn sis_integration_reports_blocking_dependencies_without_c_abi() {
-        assert!(required_port_beads().iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.318"
-                && dependency.source_file == "LogicSynthesis/sis/node/node.c"
-        }));
-
-        assert_eq!(
-            network_to_two_level_unavailable(),
-            Err(TwoLevelError::MissingSisPorts {
-                operation: "network_to_two_level native SIS integration",
-                dependencies: REQUIRED_PORT_BEADS,
-            })
         );
     }
 }

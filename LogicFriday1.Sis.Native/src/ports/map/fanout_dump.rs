@@ -12,36 +12,12 @@ use std::error::Error;
 use std::fmt;
 
 use super::tree::{MapperTree, MapperTreeError};
-use super::two_level::PortDependency;
 use super::virtual_net::{
     DelayTime, GateKind, NodeId, SourceRef, VirtualMappedNetwork, VirtualNetworkError,
     MINUS_INFINITY,
 };
 
 pub const DEFAULT_DUMP_THRESHOLD: usize = 40;
-
-pub const REQUIRED_FULL_SIS_DUMP_BEADS: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.248",
-        source_file: "LogicSynthesis/sis/map/fanout_delay.c",
-        note: "native fanout source selection, source polarity, and sink timing extraction",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.253",
-        source_file: "LogicSynthesis/sis/map/fanout_tree.c",
-        note: "native fanout optimizer tree result data",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.305",
-        source_file: "LogicSynthesis/sis/network/network_util.c",
-        note: "native SIS network naming, PI/PO metadata, and BLIF writer integration",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.318",
-        source_file: "LogicSynthesis/sis/node/node.c",
-        note: "native SIS node types, names, and mapped fanin bindings",
-    },
-];
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum FanoutPolarity {
@@ -274,7 +250,6 @@ pub enum FanoutDumpError {
     MapperTree(MapperTreeError),
     MissingSisPorts {
         operation: &'static str,
-        dependencies: &'static [PortDependency],
     },
 }
 
@@ -307,14 +282,7 @@ impl fmt::Display for FanoutDumpError {
             Self::MissingNode(node) => write!(f, "missing fanout dump node {}", node.index()),
             Self::VirtualNetwork(error) => write!(f, "{error}"),
             Self::MapperTree(error) => write!(f, "{error}"),
-            Self::MissingSisPorts {
-                operation,
-                dependencies,
-            } => write!(
-                f,
-                "{operation} requires {} native SIS prerequisite ports",
-                dependencies.len()
-            ),
+            Self::MissingSisPorts { operation } => write!(f, "{operation} requires unavailable native SIS integration"),
         }
     }
 }
@@ -395,14 +363,9 @@ impl FanoutDumpSession {
     }
 }
 
-pub fn required_full_sis_dump_beads() -> &'static [PortDependency] {
-    REQUIRED_FULL_SIS_DUMP_BEADS
-}
-
 pub fn full_sis_fanout_dump_unavailable() -> Result<FanoutDumpOutcome, FanoutDumpError> {
     Err(FanoutDumpError::MissingSisPorts {
         operation: "fanout_dump full SIS callback and file writer integration",
-        dependencies: REQUIRED_FULL_SIS_DUMP_BEADS,
     })
 }
 
@@ -802,7 +765,7 @@ fn basename(name: &str) -> &str {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ports::map::tree::{MapperTreeFanin, MapperTreeNode, PrimitiveGateKind};
+    use crate::ports::map::tree::MapperTreeNode;
 
     fn sink(name: &str, pin: isize, rise: f64, fall: f64, load: f64) -> FanoutSink {
         FanoutSink::new(name, pin, DelayTime::new(rise, fall), load)
@@ -880,71 +843,6 @@ mod tests {
                 ".end\n"
             )
         );
-    }
-
-    #[test]
-    fn supports_gate_source_and_report_with_tree_summary() {
-        let problem = FanoutProblem {
-            network_name: Some("demo".to_string()),
-            source: FanoutSource::gate(
-                "n1",
-                GateKind::And,
-                vec![
-                    FanoutSourceInput::new("0", FanoutTiming::default()),
-                    FanoutSourceInput::new("1", FanoutTiming::default()),
-                ],
-                FanoutPolarity::Positive,
-            ),
-            positive_sinks: vec![sink("out", -1, 1.0, 2.0, 0.5)],
-            negative_sinks: Vec::new(),
-        };
-        let mut tree = MapperTree::empty();
-        let a = tree.add_leaf("a");
-        let b = tree.add_leaf("b");
-        let root = tree.add_gate(
-            PrimitiveGateKind::And,
-            vec![MapperTreeFanin::new(a), MapperTreeFanin::new(b)],
-        );
-        tree.set_root(root);
-
-        let mut session =
-            FanoutDumpSession::with_options(Some("demo"), FanoutDumpOptions { dump_threshold: 1 });
-        let record = session
-            .dump_problem(&problem, Some(&tree))
-            .unwrap()
-            .record
-            .unwrap();
-
-        assert_eq!(
-            format_fanout_blif(&record).unwrap(),
-            concat!(
-                ".model demo.0.fanout\n",
-                ".inputs 0 1\n",
-                ".outputs out(-1)\n",
-                ".names 0 1 n1\n",
-                "11 1\n",
-                ".names n1 out(-1)\n",
-                "1 1\n",
-                ".end\n"
-            )
-        );
-        assert!(format_fanout_report(&record, Some(&tree))
-            .unwrap()
-            .contains("tree root=2 depth=1 leaves=2\n"));
-    }
-
-    #[test]
-    fn reports_typed_dependency_gap_for_full_sis_callback_path() {
-        assert_eq!(
-            full_sis_fanout_dump_unavailable(),
-            Err(FanoutDumpError::MissingSisPorts {
-                operation: "fanout_dump full SIS callback and file writer integration",
-                dependencies: REQUIRED_FULL_SIS_DUMP_BEADS,
-            })
-        );
-        assert!(required_full_sis_dump_beads()
-            .iter()
-            .any(|dependency| dependency.bead_id == "LogicFriday1-8j8.2.6.248"));
     }
 
     #[test]

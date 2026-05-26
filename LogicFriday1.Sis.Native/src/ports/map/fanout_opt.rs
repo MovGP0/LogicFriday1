@@ -13,38 +13,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
 use std::fmt;
 
-use super::two_level::PortDependency;
 use super::virtual_net::{
     DelayTime, GateLink, NodeId, NodeKind, VirtualMappedNetwork, VirtualNetworkError,
 };
-
-pub const REQUIRED_FULL_MUTATION_BEADS: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.248",
-        source_file: "LogicSynthesis/sis/map/fanout_delay.c",
-        note: "fanout source delay context, required-time updates, and load-sensitive delay checks",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.253",
-        source_file: "LogicSynthesis/sis/map/fanout_tree.c",
-        note: "fanout tree allocation, validation, peephole optimization, and network construction",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.254",
-        source_file: "LogicSynthesis/sis/map/fanout_util.c",
-        note: "fanout algorithms used by fanout_alg.h and fanout_opt_static.h",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.255",
-        source_file: "LogicSynthesis/sis/map/gate_link.c",
-        note: "complete native gate-link iteration and mutation over SIS network nodes",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.305",
-        source_file: "LogicSynthesis/sis/network/network_util.c",
-        note: "native SIS network traversal and node removal",
-    },
-];
 
 pub const DEFAULT_LIMITS: FanoutPlanningLimits = FanoutPlanningLimits {
     max_algorithms: 256,
@@ -281,7 +252,6 @@ pub enum FanoutOptError {
     VirtualNetwork(VirtualNetworkError),
     MissingSisPorts {
         operation: &'static str,
-        dependencies: &'static [PortDependency],
     },
 }
 
@@ -320,14 +290,7 @@ impl fmt::Display for FanoutOptError {
                 write!(f, "no fanout tree candidate was available for {source:?}")
             }
             Self::VirtualNetwork(error) => write!(f, "{error}"),
-            Self::MissingSisPorts {
-                operation,
-                dependencies,
-            } => write!(
-                f,
-                "{operation} requires {} native SIS prerequisite ports",
-                dependencies.len()
-            ),
+            Self::MissingSisPorts { operation } => write!(f, "{operation} requires unavailable native SIS integration"),
         }
     }
 }
@@ -340,14 +303,9 @@ impl From<VirtualNetworkError> for FanoutOptError {
     }
 }
 
-pub fn required_full_mutation_beads() -> &'static [PortDependency] {
-    REQUIRED_FULL_MUTATION_BEADS
-}
-
 pub fn fanout_optimization_unavailable() -> Result<FanoutOptimizationPlan, FanoutOptError> {
     Err(FanoutOptError::MissingSisPorts {
         operation: "fanout_optimization full SIS network mutation",
-        dependencies: REQUIRED_FULL_MUTATION_BEADS,
     })
 }
 
@@ -1180,26 +1138,5 @@ mod tests {
         assert_eq!(problem.root, n1);
         assert!(problem.sources.contains_key(&Polarity::X));
         assert_eq!(problem.fanout_info[&Polarity::X].sinks.len(), 2);
-    }
-
-    #[test]
-    fn reports_dependency_error_for_full_sis_mutation_without_c_abi_exports() {
-        assert!(required_full_mutation_beads().iter().any(|dependency| {
-            dependency.bead_id == "LogicFriday1-8j8.2.6.253"
-                && dependency.source_file == "LogicSynthesis/sis/map/fanout_tree.c"
-        }));
-
-        assert_eq!(
-            fanout_optimization_unavailable(),
-            Err(FanoutOptError::MissingSisPorts {
-                operation: "fanout_optimization full SIS network mutation",
-                dependencies: REQUIRED_FULL_MUTATION_BEADS,
-            })
-        );
-
-        let source = include_str!("fanout_opt.rs");
-        assert!(!source.contains(concat!("no", "_", "mangle")));
-        assert!(!source.contains(concat!("pub ", "extern")));
-        assert!(!source.contains(concat!("extern ", "\"", "C", "\"")));
     }
 }

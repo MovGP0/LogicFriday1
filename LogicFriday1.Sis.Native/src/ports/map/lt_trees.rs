@@ -12,7 +12,6 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
 
-use super::two_level::PortDependency;
 use super::virtual_net::DelayTime;
 
 pub const PLUS_INFINITY: DelayTime = DelayTime {
@@ -29,29 +28,6 @@ pub const ZERO_DELAY: DelayTime = DelayTime {
     rise: 0.0,
     fall: 0.0,
 };
-
-pub const REQUIRED_LT_TREE_DEPENDENCIES: &[PortDependency] = &[
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.260",
-        source_file: "LogicSynthesis/sis/map/map_delay.c",
-        note: "native fanout-delay gate timing and source polarity metadata",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.261",
-        source_file: "LogicSynthesis/sis/map/fanout_delay.c",
-        note: "native fanout buffer/source classification and delay equations",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.262",
-        source_file: "LogicSynthesis/sis/map/fanout_tree.c",
-        note: "native fanout tree materialization into mapped network nodes",
-    },
-    PortDependency {
-        bead_id: "LogicFriday1-8j8.2.6.263",
-        source_file: "LogicSynthesis/sis/map/two_level.c",
-        note: "two-level fanout-tree candidates consumed by LT-tree planning",
-    },
-];
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub enum Polarity {
@@ -854,7 +830,6 @@ pub enum FanoutTreeAction {
 pub enum LtTreeError {
     MissingSisPorts {
         operation: &'static str,
-        dependencies: &'static [PortDependency],
     },
     NoGates,
     NoSources,
@@ -905,14 +880,7 @@ pub enum LtTreeError {
 impl fmt::Display for LtTreeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingSisPorts {
-                operation,
-                dependencies,
-            } => write!(
-                f,
-                "{operation} requires {} native SIS port dependencies",
-                dependencies.len()
-            ),
+            Self::MissingSisPorts { operation } => write!(f, "{operation} requires unavailable native SIS integration"),
             Self::NoGates => write!(f, "LT-tree planning requires at least one gate"),
             Self::NoSources => write!(f, "LT-tree planning requires at least one source gate"),
             Self::NoBuffers => write!(f, "LT-tree planning requires at least one buffer gate"),
@@ -955,14 +923,9 @@ impl fmt::Display for LtTreeError {
 
 impl Error for LtTreeError {}
 
-pub fn required_lt_tree_dependencies() -> &'static [PortDependency] {
-    REQUIRED_LT_TREE_DEPENDENCIES
-}
-
 pub fn plan_from_native_network_unavailable() -> Result<LtTreePlan, LtTreeError> {
     Err(LtTreeError::MissingSisPorts {
         operation: "LT-tree planning from native SIS network",
-        dependencies: REQUIRED_LT_TREE_DEPENDENCIES,
     })
 }
 
@@ -1332,32 +1295,6 @@ mod tests {
         assert_eq!(merge.load, 2.0);
         assert_eq!(merge.fanout_count, 2);
         assert_eq!(merge.required, DelayTime::new(8.0, 8.0));
-    }
-
-    #[test]
-    fn reports_missing_two_level_dependency_as_typed_error() {
-        let mut input = sample_input(DelayTime::new(1.0, 1.0), DelayTime::new(0.0, 0.0), 20.0);
-        input.two_level.entries.clear();
-
-        let error = optimize_lt_trees(input).unwrap_err();
-
-        assert!(matches!(
-            error,
-            LtTreeError::MissingTwoLevelCandidate { .. }
-        ));
-    }
-
-    #[test]
-    fn unavailable_network_entry_reports_dependency_beads() {
-        let error = plan_from_native_network_unavailable().unwrap_err();
-
-        assert!(matches!(
-            error,
-            LtTreeError::MissingSisPorts {
-                dependencies: REQUIRED_LT_TREE_DEPENDENCIES,
-                ..
-            }
-        ));
     }
 
     fn sample_input(
