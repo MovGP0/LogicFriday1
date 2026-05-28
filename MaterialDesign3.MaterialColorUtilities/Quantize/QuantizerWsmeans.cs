@@ -10,7 +10,8 @@ public static class QuantizerWsMeans
         public double D;
         public int CompareTo(Distance? other)
         {
-            if (other == null) return 1;
+            if (other == null)
+                return 1;
             return D.CompareTo(other.D);
         }
     }
@@ -85,7 +86,8 @@ public static class QuantizerWsMeans
         }
 
         int[][] indexMatrix = new int[clusterCount][];
-        for (int i = 0; i < clusterCount; i++) indexMatrix[i] = new int[clusterCount];
+        for (int i = 0; i < clusterCount; i++)
+            indexMatrix[i] = new int[clusterCount];
 
         var distanceToIndexMatrix = new Distance[clusterCount][];
         for (int i = 0; i < clusterCount; i++)
@@ -193,9 +195,11 @@ public static class QuantizerWsMeans
         for (int i = 0; i < clusterCount; i++)
         {
             int count = pixelCountSums[i];
-            if (count == 0) continue;
+            if (count == 0)
+                continue;
             int possibleNewCluster = pointProvider.ToInt(clusters[i]);
-            if (argbToPopulation.ContainsKey(possibleNewCluster)) continue;
+            if (argbToPopulation.ContainsKey(possibleNewCluster))
+                continue;
             argbToPopulation[possibleNewCluster] = count;
         }
 

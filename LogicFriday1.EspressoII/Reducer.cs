@@ -3,6 +3,7 @@
 public static class Reducer
 {
     private const int TRUE = 1, MAYBE = 0;
+
     public static BitVector ReduceOneCube(CubeData cube, CubeList FD, BitVector p, SplitStack stack)
     {
         ReadOnlySpan<uint> sp = p.AsSpan();
@@ -12,6 +13,7 @@ public static class Reducer
         BitVectorOps.And(cunder.AsSpan(), cunder.AsSpan(), sp);
         return cunder;
     }
+
     private static BitVector ContainmentCube(CubeData cube, CubeList T, SplitStack stack, int depth)
     {
         BitVector r;
@@ -29,16 +31,20 @@ public static class Reducer
                 r = cube.RentCofCopy(cube.FullSet);
                 ccscResult = TRUE;
             }
+
             if (ccscResult == MAYBE)
             {
                 for (int t1 = 0; t1 < T.Count; t1++)
+                {
                     if (CubeDistance.IsFullCoverage(cube, T.GetSpan(t1), scof))
                     {
                         r = cube.RentCofEmpty();
                         ccscResult = TRUE;
                         break;
                     }
+                }
             }
+
             if (ccscResult == MAYBE)
             {
                 summary = Cofactor.AnalyzeSplitVariable(cube, T);
@@ -50,16 +56,21 @@ public static class Reducer
                         BitVectorOps.Or(stemp, T.GetSpan(t1), scof);
                         SingleCubeContainment(cube, r, cube.Temp[1]);
                     }
+
                     ccscResult = TRUE;
                 }
             }
+
             if (ccscResult == MAYBE)
             {
                 BitVector ceil = cube.Temp[3];
                 Span<uint> sceil = ceil.AsSpan();
                 BitVectorOps.Copy(sceil, T.CofSpan);
                 for (int t1 = 0; t1 < T.Count; t1++)
+                {
                     BitVectorOps.Or(sceil, sceil, T.GetSpan(t1));
+                }
+
                 if (!BitVectorOps.AreEqual(sceil, sFull))
                 {
                     r = SingleCubeContainment(cube, cube.RentCofCopy(cube.FullSet), ceil);
@@ -74,6 +85,7 @@ public static class Reducer
                         cube.ReturnCof(oldR);
                         cof.ReturnCubes();
                     }
+
                     ccscResult = TRUE;
                 }
                 else if (summary.VarsActive == 1)
@@ -89,12 +101,14 @@ public static class Reducer
                         var rB = ContainmentCube(cube, B, stack, depth);
                         BitVectorOps.And(r.AsSpan(), r.AsSpan(), rB.AsSpan());
                         cube.ReturnCof(rB);
-                        A.ReturnCubes(); B.ReturnCubes();
+                        A.ReturnCubes();
+                        B.ReturnCubes();
                         ccscResult = TRUE;
                     }
                 }
             }
         }
+
         // --- end inlined ContainmentCubeSpecialCases ---
         if (ccscResult == MAYBE)
         {
@@ -104,15 +118,19 @@ public static class Reducer
             Cofactor.BuildSplitCubes(cube, T, best, scl, scr);
             var cofL = Cofactor.SingleVariableCofactor(cube, T, scl, best);
             var cofR = Cofactor.SingleVariableCofactor(cube, T, scr, best);
-            r = MergeContainmentCubes(cube,
+            r = MergeContainmentCubes(
+                cube,
                 ContainmentCube(cube, cofL, stack, depth + 1),
                 ContainmentCube(cube, cofR, stack, depth + 1),
-                cl, cr);
+                cl,
+                cr);
             cofL.ReturnCubes();
             cofR.ReturnCubes();
         }
+
         return r;
     }
+
     private static BitVector MergeContainmentCubes(CubeData cube, BitVector left, BitVector right, BitVector cl, BitVector cr)
     {
         Span<uint> sleft = left.AsSpan(), sright = right.AsSpan();
@@ -122,6 +140,7 @@ public static class Reducer
         cube.ReturnCof(right);
         return left;
     }
+
     private static BitVector SingleCubeContainment(CubeData cube, BitVector result, BitVector p)
     {
         Span<uint> stemp = cube.Temp[0].AsSpan(), sresult = result.AsSpan();
@@ -137,9 +156,15 @@ public static class Reducer
                 if (x != 0)
                 {
                     savDist = BitVectorOps.CountOnes(x);
-                    if (savDist > 1) { var = -1; goto savDone; }
+                    if (savDist > 1)
+                    {
+                        var = -1;
+                        goto savDone;
+                    }
+
                     savActive = savLast * (BitVectorOps.Bpi / 2) + BitVectorOps.BitIndex(x) / 2;
                 }
+
                 for (int w = 0; w < savLast; w++)
                 {
                     x = sp[w];
@@ -147,27 +172,49 @@ public static class Reducer
                     if (x != 0)
                     {
                         savDist += BitVectorOps.CountOnes(x);
-                        if (savDist > 1) { var = -1; goto savDone; }
+                        if (savDist > 1)
+                        {
+                            var = -1;
+                            goto savDone;
+                        }
+
                         savActive = w * (BitVectorOps.Bpi / 2) + BitVectorOps.BitIndex(x) / 2;
                     }
                 }
             }
+
             for (int savVar = cube.NumBinaryVars; savVar < cube.NumVars; savVar++)
             {
                 ReadOnlySpan<uint> sm = cube.VarMask[savVar].AsSpan();
                 int mvLast = cube.LastWordOf(savVar);
                 for (int w = cube.FirstWordOf(savVar); w <= mvLast; w++)
-                    if ((sm[w] & ~sp[w]) != 0) { if (++savDist > 1) { var = -1; goto savDone; } savActive = savVar; break; }
+                {
+                    if ((sm[w] & ~sp[w]) != 0)
+                    {
+                        if (++savDist > 1)
+                        {
+                            var = -1;
+                            goto savDone;
+                        }
+
+                        savActive = savVar;
+                        break;
+                    }
+                }
             }
+
             var = savActive;
-            savDone:;
+savDone:
+            ;
         }
+
         // --- end inlined SingleActiveVariable ---
         if (var >= 0)
         {
             BitVectorOps.Xor(stemp, sp, cube.VarMask[var].AsSpan());
             BitVectorOps.And(sresult, sresult, stemp);
         }
+
         return result;
     }
 }

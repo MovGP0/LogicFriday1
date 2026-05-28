@@ -16,16 +16,46 @@ public sealed class ViewingConditions
     public static readonly ViewingConditions DEFAULT = DefaultWithBackgroundLstar(50.0);
 
     // Properties corresponding to Java getters
-    public double Aw { get; }
-    public double N { get; }
-    public double Nbb { get; }
-    internal double Ncb { get; }
-    internal double C { get; }
-    internal double Nc { get; }
-    public double[] RgbD { get; }
-    internal double Fl { get; }
-    public double FlRoot { get; }
-    internal double Z { get; }
+    public double Aw
+    {
+        get;
+    }
+    public double N
+    {
+        get;
+    }
+    public double Nbb
+    {
+        get;
+    }
+    internal double Ncb
+    {
+        get;
+    }
+    internal double C
+    {
+        get;
+    }
+    internal double Nc
+    {
+        get;
+    }
+    public double[] RgbD
+    {
+        get;
+    }
+    internal double Fl
+    {
+        get;
+    }
+    public double FlRoot
+    {
+        get;
+    }
+    internal double Z
+    {
+        get;
+    }
 
     /// <summary>
     /// Create ViewingConditions from a simple, physically relevant set of parameters.

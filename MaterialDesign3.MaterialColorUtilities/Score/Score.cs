@@ -119,9 +119,12 @@ public static class Score
     {
         public int Compare(ScoredHct? x, ScoredHct? y)
         {
-            if (x == null && y == null) return 0;
-            if (x == null) return 1;
-            if (y == null) return -1;
+            if (x == null && y == null)
+                return 0;
+            if (x == null)
+                return 1;
+            if (y == null)
+                return -1;
             // Descending by score
             return Comparer<double>.Default.Compare(y.Score, x.Score);
         }

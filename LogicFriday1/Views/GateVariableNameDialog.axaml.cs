@@ -19,7 +19,10 @@ public partial class GateVariableNameDialog : Window
         };
     }
 
-    public GateVariableNameDialogViewModel ViewModel { get; }
+    public GateVariableNameDialogViewModel ViewModel
+    {
+        get;
+    }
 
     private void OkButton_OnClick(object? sender, RoutedEventArgs e)
     {

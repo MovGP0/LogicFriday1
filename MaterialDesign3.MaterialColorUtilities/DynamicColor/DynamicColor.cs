@@ -243,16 +243,56 @@ public sealed class DynamicColor
         private Func<DynamicScheme, ToneDeltaPair>? _toneDeltaPair;
         private Func<DynamicScheme, double>? _opacity;
 
-        public Builder SetName(string name) { _name = name; return this; }
-        public Builder SetPalette(Func<DynamicScheme, TonalPalette> palette) { _palette = palette; return this; }
-        public Builder SetTone(Func<DynamicScheme, double> tone) { _tone = tone; return this; }
-        public Builder SetIsBackground(bool isBackground) { _isBackground = isBackground; return this; }
-        public Builder SetChromaMultiplier(Func<DynamicScheme, double> chromaMultiplier) { _chromaMultiplier = chromaMultiplier; return this; }
-        public Builder SetBackground(Func<DynamicScheme, DynamicColor> background) { _background = background; return this; }
-        public Builder SetSecondBackground(Func<DynamicScheme, DynamicColor> secondBackground) { _secondBackground = secondBackground; return this; }
-        public Builder SetContrastCurve(Func<DynamicScheme, ContrastCurve> contrastCurve) { _contrastCurve = contrastCurve; return this; }
-        public Builder SetToneDeltaPair(Func<DynamicScheme, ToneDeltaPair> toneDeltaPair) { _toneDeltaPair = toneDeltaPair; return this; }
-        public Builder SetOpacity(Func<DynamicScheme, double> opacity) { _opacity = opacity; return this; }
+        public Builder SetName(string name)
+        {
+            _name = name;
+            return this;
+        }
+        public Builder SetPalette(Func<DynamicScheme, TonalPalette> palette)
+        {
+            _palette = palette;
+            return this;
+        }
+        public Builder SetTone(Func<DynamicScheme, double> tone)
+        {
+            _tone = tone;
+            return this;
+        }
+        public Builder SetIsBackground(bool isBackground)
+        {
+            _isBackground = isBackground;
+            return this;
+        }
+        public Builder SetChromaMultiplier(Func<DynamicScheme, double> chromaMultiplier)
+        {
+            _chromaMultiplier = chromaMultiplier;
+            return this;
+        }
+        public Builder SetBackground(Func<DynamicScheme, DynamicColor> background)
+        {
+            _background = background;
+            return this;
+        }
+        public Builder SetSecondBackground(Func<DynamicScheme, DynamicColor> secondBackground)
+        {
+            _secondBackground = secondBackground;
+            return this;
+        }
+        public Builder SetContrastCurve(Func<DynamicScheme, ContrastCurve> contrastCurve)
+        {
+            _contrastCurve = contrastCurve;
+            return this;
+        }
+        public Builder SetToneDeltaPair(Func<DynamicScheme, ToneDeltaPair> toneDeltaPair)
+        {
+            _toneDeltaPair = toneDeltaPair;
+            return this;
+        }
+        public Builder SetOpacity(Func<DynamicScheme, double> opacity)
+        {
+            _opacity = opacity;
+            return this;
+        }
 
         public Builder ExtendSpecVersion(SpecVersion specVersion, DynamicColor extendedColor)
         {

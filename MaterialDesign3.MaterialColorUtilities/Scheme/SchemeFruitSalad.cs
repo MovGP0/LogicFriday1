@@ -1,6 +1,6 @@
 ﻿namespace MaterialColorUtilities;
 
-public class SchemeFruitSalad: DynamicScheme
+public class SchemeFruitSalad : DynamicScheme
 {
     public SchemeFruitSalad(Hct sourceColorHct, bool isDark, double contrastLevel)
         : this(sourceColorHct, isDark, contrastLevel, DEFAULT_SPEC_VERSION, DEFAULT_PLATFORM)

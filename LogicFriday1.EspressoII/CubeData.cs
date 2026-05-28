@@ -30,6 +30,7 @@ public sealed record CubeData
     public required BitVector EmptySet { get; init; }
     public required uint InMask { get; init; }
     public required int InWord { get; init; }
+
     public List<uint[]> CofPool { get; } = [];
     public int NumMvVars => NumVars - NumBinaryVars;
     public BitVector RentCof()
@@ -37,37 +38,72 @@ public sealed record CubeData
         int words = BitVectorOps.WordCount(Size);
         var pool = CofPool;
         uint[] arr;
-        if (pool.Count > 0) { arr = pool[^1]; pool.RemoveAt(pool.Count - 1); }
-        else arr = new uint[words + 1];
+        if (pool.Count > 0)
+        {
+            arr = pool[^1];
+            pool.RemoveAt(pool.Count - 1);
+        }
+        else
+        {
+            arr = new uint[words + 1];
+        }
+
         arr[0] = 0;
         return new BitVector(arr, 1, words);
     }
+
     public BitVector RentCofEmpty()
     {
         int words = BitVectorOps.WordCount(Size);
         var pool = CofPool;
         uint[] arr;
-        if (pool.Count > 0) { arr = pool[^1]; pool.RemoveAt(pool.Count - 1); Array.Clear(arr, 0, words + 1); }
-        else arr = new uint[words + 1];
+        if (pool.Count > 0)
+        {
+            arr = pool[^1];
+            pool.RemoveAt(pool.Count - 1);
+            Array.Clear(arr, 0, words + 1);
+        }
+        else
+        {
+            arr = new uint[words + 1];
+        }
+
         return new BitVector(arr, 1, words);
     }
+
     public void ReturnCof(BitVector b)
     {
-        if (b.RawData != null) CofPool.Add(b.RawData);
+        if (b.RawData != null)
+        {
+            CofPool.Add(b.RawData);
+        }
     }
+
     public BitVector RentCofCopy(BitVector src)
     {
         int words = BitVectorOps.WordCount(Size);
         var pool = CofPool;
         uint[] arr;
-        if (pool.Count > 0) { arr = pool[^1]; pool.RemoveAt(pool.Count - 1); }
-        else arr = new uint[words + 1];
+        if (pool.Count > 0)
+        {
+            arr = pool[^1];
+            pool.RemoveAt(pool.Count - 1);
+        }
+        else
+        {
+            arr = new uint[words + 1];
+        }
+
         arr[0] = 0;
         src.AsSpan().CopyTo(arr.AsSpan(1, words));
         return new BitVector(arr, 1, words);
     }
+
     public int Output => NumMvVars > 0 ? NumVars - 1 : -1;
+
     public int FirstWordOf(int var) => BitVectorOps.WhichWord(FirstPart[var]);
+
     public int LastWordOf(int var) => BitVectorOps.WhichWord(LastPart[var]);
+
     public bool IsSparse(int var) => var >= NumBinaryVars;
 }

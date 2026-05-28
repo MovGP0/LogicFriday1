@@ -11,10 +11,18 @@ public static class Expander
         if (cacheActive)
         {
             key = MemoCache.BuildFamiliesKey(MemoCache.TagExpandCover, cube, F, R, null, nonsparse);
-            if (MemoCache.TryGetFamily(key, cube.Size, out var cached)) return cached;
+            if (MemoCache.TryGetFamily(key, cube.Size, out var cached))
+            {
+                return cached;
+            }
         }
+
         var result = ExpandCoverImpl(cube, F, R, nonsparse);
-        if (cacheActive) MemoCache.PutFamily(key, result);
+        if (cacheActive)
+        {
+            MemoCache.PutFamily(key, result);
+        }
+
         return result;
     }
 
@@ -30,17 +38,27 @@ public static class Expander
             var cbData = new uint[5 * cbStride];
             scratch = new BitVector[5];
             for (int cbi = 0; cbi < 5; cbi++)
+            {
                 scratch[cbi] = new BitVector(cbData, cbi * cbStride + 1, cbWords);
+            }
         }
+
         // --- end inlined CreateBatch ---
         BitVector RAISE = scratch[0], FREESET = scratch[1], INIT_LOWER = scratch[2],
             SUPER_CUBE = scratch[3], OVEREXPANDED_CUBE = scratch[4];
         Span<uint> sRAISE = RAISE.AsSpan(), sFREESET = FREESET.AsSpan(), sINIT_LOWER = INIT_LOWER.AsSpan(),
             sSUPER_CUBE = SUPER_CUBE.AsSpan(), sOVEREXPANDED_CUBE = OVEREXPANDED_CUBE.AsSpan();
         if (nonsparse != 0)
+        {
             for (int var = 0; var < cube.NumVars; var++)
+            {
                 if (cube.IsSparse(var))
+                {
                     BitVectorOps.Or(sINIT_LOWER, sINIT_LOWER, cube.VarMask![var].AsSpan());
+                }
+            }
+        }
+
         BitVectorFamily.ClearAllFlags(F, CubeFlags.Covered | CubeFlags.NonEssen);
         var newLowerBuf = BitVectorFamily.Create(Math.Max(F.Count, 16), cube.Size);
         int[] feasIdxBuf = ArrayPool<int>.Shared.Rent(Math.Max(256, F.Count));
@@ -64,6 +82,7 @@ public static class Expander
                         BitVectorOps.ClearFlag(sbcp, CubeFlags.Active);
                     }
                 }
+
                 int num_covered = 0;
                 ReadOnlySpan<uint> sc = p.AsSpan();
                 BitVectorOps.Copy(sSUPER_CUBE, sc);
@@ -74,6 +93,7 @@ public static class Expander
                     BitVectorOps.AndNot(sFREESET, sFREESET, sINIT_LOWER);
                     EliminateLowering(cube, BB, CC, RAISE, FREESET);
                 }
+
                 DetermineEssentialParts(cube, BB, CC, RAISE, FREESET);
                 BitVectorOps.Or(sOVEREXPANDED_CUBE, sRAISE, sFREESET);
                 if (CC.ActiveCount > 0)
@@ -82,15 +102,31 @@ public static class Expander
                     Span<int> feasIdx = feasIdxBuf;
                     int numfeas = 0;
                     for (int ii = 0; ii < CC.Count; ii++)
-                        if (BitVectorOps.HasFlag(CC.GetSet(ii), CubeFlags.Active)) feasIdx[numfeas++] = ii;
+                    {
+                        if (BitVectorOps.HasFlag(CC.GetSet(ii), CubeFlags.Active))
+                        {
+                            feasIdx[numfeas++] = ii;
+                        }
+                    }
+
                     BitVectorFamily new_lower = numfeas <= newLowerBuf.Capacity ? newLowerBuf : BitVectorFamily.Create(numfeas, cube.Size);
-                    if (numfeas <= newLowerBuf.Capacity) new_lower.Count = 0;
+                    if (numfeas <= newLowerBuf.Capacity)
+                    {
+                        new_lower.Count = 0;
+                    }
+
                     while (true)
                     {
                         Span<uint> sxraise = cube.Temp![0].AsSpan();
                         BitVectorOps.Copy(sxraise, sEmpty);
                         for (int j = 0; j < BB.Count; j++)
-                            if (BitVectorOps.HasFlag(BB.GetSet(j), CubeFlags.Active)) BitVectorOps.Or(sxraise, sxraise, BB.GetSpan(j));
+                        {
+                            if (BitVectorOps.HasFlag(BB.GetSet(j), CubeFlags.Active))
+                            {
+                                BitVectorOps.Or(sxraise, sxraise, BB.GetSpan(j));
+                            }
+                        }
+
                         BitVectorOps.AndNot(sxraise, sFREESET, sxraise);
                         BitVectorOps.Or(sRAISE, sRAISE, sxraise);
                         BitVectorOps.AndNot(sFREESET, sFREESET, sxraise);
@@ -120,13 +156,27 @@ public static class Expander
                                         ifcResult = 1;
                                         for (int bi = 0; bi < BB.Count; bi++)
                                         {
-                                            if (!BitVectorOps.HasFlag(BB.GetSet(bi), CubeFlags.Active)) continue;
+                                            if (!BitVectorOps.HasFlag(BB.GetSet(bi), CubeFlags.Active))
+                                            {
+                                                continue;
+                                            }
+
                                             int dist = CubeDistance.DistanceCapped(cube, BB.GetSpan(bi), sifcr);
-                                            if (dist > 1) continue;
-                                            if (dist == 0) { ifcResult = 0; break; }
+                                            if (dist > 1)
+                                            {
+                                                continue;
+                                            }
+
+                                            if (dist == 0)
+                                            {
+                                                ifcResult = 0;
+                                                break;
+                                            }
+
                                             CubeDistance.FindDisjointParts(cube, new_lower.GetSet(numfeas).AsSpan(), BB.GetSpan(bi), sifcr);
                                         }
                                     }
+
                                     if (ifcResult != 0)
                                     {
                                         feasIdx[numfeas] = feasIdx[fi];
@@ -135,14 +185,25 @@ public static class Expander
                                 }
                             }
                         }
-                        if (numfeas == 0) break;
+
+                        if (numfeas == 0)
+                        {
+                            break;
+                        }
+
                         int bestcount = 0, bestsize = 9999, bestFeasIdx = -1;
                         for (int fi = 0; fi < numfeas; fi++)
                         {
                             int size = BitVectorOps.IntersectionCount(CC.GetSpan(feasIdx[fi]), sFREESET);
                             int count = 0;
                             for (int fj = 0; fj < numfeas; fj++)
-                                if (BitVectorOps.AreDisjoint(new_lower.GetSpan(fi), CC.GetSpan(feasIdx[fj]))) count++;
+                            {
+                                if (BitVectorOps.AreDisjoint(new_lower.GetSpan(fi), CC.GetSpan(feasIdx[fj])))
+                                {
+                                    count++;
+                                }
+                            }
+
                             if (count > bestcount)
                             {
                                 bestcount = count;
@@ -155,11 +216,13 @@ public static class Expander
                                 bestsize = size;
                             }
                         }
+
                         BitVectorOps.Or(sRAISE, sRAISE, CC.GetSpan(bestFeasIdx));
                         BitVectorOps.AndNot(sFREESET, sFREESET, sRAISE);
                         DetermineEssentialParts(cube, BB, CC, RAISE, FREESET);
                     }
                 }
+
                 while (CC.ActiveCount > 0)
                 {
                     int ebi = SelectMostFrequent(cube, CC, FREESET, countBuf);
@@ -167,6 +230,7 @@ public static class Expander
                     BitVectorOps.Remove(sFREESET, ebi);
                     DetermineEssentialParts(cube, BB, CC, RAISE, FREESET);
                 }
+
                 while (BB.ActiveCount > 0)
                 {
                     Span<uint> mcxraise = cube.Temp![0].AsSpan();
@@ -181,6 +245,7 @@ public static class Expander
                             CubeDistance.FindDisjointParts(cube, splower, BB.GetSpan(mi), sRAISE);
                         }
                     }
+
                     int nset = 0;
                     bool useHeuristic = false;
                     for (int mi = 0; mi < B.Count; mi++)
@@ -193,13 +258,27 @@ public static class Expander
                             if (edist > 1)
                             {
                                 expansion *= edist;
-                                if (expansion > 500) { useHeuristic = true; break; }
+                                if (expansion > 500)
+                                {
+                                    useHeuristic = true;
+                                    break;
+                                }
                             }
                         }
-                        if (useHeuristic) break;
+
+                        if (useHeuristic)
+                        {
+                            break;
+                        }
+
                         nset += expansion;
-                        if (nset > 500) { useHeuristic = true; break; }
+                        if (nset > 500)
+                        {
+                            useHeuristic = true;
+                            break;
+                        }
                     }
+
                     if (!useHeuristic)
                     {
                         B = CoverManipulation.ExpandMultiValued(cube, B, cube.NumBinaryVars);
@@ -221,11 +300,16 @@ public static class Expander
                                     }
                                 }
                             }
+
                             var sfCover = MinimumCoverSolver.Solve(sfM);
                             xlower = BitVectorOps.Create(B.SfSize);
                             Span<uint> sfsc = xlower.AsSpan();
-                            foreach (int col in sfCover.Refs) BitVectorOps.Insert(sfsc, col);
+                            foreach (int col in sfCover.Refs)
+                            {
+                                BitVectorOps.Insert(sfsc, col);
+                            }
                         }
+
                         // --- end inlined SolveFromFamily ---
                         BitVectorOps.AndNot(mcxraise, sFREESET, xlower.AsSpan());
                         BitVectorOps.Or(sRAISE, sRAISE, mcxraise);
@@ -239,14 +323,18 @@ public static class Expander
                         DetermineEssentialParts(cube, BB, null, RAISE, FREESET);
                     }
                 }
+
                 BitVectorOps.Or(sRAISE, sRAISE, sFREESET);
                 // --- end inlined ExpandOneCube ---
                 BitVectorOps.Copy(F.GetSpan(i), sRAISE);
                 BitVectorOps.AddFlag(p, CubeFlags.Prime);
                 if (num_covered == 0 && !BitVectorOps.AreEqual(F.GetSpan(i), sOVEREXPANDED_CUBE))
+                {
                     BitVectorOps.AddFlag(p, CubeFlags.NonEssen);
+                }
             }
         }
+
         F.ActiveCount = 0;
         bool change = false;
         for (int i = 0; i < F.Count; i++)
@@ -263,11 +351,17 @@ public static class Expander
                 F.ActiveCount++;
             }
         }
-        if (change) F = BitVectorFamily.CompactInactive(F);
+
+        if (change)
+        {
+            F = BitVectorFamily.CompactInactive(F);
+        }
+
         ArrayPool<int>.Shared.Return(feasIdxBuf, clearArray: false);
         ArrayPool<int>.Shared.Return(countBuf, clearArray: false);
         return F;
     }
+
     internal static void DetermineEssentialParts(CubeData cube, BitVectorFamily BB, BitVectorFamily? CC, BitVector RAISE, BitVector FREESET)
     {
         Span<uint> sRAISE = RAISE.AsSpan(), sFREESET = FREESET.AsSpan();
@@ -276,20 +370,34 @@ public static class Expander
         for (int i = 0; i < BB.Count; i++)
         {
             BitVector p = BB.GetSet(i);
-            if (!BitVectorOps.HasFlag(p, CubeFlags.Active)) continue;
+            if (!BitVectorOps.HasFlag(p, CubeFlags.Active))
+            {
+                continue;
+            }
+
             int dist = CubeDistance.DistanceCapped(cube, BB.GetSpan(i), sRAISE);
-            if (dist > 1) continue;
-            if (dist == 0) throw new InvalidOperationException("ON-set and OFF-set are not orthogonal");
+            if (dist > 1)
+            {
+                continue;
+            }
+
+            if (dist == 0)
+            {
+                throw new InvalidOperationException("ON-set and OFF-set are not orthogonal");
+            }
+
             CubeDistance.FindDisjointParts(cube, sxlower, BB.GetSpan(i), sRAISE);
             BB.ActiveCount--;
             BitVectorOps.ClearFlag(p, CubeFlags.Active);
         }
+
         if (!BitVectorOps.IsEmpty(sxlower))
         {
             BitVectorOps.AndNot(sFREESET, sFREESET, sxlower);
             EliminateLowering(cube, BB, CC, RAISE, FREESET);
         }
     }
+
     private static void EliminateLowering(CubeData cube, BitVectorFamily BB, BitVectorFamily? CC, BitVector RAISE, BitVector FREESET)
     {
         Span<uint> sRAISE = RAISE.AsSpan(), sFREESET = FREESET.AsSpan();
@@ -298,31 +406,45 @@ public static class Expander
         for (int i = 0; i < BB.Count; i++)
         {
             BitVector p = BB.GetSet(i);
-            if (!BitVectorOps.HasFlag(p, CubeFlags.Active)) continue;
+            if (!BitVectorOps.HasFlag(p, CubeFlags.Active))
+            {
+                continue;
+            }
+
             if (!CubeDistance.AreDistance0(cube, BB.GetSpan(i), sr))
             {
                 BB.ActiveCount--;
                 BitVectorOps.ClearFlag(p, CubeFlags.Active);
             }
         }
+
         if (CC != null)
+        {
             for (int i = 0; i < CC.Count; i++)
             {
                 BitVector p = CC.GetSet(i);
-                if (!BitVectorOps.HasFlag(p, CubeFlags.Active)) continue;
+                if (!BitVectorOps.HasFlag(p, CubeFlags.Active))
+                {
+                    continue;
+                }
+
                 if (!BitVectorOps.IsSubsetOf(CC.GetSpan(i), sr))
                 {
                     CC.ActiveCount--;
                     BitVectorOps.ClearFlag(p, CubeFlags.Active);
                 }
             }
+        }
     }
+
     private static int SelectMostFrequent(CubeData cube, BitVectorFamily? CC, BitVector FREESET, int[] count)
     {
         Span<uint> sFREESET = FREESET.AsSpan();
         Array.Clear(count);
         if (CC != null)
+        {
             for (int j = 0; j < CC.Count; j++)
+            {
                 if (BitVectorOps.HasFlag(CC.GetSet(j), CubeFlags.Active))
                 {
                     ReadOnlySpan<uint> acSpan = CC.GetSpan(j);
@@ -337,13 +459,19 @@ public static class Expander
                         }
                     }
                 }
+            }
+        }
+
         int best_count = -1, best_part = -1;
         for (int i = 0; i < cube.Size; i++)
+        {
             if (BitVectorOps.Contains(sFREESET, i) && count[i] > best_count)
             {
                 best_part = i;
                 best_count = count[i];
             }
+        }
+
         return best_part;
     }
 }

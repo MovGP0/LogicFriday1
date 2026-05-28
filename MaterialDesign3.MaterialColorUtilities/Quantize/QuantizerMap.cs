@@ -1,6 +1,6 @@
 ﻿namespace MaterialColorUtilities;
 
-public sealed class QuantizerMap: Quantizer
+public sealed class QuantizerMap : Quantizer
 {
     private Dictionary<int, int> ColorToCount { get; } = new();
 

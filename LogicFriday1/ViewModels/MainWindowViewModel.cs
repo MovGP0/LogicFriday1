@@ -65,7 +65,10 @@ public partial class MainWindowViewModel : ObservableObject
 
     public ObservableCollection<TruthTableRow> FunctionTruthTableRows { get; } = [];
 
-    public ObservableCollection<GatePaletteItem> GatePaletteItems { get; } =
+    public ObservableCollection<GatePaletteItem> GatePaletteItems
+    {
+        get;
+    } =
     [
         new("Select", GatePaletteKind.Select, 0x42b, 0, "Decompiled/logicfriday_decompiled_functions/0040cabd_FUN_0040cabd.c"),
         new("Wire", GatePaletteKind.Wire, 0x42c, 0, "Decompiled/logicfriday_decompiled_functions/0040cabd_FUN_0040cabd.c"),
@@ -101,7 +104,10 @@ public partial class MainWindowViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(IsUnminimizedViewSelected))]
     private bool _isMinimizedViewSelected;
 
-    public ObservableCollection<FunctionSummaryRow> FunctionSummaries { get; } =
+    public ObservableCollection<FunctionSummaryRow> FunctionSummaries
+    {
+        get;
+    } =
     [
         new()
         {

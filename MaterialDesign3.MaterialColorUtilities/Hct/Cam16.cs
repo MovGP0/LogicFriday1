@@ -29,17 +29,44 @@ public sealed class Cam16
     ];
 
     // CAM16 color dimensions
-    public double Hue { get; private set; }
-    public double Chroma { get; private set; }
-    public double J { get; private set; }
-    public double Q { get; private set; }
-    public double M { get; private set; }
-    public double S { get; private set; }
+    public double Hue
+    {
+        get; private set;
+    }
+    public double Chroma
+    {
+        get; private set;
+    }
+    public double J
+    {
+        get; private set;
+    }
+    public double Q
+    {
+        get; private set;
+    }
+    public double M
+    {
+        get; private set;
+    }
+    public double S
+    {
+        get; private set;
+    }
 
     // Coordinates in UCS space.
-    public double Jstar { get; private set; }
-    public double Astar { get; private set; }
-    public double Bstar { get; private set; }
+    public double Jstar
+    {
+        get; private set;
+    }
+    public double Astar
+    {
+        get; private set;
+    }
+    public double Bstar
+    {
+        get; private set;
+    }
 
     // Avoid allocations during conversion by pre-allocating an array.
     private readonly double[] _tempArray = [0.0, 0.0, 0.0];

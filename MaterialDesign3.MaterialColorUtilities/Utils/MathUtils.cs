@@ -10,8 +10,10 @@ public static class MathUtils
     /// </summary>
     public static int Signum(double num)
     {
-        if (num < 0) return -1;
-        if (num == 0) return 0;
+        if (num < 0)
+            return -1;
+        if (num == 0)
+            return 0;
         return 1;
     }
 
@@ -25,8 +27,10 @@ public static class MathUtils
     /// </summary>
     public static int ClampInt(int min, int max, int input)
     {
-        if (input < min) return min;
-        if (input > max) return max;
+        if (input < min)
+            return min;
+        if (input > max)
+            return max;
         return input;
     }
 
@@ -35,8 +39,10 @@ public static class MathUtils
     /// </summary>
     public static double ClampDouble(double min, double max, double input)
     {
-        if (input < min) return min;
-        if (input > max) return max;
+        if (input < min)
+            return min;
+        if (input > max)
+            return max;
         return input;
     }
 
@@ -46,7 +52,8 @@ public static class MathUtils
     public static int SanitizeDegreesInt(int degrees)
     {
         degrees %= 360;
-        if (degrees < 0) degrees += 360;
+        if (degrees < 0)
+            degrees += 360;
         return degrees;
     }
 
@@ -56,7 +63,8 @@ public static class MathUtils
     public static double SanitizeDegreesDouble(double degrees)
     {
         degrees %= 360.0;
-        if (degrees < 0) degrees += 360.0;
+        if (degrees < 0)
+            degrees += 360.0;
         return degrees;
     }
 
@@ -96,7 +104,8 @@ public static class MathUtils
         y = Math.Abs(y);
         double max = Math.Max(x, y);
         double min = Math.Min(x, y);
-        if (max == 0) return 0;
+        if (max == 0)
+            return 0;
         double r = min / max;
         return max * Math.Sqrt(1 + r * r);
     }
@@ -106,7 +115,8 @@ public static class MathUtils
     /// </summary>
     public static double Expm1(double x)
     {
-        if (x == 0.0) return 0.0;
+        if (x == 0.0)
+            return 0.0;
         double ax = Math.Abs(x);
         if (ax < 1e-5)
         {

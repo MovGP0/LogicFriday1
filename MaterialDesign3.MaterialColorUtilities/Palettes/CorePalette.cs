@@ -8,12 +8,30 @@ namespace MaterialColorUtilities;
 [Obsolete("Use DynamicScheme for color scheme generation. Use CorePalettes for core palettes container class.")]
 public sealed class CorePalette
 {
-    public TonalPalette a1 { get; }
-    public TonalPalette a2 { get; }
-    public TonalPalette a3 { get; }
-    public TonalPalette n1 { get; }
-    public TonalPalette n2 { get; }
-    public TonalPalette error { get; }
+    public TonalPalette a1
+    {
+        get;
+    }
+    public TonalPalette a2
+    {
+        get;
+    }
+    public TonalPalette a3
+    {
+        get;
+    }
+    public TonalPalette n1
+    {
+        get;
+    }
+    public TonalPalette n2
+    {
+        get;
+    }
+    public TonalPalette error
+    {
+        get;
+    }
 
     /// <summary>
     /// Create key palettes from a color.

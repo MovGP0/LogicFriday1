@@ -15,24 +15,75 @@ public class DynamicScheme
     public static readonly Color DEFAULT_ERROR_COLOR = Color.FromArgb(255, 163, 23, 26);
 
     // Core properties
-    public int SourceColorArgb { get; private set; }
-    public Hct SourceColorHct { get; }
-    public Variant Variant { get; }
-    public bool IsDark { get; }
-    public Platform PlatformType { get; }
-    public double ContrastLevel { get; }
-    public SpecVersion SpecVersion { get; }
+    public int SourceColorArgb
+    {
+        get; private set;
+    }
+    public Hct SourceColorHct
+    {
+        get;
+    }
+    public Variant Variant
+    {
+        get;
+    }
+    public bool IsDark
+    {
+        get;
+    }
+    public Platform PlatformType
+    {
+        get;
+    }
+    public double ContrastLevel
+    {
+        get;
+    }
+    public SpecVersion SpecVersion
+    {
+        get;
+    }
 
-    public TonalPalette PrimaryPalette { get; }
-    public TonalPalette SecondaryPalette { get; }
-    public TonalPalette TertiaryPalette { get; }
-    public TonalPalette NeutralPalette { get; }
-    public TonalPalette NeutralVariantPalette { get; }
-    public TonalPalette ErrorPalette { get; }
-    public TonalPalette WarningHighPalette { get; }
-    public TonalPalette WarningLowPalette { get; }
-    public TonalPalette InformationPalette { get; }
-    public TonalPalette SafePalette { get; }
+    public TonalPalette PrimaryPalette
+    {
+        get;
+    }
+    public TonalPalette SecondaryPalette
+    {
+        get;
+    }
+    public TonalPalette TertiaryPalette
+    {
+        get;
+    }
+    public TonalPalette NeutralPalette
+    {
+        get;
+    }
+    public TonalPalette NeutralVariantPalette
+    {
+        get;
+    }
+    public TonalPalette ErrorPalette
+    {
+        get;
+    }
+    public TonalPalette WarningHighPalette
+    {
+        get;
+    }
+    public TonalPalette WarningLowPalette
+    {
+        get;
+    }
+    public TonalPalette InformationPalette
+    {
+        get;
+    }
+    public TonalPalette SafePalette
+    {
+        get;
+    }
 
     public DynamicScheme() => throw new NotImplementedException();
 

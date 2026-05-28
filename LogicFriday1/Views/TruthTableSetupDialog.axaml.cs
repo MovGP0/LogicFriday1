@@ -13,7 +13,10 @@ public partial class TruthTableSetupDialog : Window
         DataContext = ViewModel;
     }
 
-    public TruthTableSetupDialogViewModel ViewModel { get; }
+    public TruthTableSetupDialogViewModel ViewModel
+    {
+        get;
+    }
 
     private void InputCount_OnValueChanged(object? sender, NumericUpDownValueChangedEventArgs e)
     {

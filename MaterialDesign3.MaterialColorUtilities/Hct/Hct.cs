@@ -9,10 +9,22 @@ namespace MaterialColorUtilities;
 /// </summary>
 public sealed class Hct
 {
-    public int Argb { get; set; }
-    public double Hue { get; set; }
-    public double Chroma { get; set; }
-    public double Tone { get; set; }
+    public int Argb
+    {
+        get; set;
+    }
+    public double Hue
+    {
+        get; set;
+    }
+    public double Chroma
+    {
+        get; set;
+    }
+    public double Tone
+    {
+        get; set;
+    }
 
     /// <summary>
     /// Create an HCT color from hue, chroma, and tone.

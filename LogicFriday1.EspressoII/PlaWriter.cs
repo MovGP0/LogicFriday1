@@ -9,17 +9,25 @@ public static class PlaWriter
         CubeData cube = pla.Cube;
         if (outputType == PlaData.EqntottType)
         {
-            if (cube.Output == -1) throw new InvalidOperationException("Cannot have no-output function for EQNTOTT output mode");
-            if (cube.NumMvVars != 1) throw new InvalidOperationException("Must have binary-valued function for EQNTOTT output mode");
+            if (cube.Output == -1)
+            {
+                throw new InvalidOperationException("Cannot have no-output function for EQNTOTT output mode");
+            }
+
+            if (cube.NumMvVars != 1)
+            {
+                throw new InvalidOperationException("Must have binary-valued function for EQNTOTT output mode");
+            }
+
             pla.Label ??= new string?[cube.Size];
             for (int var = 0; var < cube.NumVars; var++)
-            for (int ei = 0; ei < cube.PartSize[var]; ei++)
-            {
-                int ind = cube.FirstPart[var] + ei;
-                pla.Label[ind] ??= var < cube.NumBinaryVars
-                    ? (ei % 2 == 0 ? $"v{var}.bar" : $"v{var}")
-                    : $"v{var}.{ei}";
-            }
+                for (int ei = 0; ei < cube.PartSize[var]; ei++)
+                {
+                    int ind = cube.FirstPart[var] + ei;
+                    pla.Label[ind] ??= var < cube.NumBinaryVars
+                        ? (ei % 2 == 0 ? $"v{var}.bar" : $"v{var}")
+                        : $"v{var}.{ei}";
+                }
             for (int i = 0; i < cube.PartSize[cube.Output]; i++)
             {
                 string ol = GetLabel(pla, cube, cube.Output, i);
@@ -29,24 +37,60 @@ public static class PlaWriter
                 for (int si = 0; si < pla.F!.Count; si++)
                 {
                     ReadOnlySpan<uint> sp = pla.F.GetSpan(si);
-                    if (!BitVectorOps.Contains(sp, i + cube.FirstPart[cube.Output])) continue;
-                    if (firstOr) { fp.Write('('); col++; }
-                    else { fp.Write(" | ("); col += 4; }
+                    if (!BitVectorOps.Contains(sp, i + cube.FirstPart[cube.Output]))
+                    {
+                        continue;
+                    }
+
+                    if (firstOr)
+                    {
+                        fp.Write('(');
+                        col++;
+                    }
+                    else
+                    {
+                        fp.Write(" | (");
+                        col += 4;
+                    }
+
                     firstOr = false;
                     bool firstAnd = true;
                     for (int var = 0; var < cube.NumBinaryVars; var++)
                     {
                         int x = GetInput(sp, var);
-                        if (x == Dash) continue;
+                        if (x == Dash)
+                        {
+                            continue;
+                        }
+
                         string il = GetLabel(pla, cube, var, 1);
-                        if (col + il.Length > 72) { fp.Write("\n    "); col = 4; }
-                        if (!firstAnd) { fp.Write('&'); col++; }
+                        if (col + il.Length > 72)
+                        {
+                            fp.Write("\n    ");
+                            col = 4;
+                        }
+
+                        if (!firstAnd)
+                        {
+                            fp.Write('&');
+                            col++;
+                        }
+
                         firstAnd = false;
-                        if (x == Zero) { fp.Write('!'); col++; }
-                        fp.Write(il); col += il.Length;
+                        if (x == Zero)
+                        {
+                            fp.Write('!');
+                            col++;
+                        }
+
+                        fp.Write(il);
+                        col += il.Length;
                     }
-                    fp.Write(')'); col++;
+
+                    fp.Write(')');
+                    col++;
                 }
+
                 fp.Write(";\n\n");
             }
         }
@@ -55,56 +99,95 @@ public static class PlaWriter
             if (cube.NumMvVars <= 1)
             {
                 fp.WriteLine($".i {cube.NumBinaryVars}");
-                if (cube.Output != -1) fp.WriteLine($".o {cube.PartSize[cube.Output]}");
+                if (cube.Output != -1)
+                {
+                    fp.WriteLine($".o {cube.PartSize[cube.Output]}");
+                }
             }
             else
             {
                 fp.Write($".mv {cube.NumVars} {cube.NumBinaryVars}");
-                for (int var = cube.NumBinaryVars; var < cube.NumVars; var++) fp.Write($" {cube.PartSize[var]}");
+                for (int var = cube.NumBinaryVars; var < cube.NumVars; var++)
+                {
+                    fp.Write($" {cube.PartSize[var]}");
+                }
+
                 fp.Write('\n');
             }
+
             if (pla.Label != null && cube.NumBinaryVars > 0 && pla.Label[1] != null)
             {
                 fp.Write(".ilb");
-                for (int var = 0; var < cube.NumBinaryVars; var++) fp.Write($" {GetLabel(pla, cube, var, 1)}");
+                for (int var = 0; var < cube.NumBinaryVars; var++)
+                {
+                    fp.Write($" {GetLabel(pla, cube, var, 1)}");
+                }
+
                 fp.Write('\n');
             }
+
             if (pla.Label != null && cube.Output != -1 && pla.Label[cube.FirstPart[cube.Output]] != null)
             {
                 fp.Write(".ob");
-                for (int i = 0; i < cube.PartSize[cube.Output]; i++) fp.Write($" {GetLabel(pla, cube, cube.Output, i)}");
+                for (int i = 0; i < cube.PartSize[cube.Output]; i++)
+                {
+                    fp.Write($" {GetLabel(pla, cube, cube.Output, i)}");
+                }
+
                 fp.Write('\n');
             }
+
             for (int var = cube.NumBinaryVars; var < cube.NumVars - 1; var++)
             {
                 if (pla.Label != null && pla.Label[cube.FirstPart[var]] != null)
                 {
                     fp.Write($".label var={var}");
-                    for (int i = cube.FirstPart[var]; i <= cube.LastPart[var]; i++) fp.Write($" {pla.Label[i]}");
+                    for (int i = cube.FirstPart[var]; i <= cube.LastPart[var]; i++)
+                    {
+                        fp.Write($" {pla.Label[i]}");
+                    }
+
                     fp.Write('\n');
                 }
             }
+
             fp.WriteLine($".p {pla.F!.Count}");
             for (int i = 0; i < pla.F.Count; i++)
             {
                 BitVector c = pla.F.GetSet(i);
                 ReadOnlySpan<uint> sc = c.AsSpan();
-                for (int var = 0; var < cube.NumBinaryVars; var++) fp.Write("?01-"[GetInput(sc, var)]);
+                for (int var = 0; var < cube.NumBinaryVars; var++)
+                {
+                    fp.Write("?01-"[GetInput(sc, var)]);
+                }
+
                 for (int var = cube.NumBinaryVars; var < cube.NumVars - 1; var++)
                 {
                     fp.Write(' ');
-                    for (int j = cube.FirstPart[var]; j <= cube.LastPart[var]; j++) fp.Write("01"[BitVectorOps.Contains(sc, j) ? 1 : 0]);
+                    for (int j = cube.FirstPart[var]; j <= cube.LastPart[var]; j++)
+                    {
+                        fp.Write("01"[BitVectorOps.Contains(sc, j) ? 1 : 0]);
+                    }
                 }
+
                 if (cube.Output != -1)
                 {
                     fp.Write(' ');
-                    for (int j = cube.FirstPart[cube.Output]; j <= cube.LastPart[cube.Output]; j++) fp.Write("01"[BitVectorOps.Contains(sc, j) ? 1 : 0]);
+                    for (int j = cube.FirstPart[cube.Output]; j <= cube.LastPart[cube.Output]; j++)
+                    {
+                        fp.Write("01"[BitVectorOps.Contains(sc, j) ? 1 : 0]);
+                    }
                 }
+
                 fp.Write('\n');
             }
+
             fp.WriteLine(".e");
         }
-        else throw new InvalidOperationException("Unsupported output type");
+        else
+        {
+            throw new InvalidOperationException("Unsupported output type");
+        }
     }
 
     private static int GetInput(ReadOnlySpan<uint> c, int var) =>

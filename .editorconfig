@@ -1,0 +1,137 @@
+root = true
+
+[*]
+indent_style = space
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.{cs,csx}]
+indent_size = 4
+
+# C# formatting
+dotnet_diagnostic.IDE0055.severity = warning
+csharp_new_line_before_open_brace = all
+csharp_new_line_before_else = true
+csharp_new_line_before_catch = true
+csharp_new_line_before_finally = true
+csharp_new_line_before_members_in_object_initializers = true
+csharp_new_line_before_members_in_anonymous_types = true
+csharp_new_line_between_query_expression_clauses = true
+csharp_indent_case_contents = true
+csharp_indent_switch_labels = true
+csharp_indent_labels = flush_left
+csharp_space_after_cast = false
+csharp_space_after_keywords_in_control_flow_statements = true
+csharp_space_between_parentheses = false
+csharp_space_before_colon_in_inheritance_clause = true
+csharp_space_after_colon_in_inheritance_clause = true
+csharp_space_around_binary_operators = before_and_after
+csharp_preserve_single_line_blocks = true
+csharp_preserve_single_line_statements = false
+
+# C# style
+csharp_style_namespace_declarations = file_scoped:warning
+csharp_style_var_when_type_is_apparent = true:warning
+csharp_style_var_for_built_in_types = false:suggestion
+csharp_style_var_elsewhere = false:suggestion
+csharp_prefer_braces = true:suggestion
+csharp_preferred_modifier_order = public,private,protected,internal,file,static,extern,new,virtual,abstract,sealed,override,readonly,unsafe,required,volatile,async:warning
+csharp_style_expression_bodied_methods = when_on_single_line:suggestion
+csharp_style_expression_bodied_constructors = false:suggestion
+csharp_style_expression_bodied_operators = false:suggestion
+csharp_style_expression_bodied_properties = true:suggestion
+csharp_style_expression_bodied_indexers = true:suggestion
+csharp_style_expression_bodied_accessors = true:suggestion
+csharp_style_expression_bodied_lambdas = true:suggestion
+csharp_style_expression_bodied_local_functions = false:suggestion
+
+# .NET style
+dotnet_sort_system_directives_first = true
+dotnet_separate_import_directive_groups = false
+dotnet_style_predefined_type_for_locals_parameters_members = true:warning
+dotnet_style_predefined_type_for_member_access = true:warning
+dotnet_style_qualification_for_event = false:suggestion
+dotnet_style_qualification_for_field = false:suggestion
+dotnet_style_qualification_for_method = false:suggestion
+dotnet_style_qualification_for_property = false:suggestion
+dotnet_style_object_initializer = true:suggestion
+dotnet_style_collection_initializer = true:suggestion
+dotnet_style_coalesce_expression = true:suggestion
+dotnet_style_null_propagation = true:suggestion
+dotnet_style_explicit_tuple_names = true:suggestion
+dotnet_style_prefer_is_null_check_over_reference_equality_method = true:suggestion
+dotnet_style_prefer_auto_properties = true:suggestion
+dotnet_style_readonly_field = true:suggestion
+
+# Roslynator formatting analyzers
+dotnet_diagnostic.RCS0001.severity = warning
+dotnet_diagnostic.RCS0002.severity = warning
+dotnet_diagnostic.RCS0003.severity = warning
+dotnet_diagnostic.RCS0005.severity = warning
+dotnet_diagnostic.RCS0006.severity = warning
+dotnet_diagnostic.RCS0007.severity = warning
+dotnet_diagnostic.RCS0008.severity = warning
+dotnet_diagnostic.RCS0009.severity = warning
+dotnet_diagnostic.RCS0010.severity = warning
+dotnet_diagnostic.RCS0011.severity = warning
+dotnet_diagnostic.RCS0012.severity = warning
+dotnet_diagnostic.RCS0013.severity = warning
+dotnet_diagnostic.RCS0015.severity = warning
+dotnet_diagnostic.RCS0016.severity = warning
+dotnet_diagnostic.RCS0020.severity = warning
+dotnet_diagnostic.RCS0021.severity = warning
+dotnet_diagnostic.RCS0023.severity = warning
+dotnet_diagnostic.RCS0024.severity = warning
+dotnet_diagnostic.RCS0030.severity = warning
+dotnet_diagnostic.RCS0031.severity = warning
+dotnet_diagnostic.RCS0033.severity = warning
+dotnet_diagnostic.RCS0042.severity = warning
+dotnet_diagnostic.RCS0046.severity = warning
+dotnet_diagnostic.RCS0049.severity = warning
+dotnet_diagnostic.RCS0050.severity = warning
+dotnet_diagnostic.RCS0053.severity = warning
+dotnet_diagnostic.RCS0054.severity = warning
+dotnet_diagnostic.RCS0055.severity = warning
+dotnet_diagnostic.RCS0056.severity = suggestion
+dotnet_diagnostic.RCS0057.severity = warning
+dotnet_diagnostic.RCS0058.severity = warning
+dotnet_diagnostic.RCS0060.severity = warning
+dotnet_diagnostic.RCS0061.severity = warning
+dotnet_diagnostic.RCS0063.severity = warning
+
+# Do not enforce newline kind in analyzers; Git handles checkout/commit conversion.
+dotnet_diagnostic.RCS0044.severity = none
+dotnet_diagnostic.RCS0045.severity = none
+
+# Roslynator common style analyzers
+dotnet_diagnostic.RCS1007.severity = warning
+dotnet_diagnostic.RCS1013.severity = warning
+dotnet_diagnostic.RCS1015.severity = warning
+dotnet_diagnostic.RCS1019.severity = warning
+dotnet_diagnostic.RCS1020.severity = warning
+dotnet_diagnostic.RCS1046.severity = warning
+dotnet_diagnostic.RCS1047.severity = warning
+dotnet_diagnostic.RCS1060.severity = warning
+dotnet_diagnostic.RCS1094.severity = warning
+dotnet_diagnostic.RCS1110.severity = warning
+dotnet_diagnostic.RCS1118.severity = warning
+dotnet_diagnostic.RCS1126.severity = warning
+dotnet_diagnostic.RCS1169.severity = warning
+dotnet_diagnostic.RCS1209.severity = warning
+dotnet_diagnostic.RCS1232.severity = warning
+dotnet_diagnostic.RCS1264.severity = warning
+
+# Deliberate style choices for conflicting or overly subjective Roslynator rules.
+dotnet_diagnostic.RCS1001.severity = none
+dotnet_diagnostic.RCS1002.severity = none
+dotnet_diagnostic.RCS1003.severity = none
+dotnet_diagnostic.RCS1004.severity = none
+dotnet_diagnostic.RCS1016.severity = none
+dotnet_diagnostic.RCS1021.severity = none
+dotnet_diagnostic.RCS1050.severity = none
+dotnet_diagnostic.RCS1078.severity = none
+dotnet_diagnostic.RCS1090.severity = none
+dotnet_diagnostic.RCS1207.severity = none
+dotnet_diagnostic.RCS1217.severity = none
+dotnet_diagnostic.RCS1250.severity = none
+dotnet_diagnostic.RCS1252.severity = none

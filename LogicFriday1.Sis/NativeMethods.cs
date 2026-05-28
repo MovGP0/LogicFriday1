@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 
 namespace LogicFriday1.Sis.Interop;
 
-internal static unsafe partial class NativeMethods
+internal static partial class NativeMethods
 {
     private const string NativeLibraryName = "logicfriday1_sis";
 

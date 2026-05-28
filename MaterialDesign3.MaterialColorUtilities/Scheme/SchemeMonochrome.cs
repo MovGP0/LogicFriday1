@@ -1,6 +1,6 @@
 ﻿namespace MaterialColorUtilities;
 
-public class SchemeMonochrome: DynamicScheme
+public class SchemeMonochrome : DynamicScheme
 {
     public SchemeMonochrome(Hct sourceColorHct, bool isDark, double contrastLevel)
         : this(sourceColorHct, isDark, contrastLevel, DEFAULT_SPEC_VERSION, DEFAULT_PLATFORM)

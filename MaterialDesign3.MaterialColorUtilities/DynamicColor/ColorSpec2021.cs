@@ -234,8 +234,10 @@ public class ColorSpec2021 : ColorSpec
         .SetPalette(s => s.PrimaryPalette)
         .SetTone(s =>
         {
-            if (IsFidelity(s)) return s.SourceColorHct.Tone;
-            if (IsMonochrome(s)) return s.IsDark ? 85.0 : 25.0;
+            if (IsFidelity(s))
+                return s.SourceColorHct.Tone;
+            if (IsMonochrome(s))
+                return s.IsDark ? 85.0 : 25.0;
             return s.IsDark ? 30.0 : 90.0;
         })
         .SetIsBackground(true)
@@ -249,8 +251,10 @@ public class ColorSpec2021 : ColorSpec
         .SetPalette(s => s.PrimaryPalette)
         .SetTone(s =>
         {
-            if (IsFidelity(s)) return DynamicColor.ForegroundTone(PrimaryContainer.GetTone(s), 4.5);
-            if (IsMonochrome(s)) return s.IsDark ? 0.0 : 100.0;
+            if (IsFidelity(s))
+                return DynamicColor.ForegroundTone(PrimaryContainer.GetTone(s), 4.5);
+            if (IsMonochrome(s))
+                return s.IsDark ? 0.0 : 100.0;
             return s.IsDark ? 90.0 : 30.0;
         })
         .SetBackground(_ => PrimaryContainer)
@@ -292,8 +296,10 @@ public class ColorSpec2021 : ColorSpec
         .SetTone(s =>
         {
             double initialTone = s.IsDark ? 30.0 : 90.0;
-            if (IsMonochrome(s)) return s.IsDark ? 30.0 : 85.0;
-            if (!IsFidelity(s)) return initialTone;
+            if (IsMonochrome(s))
+                return s.IsDark ? 30.0 : 85.0;
+            if (!IsFidelity(s))
+                return initialTone;
             return FindDesiredChromaByTone(s.SecondaryPalette.GetHue(), s.SecondaryPalette.GetChroma(), initialTone, !s.IsDark);
         })
         .SetIsBackground(true)
@@ -307,8 +313,10 @@ public class ColorSpec2021 : ColorSpec
         .SetPalette(s => s.SecondaryPalette)
         .SetTone(s =>
         {
-            if (IsMonochrome(s)) return s.IsDark ? 90.0 : 10.0;
-            if (!IsFidelity(s)) return s.IsDark ? 90.0 : 30.0;
+            if (IsMonochrome(s))
+                return s.IsDark ? 90.0 : 10.0;
+            if (!IsFidelity(s))
+                return s.IsDark ? 90.0 : 30.0;
             return DynamicColor.ForegroundTone(SecondaryContainer.GetTone(s), 4.5);
         })
         .SetBackground(_ => SecondaryContainer)
@@ -341,8 +349,10 @@ public class ColorSpec2021 : ColorSpec
         .SetPalette(s => s.TertiaryPalette)
         .SetTone(s =>
         {
-            if (IsMonochrome(s)) return s.IsDark ? 60.0 : 49.0;
-            if (!IsFidelity(s)) return s.IsDark ? 30.0 : 90.0;
+            if (IsMonochrome(s))
+                return s.IsDark ? 60.0 : 49.0;
+            if (!IsFidelity(s))
+                return s.IsDark ? 30.0 : 90.0;
             var proposed = s.TertiaryPalette.GetHct(s.SourceColorHct.Tone);
             return DislikeAnalyzer.FixIfDisliked(proposed).Tone;
         })
@@ -357,8 +367,10 @@ public class ColorSpec2021 : ColorSpec
         .SetPalette(s => s.TertiaryPalette)
         .SetTone(s =>
         {
-            if (IsMonochrome(s)) return s.IsDark ? 0.0 : 100.0;
-            if (!IsFidelity(s)) return s.IsDark ? 90.0 : 30.0;
+            if (IsMonochrome(s))
+                return s.IsDark ? 0.0 : 100.0;
+            if (!IsFidelity(s))
+                return s.IsDark ? 90.0 : 30.0;
             return DynamicColor.ForegroundTone(TertiaryContainer.GetTone(s), 4.5);
         })
         .SetBackground(_ => TertiaryContainer)

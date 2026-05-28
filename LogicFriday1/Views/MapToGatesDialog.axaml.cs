@@ -18,7 +18,10 @@ public partial class MapToGatesDialog : Window
         DataContext = ViewModel;
     }
 
-    public MapToGatesDialogViewModel ViewModel { get; }
+    public MapToGatesDialogViewModel ViewModel
+    {
+        get;
+    }
 
     private void StandardLogicToggle_OnClick(object? sender, RoutedEventArgs e)
     {

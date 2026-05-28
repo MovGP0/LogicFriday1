@@ -2,7 +2,9 @@
 
 public sealed class QuantizerCelebi
 {
-    private QuantizerCelebi() { }
+    private QuantizerCelebi()
+    {
+    }
 
     public static Dictionary<int, int> Quantize(int[] pixels, int maxColors)
     {

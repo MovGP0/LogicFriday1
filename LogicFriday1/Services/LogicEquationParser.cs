@@ -411,7 +411,10 @@ public static class LogicEquationParser
 
     private abstract record ExpressionNode
     {
-        public abstract IEnumerable<string> VariableNames { get; }
+        public abstract IEnumerable<string> VariableNames
+        {
+            get;
+        }
         public abstract bool Evaluate(IReadOnlyDictionary<string, bool> values);
     }
 

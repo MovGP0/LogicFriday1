@@ -480,7 +480,7 @@ public partial class MainWindow : Window
 
         var headers = new[] { "Term" }
             .Concat(inputNames)
-            .Concat([ "=>" ])
+            .Concat(["=>"])
             .Concat(outputNames)
             .ToArray();
 
@@ -852,7 +852,7 @@ public partial class MainWindow : Window
 
         return _truthTableContextRow is null
             ? []
-            : [ _truthTableContextRow ];
+            : [_truthTableContextRow];
     }
 
     private async Task ShowMessageAsync(string message)

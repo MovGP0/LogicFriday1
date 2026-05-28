@@ -1,6 +1,6 @@
 ﻿namespace MaterialColorUtilities;
 
-public class SchemeNeutral: DynamicScheme
+public class SchemeNeutral : DynamicScheme
 {
     public SchemeNeutral(Hct sourceColorHct, bool isDark, double contrastLevel)
         : this(sourceColorHct, isDark, contrastLevel, DEFAULT_SPEC_VERSION, DEFAULT_PLATFORM)

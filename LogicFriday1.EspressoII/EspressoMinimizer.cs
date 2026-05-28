@@ -1,8 +1,11 @@
 using System.Buffers;
+
 namespace Espresso;
+
 using static BitVectorOps;
 using static BitVectorFamily;
 using static CubeDistance;
+
 public static class EspressoMinimizer
 {
     public static BitVectorFamily Minimize(CubeData cube, BitVectorFamily F, BitVectorFamily D1, BitVectorFamily R)
@@ -12,10 +15,18 @@ public static class EspressoMinimizer
         if (minCacheActive)
         {
             minKey = MemoCache.BuildMinimizeKey(cube, F, D1, R);
-            if (MemoCache.TryGetFamily(minKey, cube.Size, out var cached)) return cached;
+            if (MemoCache.TryGetFamily(minKey, cube.Size, out var cached))
+            {
+                return cached;
+            }
         }
+
         BitVectorFamily result = MinimizeUncached(cube, F, D1, R);
-        if (minCacheActive) MemoCache.PutFamily(minKey, result);
+        if (minCacheActive)
+        {
+            MemoCache.PutFamily(minKey, result);
+        }
+
         return result;
     }
 
@@ -33,9 +44,12 @@ public static class EspressoMinimizer
             {
                 CoverManipulation.CalculateCost(cube, F, out CoverCost initialCost);
                 bool worthUnwrapping =
-                    initialCost.Out != initialCost.Cubes * cube.PartSize[cube.NumVars - 1] &&
-                    initialCost.Out < 5000;
-                if (worthUnwrapping) F = RemoveContained(cube, F);
+                    initialCost.Out != initialCost.Cubes * cube.PartSize[cube.NumVars - 1]
+                        && initialCost.Out < 5000;
+                if (worthUnwrapping)
+                {
+                    F = RemoveContained(cube, F);
+                }
             }
 
             ClearAllFlags(F, CubeFlags.Prime);
@@ -62,12 +76,15 @@ public static class EspressoMinimizer
                 F = LastGasp(cube, F, D, R, stack);
                 CoverManipulation.CalculateCost(cube, F, out cost);
             } while (cost.Cubes < bestCost.Cubes ||
-                     (cost.Cubes == bestCost.Cubes && cost.Total < bestCost.Total));
+                (cost.Cubes == bestCost.Cubes && cost.Total < bestCost.Total));
 
             F = Append(F, E);
             F = MakeSparse(cube, F, D1, R, stack);
 
-            if (Fsave.Count >= F.Count) return F;
+            if (Fsave.Count >= F.Count)
+            {
+                return F;
+            }
 
             // Retry without unwrapping when unwrap hurt us.
             F = Fsave;
@@ -87,18 +104,35 @@ public static class EspressoMinimizer
         {
             BitVector a = sorted[i];
             int aKey = GetSortKey(a);
-            if (aKey != lastSize) { lastSize = aKey; checkLimit = dest; }
+            if (aKey != lastSize)
+            {
+                lastSize = aKey;
+                checkLimit = dest;
+            }
 
             bool contained = false;
             for (int j = 0; j < checkLimit; j++)
             {
-                if (GetSortKey(sorted[j]) < aKey) continue;
-                if (IsSubsetOf(a.AsSpan(), sorted[j].AsSpan())) { contained = true; break; }
+                if (GetSortKey(sorted[j]) < aKey)
+                {
+                    continue;
+                }
+
+                if (IsSubsetOf(a.AsSpan(), sorted[j].AsSpan()))
+                {
+                    contained = true;
+                    break;
+                }
             }
-            if (!contained) sorted[dest++] = a;
+
+            if (!contained)
+            {
+                sorted[dest++] = a;
+            }
         }
+
         BitVectorFamily result = FromSortedArray(sorted, dest, expanded.SfSize);
-        BitVectorFamily.ReturnSortedArray(sorted);
+        ReturnSortedArray(sorted);
         return result;
     }
 
@@ -120,20 +154,31 @@ public static class EspressoMinimizer
         for (int fi = 0; fi < F.Count; fi++)
         {
             BitVector fp = F.GetSet(fi);
-            if (HasFlag(fp, CubeFlags.NonEssen) || !HasFlag(fp, CubeFlags.RelEssen)) continue;
+            if (HasFlag(fp, CubeFlags.NonEssen) || !HasFlag(fp, CubeFlags.RelEssen))
+            {
+                continue;
+            }
 
             ReadOnlySpan<uint> ec = fp.AsSpan();
-            consensusR.Count = 0; consensusR.ActiveCount = 0;
+            consensusR.Count = 0;
+            consensusR.ActiveCount = 0;
 
             for (int ti = 0; ti < FD.Count; ti++)
             {
                 ReadOnlySpan<uint> sp = FD.GetSpan(ti);
-                if (sp.Overlaps(ec)) continue;
+                if (sp.Overlaps(ec))
+                {
+                    continue;
+                }
 
                 int d = DistanceCapped(cube, sp, ec);
                 if (d == 0)
                 {
-                    if (IsSubsetOf(sp, ec)) continue;
+                    if (IsSubsetOf(sp, ec))
+                    {
+                        continue;
+                    }
+
                     Span<uint> spDiff = cube.Temp[0].AsSpan();
                     Span<uint> spAnd = cube.Temp[1].AsSpan();
                     AndNot(spDiff, sp, ec);
@@ -149,6 +194,7 @@ public static class EspressoMinimizer
                             gotOne = true;
                         }
                     }
+
                     if (!gotOne && cube.NumBinaryVars > 0)
                     {
                         And(sDist0, sp, ec);
@@ -172,6 +218,7 @@ public static class EspressoMinimizer
                 F.ActiveCount--;
             }
         }
+
         F = CompactInactive(F);
         return E;
     }
@@ -180,8 +227,15 @@ public static class EspressoMinimizer
     // Alternates between "by-coverage" and "by-distance-to-largest" sort each call.
     private static BitVectorFamily ReduceCover(CubeData cube, BitVectorFamily F, BitVectorFamily D, SplitStack stack, ref bool useSortReduce)
     {
-        if (useSortReduce) F = SortForReduction(cube, F);
-        else F = CoverManipulation.SortByCoverage(cube, F, CompareDescending);
+        if (useSortReduce)
+        {
+            F = SortForReduction(cube, F);
+        }
+        else
+        {
+            F = CoverManipulation.SortByCoverage(cube, F, CompareDescending);
+        }
+
         useSortReduce = !useSortReduce;
 
         CubeList FD = Cofactor.BuildCubeList(cube, F, D);
@@ -200,11 +254,19 @@ public static class EspressoMinimizer
             {
                 Copy(F.GetSpan(ri), sReduced);
                 ClearFlag(rp, CubeFlags.Prime);
-                if (IsEmpty(sReduced)) ClearFlag(rp, CubeFlags.Active);
-                else AddFlag(rp, CubeFlags.Active);
+                if (IsEmpty(sReduced))
+                {
+                    ClearFlag(rp, CubeFlags.Active);
+                }
+                else
+                {
+                    AddFlag(rp, CubeFlags.Active);
+                }
             }
+
             cube.ReturnCof(reduced);
         }
+
         FD.ReturnCubes();
         return CompactInactive(F);
     }
@@ -212,27 +274,40 @@ public static class EspressoMinimizer
     // Sort F so that cubes close to the largest come first.
     private static BitVectorFamily SortForReduction(CubeData cube, BitVectorFamily F)
     {
-        if (F.Count == 0) return F;
+        if (F.Count == 0)
+        {
+            return F;
+        }
 
         int bestSize = -1;
         BitVector largest = BitVector.Null;
         for (int si = 0; si < F.Count; si++)
         {
             int size = PopCount(F.GetSpan(si));
-            if (size > bestSize) { largest = F.GetSet(si); bestSize = size; }
+            if (size > bestSize)
+            {
+                largest = F.GetSet(si);
+                bestSize = size;
+            }
         }
+
         ReadOnlySpan<uint> largestSpan = largest.AsSpan();
         for (int si = 0; si < F.Count; si++)
         {
             ReadOnlySpan<uint> sp = F.GetSpan(si);
             int key = ((cube.NumVars - CubeDistance.Distance(cube, largestSpan, sp)) << 7)
-                      + Math.Min(PopCount(sp), 127);
+                + Math.Min(PopCount(sp), 127);
             SetSortKey(F.GetSet(si), key);
         }
+
         int[] order = ArrayPool<int>.Shared.Rent(F.Count);
-        for (int i = 0; i < F.Count; i++) order[i] = i;
+        for (int i = 0; i < F.Count; i++)
+        {
+            order[i] = i;
+        }
+
         order.AsSpan(0, F.Count).Sort((a, b) => CompareDescending(F.GetSet(a), F.GetSet(b)));
-        BitVectorFamily result = BitVectorFamily.FromSortedOrder(F, order, F.Count);
+        var result = BitVectorFamily.FromSortedOrder(F, order, F.Count);
         ArrayPool<int>.Shared.Return(order, clearArray: false);
         return result;
     }
@@ -247,15 +322,24 @@ public static class EspressoMinimizer
             {
                 BitVector lgp = F.GetSet(lgi);
                 BitVector reduced = Reducer.ReduceOneCube(cube, FD, lgp, stack);
-                if (IsEmpty(reduced.AsSpan())) throw new InvalidOperationException("empty reduction in reduce_gasp");
-                if (AreEqual(reduced.AsSpan(), F.GetSpan(lgi))) lgG = Add(lgG, lgp);
+                if (IsEmpty(reduced.AsSpan()))
+                {
+                    throw new InvalidOperationException("empty reduction in reduce_gasp");
+                }
+
+                if (AreEqual(reduced.AsSpan(), F.GetSpan(lgi)))
+                {
+                    lgG = Add(lgG, lgp);
+                }
                 else
                 {
                     ClearFlag(reduced, CubeFlags.Prime);
                     lgG = Add(lgG, reduced);
                 }
+
                 cube.ReturnCof(reduced);
             }
+
             FD.ReturnCubes();
         }
 
@@ -269,6 +353,7 @@ public static class EspressoMinimizer
             lgRAISE = new BitVector(pairData, 1, words);
             lgTemp = new BitVector(pairData, stride + 1, words);
         }
+
         Span<uint> sRAISE = lgRAISE.AsSpan(), sTemp = lgTemp.AsSpan();
 
         for (int c1 = 0; c1 < lgG.Count; c1++)
@@ -284,6 +369,7 @@ public static class EspressoMinimizer
                     ClearFlag(c2p, CubeFlags.Active);
                 }
             }
+
             Copy(sRAISE, lgG.GetSpan(c1));
 
             BitVector lgFREESET = cube.Temp[2];
@@ -295,8 +381,13 @@ public static class EspressoMinimizer
             Span<uint> xraise = cube.Temp[0].AsSpan();
             Copy(xraise, cube.EmptySet.AsSpan());
             for (int ri = 0; ri < R.Count; ri++)
+            {
                 if (HasFlag(R.GetSet(ri), CubeFlags.Active))
+                {
                     Or(xraise, xraise, R.GetSpan(ri));
+                }
+            }
+
             AndNot(xraise, sFREESET, xraise);
             Or(sRAISE, sRAISE, xraise);
             AndNot(sFREESET, sFREESET, xraise);
@@ -309,9 +400,16 @@ public static class EspressoMinimizer
             for (int c2 = 0; c2 < lgG.Count; c2++)
             {
                 BitVector c2p = lgG.GetSet(c2);
-                if (!HasFlag(c2p, CubeFlags.Active)) continue;
+                if (!HasFlag(c2p, CubeFlags.Active))
+                {
+                    continue;
+                }
+
                 if (!IsSubsetOf(lgG.GetSpan(c2), sRAISE) &&
-                    !GaspOptimizer.IsFeasiblyCovered(cube, R, c2p, lgRAISE)) continue;
+                    !GaspOptimizer.IsFeasiblyCovered(cube, R, c2p, lgRAISE))
+                {
+                    continue;
+                }
 
                 if (!fSwapped)
                 {
@@ -321,6 +419,7 @@ public static class EspressoMinimizer
                     fdSwapped = Cofactor.BuildCubeList(cube, F, D);
                     fSwapped = true;
                 }
+
                 BitVector essential = Reducer.ReduceOneCube(cube, fdSwapped, F.GetSet(c2), stack);
                 if (GaspOptimizer.IsFeasiblyCovered(cube, R, essential, lgRAISE))
                 {
@@ -328,8 +427,10 @@ public static class EspressoMinimizer
                     ClearFlag(lgTemp, CubeFlags.Prime);
                     lgG1 = Add(lgG1, lgTemp);
                 }
+
                 cube.ReturnCof(essential);
             }
+
             if (fSwapped)
             {
                 Array.Copy(savedSlot!, 0, F.Data, slotOffset, F.Stride);
@@ -344,8 +445,13 @@ public static class EspressoMinimizer
             lgG1 = FromSortedArray(sorted, RmEqual(sorted, lgG1.Count, CompareDescending), lgG1.SfSize);
             BitVectorFamily.ReturnSortedArray(sorted);
         }
+
         lgG1 = Expander.ExpandCover(cube, lgG1, R, 0);
-        if (lgG1.Count != 0) F = Irredundant.FindIrredundant(cube, Append(F, lgG1), D, stack);
+        if (lgG1.Count != 0)
+        {
+            F = Irredundant.FindIrredundant(cube, Append(F, lgG1), D, stack);
+        }
+
         return F;
     }
 
@@ -357,10 +463,18 @@ public static class EspressoMinimizer
         if (cacheActive)
         {
             key = MemoCache.BuildFamiliesKey(MemoCache.TagMakeSparse, cube, F, D1, R, 0);
-            if (MemoCache.TryGetFamily(key, cube.Size, out var cached)) return cached;
+            if (MemoCache.TryGetFamily(key, cube.Size, out var cached))
+            {
+                return cached;
+            }
         }
+
         var result = MakeSparseImpl(cube, F, D1, R, stack);
-        if (cacheActive) MemoCache.PutFamily(key, result);
+        if (cacheActive)
+        {
+            MemoCache.PutFamily(key, result);
+        }
+
         return result;
     }
 
@@ -376,7 +490,11 @@ public static class EspressoMinimizer
 
             for (int var = 0; var < cube.NumVars; var++)
             {
-                if (!cube.IsSparse(var)) continue;
+                if (!cube.IsSparse(var))
+                {
+                    continue;
+                }
+
                 ReadOnlySpan<uint> sVarMask = cube.VarMask[var].AsSpan();
 
                 for (int ii = cube.FirstPart[var]; ii <= cube.LastPart[var]; ii++)
@@ -385,29 +503,46 @@ public static class EspressoMinimizer
                     for (int fi = 0; fi < F.Count; fi++)
                     {
                         Span<uint> sp = F.GetSpan(fi);
-                        if (!Contains(sp, ii)) continue;
+                        if (!Contains(sp, ii))
+                        {
+                            continue;
+                        }
+
                         fCubeIdx[msF1.Count] = fi;
                         Span<uint> sp1 = msF1.GetSpan(msF1.Count++);
                         AndNot(sp1, sp, sVarMask);
                         Insert(sp1, ii);
                     }
+
                     msD1.Count = 0;
                     for (int di = 0; di < D1.Count; di++)
                     {
                         Span<uint> sp = D1.GetSpan(di);
-                        if (!Contains(sp, ii)) continue;
+                        if (!Contains(sp, ii))
+                        {
+                            continue;
+                        }
+
                         Span<uint> sp1 = msD1.GetSpan(msD1.Count++);
                         AndNot(sp1, sp, sVarMask);
                         Insert(sp1, ii);
                     }
+
                     Irredundant.MarkIrredundant(cube, msF1, msD1, stack);
                     for (int fi = 0; fi < msF1.Count; fi++)
                     {
                         BitVector p1 = msF1.GetSet(fi);
-                        if (HasFlag(p1, CubeFlags.Active)) continue;
+                        if (HasFlag(p1, CubeFlags.Active))
+                        {
+                            continue;
+                        }
+
                         Span<uint> sp = F.GetSpan(fCubeIdx[fi]);
                         if (var == cube.NumVars - 1 || !IsSubsetOf(sVarMask, sp))
+                        {
                             Remove(sp, ii);
+                        }
+
                         ClearFlag(F.GetSet(fCubeIdx[fi]), CubeFlags.Prime);
                     }
                 }
@@ -416,7 +551,11 @@ public static class EspressoMinimizer
             ActivateAll(F);
             for (int var = 0; var < cube.NumVars; var++)
             {
-                if (!cube.IsSparse(var)) continue;
+                if (!cube.IsSparse(var))
+                {
+                    continue;
+                }
+
                 ReadOnlySpan<uint> sVarMask = cube.VarMask[var].AsSpan();
                 for (int fi = 0; fi < F.Count; fi++)
                 {
@@ -428,16 +567,29 @@ public static class EspressoMinimizer
                     }
                 }
             }
-            if (F.Count != F.ActiveCount) F = CompactInactive(F);
+
+            if (F.Count != F.ActiveCount)
+            {
+                F = CompactInactive(F);
+            }
 
             CoverManipulation.CalculateCost(cube, F, out CoverCost cost);
-            if (cost.Total == bestCost.Total) break;
+            if (cost.Total == bestCost.Total)
+            {
+                break;
+            }
+
             bestCost = cost;
             F = Expander.ExpandCover(cube, F, R, 1);
             CoverManipulation.CalculateCost(cube, F, out cost);
-            if (cost.Total == bestCost.Total) break;
+            if (cost.Total == bestCost.Total)
+            {
+                break;
+            }
+
             bestCost = cost;
         }
+
         ArrayPool<int>.Shared.Return(fCubeIdxBuf, clearArray: false);
         return F;
     }

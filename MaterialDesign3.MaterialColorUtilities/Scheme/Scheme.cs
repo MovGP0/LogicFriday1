@@ -106,7 +106,7 @@ public record Scheme(
             // Shadow, Scrim
             unchecked((int)0xff000000), // shadow (0 with alpha 255)
             unchecked((int)0xff000000), // scrim
-            // Inverse
+                                        // Inverse
             core.n1.Tone(20),
             core.n1.Tone(95),
             core.a1.Tone(80)
@@ -149,7 +149,7 @@ public record Scheme(
             // Shadow, Scrim
             unchecked((int)0xff000000), // shadow
             unchecked((int)0xff000000), // scrim
-            // Inverse
+                                        // Inverse
             core.n1.Tone(90),
             core.n1.Tone(20),
             core.a1.Tone(40)

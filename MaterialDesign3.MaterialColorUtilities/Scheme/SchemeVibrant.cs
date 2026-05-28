@@ -1,6 +1,6 @@
 ﻿namespace MaterialColorUtilities;
 
-public class SchemeVibrant: DynamicScheme
+public class SchemeVibrant : DynamicScheme
 {
     public SchemeVibrant(Hct sourceColorHct, bool isDark, double contrastLevel)
         : this(sourceColorHct, isDark, contrastLevel, DEFAULT_SPEC_VERSION, DEFAULT_PLATFORM)

@@ -267,7 +267,7 @@ public static class TruthTableImporter
     private static string[] SplitFields(string line)
     {
         return line
-            .Split([ ',', '\t' ], StringSplitOptions.None)
+            .Split([',', '\t'], StringSplitOptions.None)
             .Select(static part => part.Trim().Trim('"'))
             .ToArray();
     }

@@ -8,9 +8,17 @@ public static class GaspOptimizer
         BitVectorOps.Or(sr, RAISE.AsSpan(), p.AsSpan());
         for (int i = 0; i < R.Count; i++)
         {
-            if (!BitVectorOps.HasFlag(R.GetSet(i), CubeFlags.Active)) continue;
-            if (CubeDistance.DistanceCapped(cube, R.GetSpan(i), sr) == 0) return false;
+            if (!BitVectorOps.HasFlag(R.GetSet(i), CubeFlags.Active))
+            {
+                continue;
+            }
+
+            if (CubeDistance.DistanceCapped(cube, R.GetSpan(i), sr) == 0)
+            {
+                return false;
+            }
         }
+
         return true;
     }
 }

@@ -1,6 +1,6 @@
 ﻿namespace MaterialColorUtilities;
 
-public sealed class QuantizerWu: Quantizer
+public sealed class QuantizerWu : Quantizer
 {
     private int[] weights = default!;
     private int[] momentsR = default!;
@@ -105,7 +105,8 @@ public sealed class QuantizerWu: Quantizer
     private CreateBoxesResult CreateBoxes(int maxColorCount)
     {
         cubes = new Box[maxColorCount];
-        for (int i = 0; i < maxColorCount; i++) cubes[i] = new Box();
+        for (int i = 0; i < maxColorCount; i++)
+            cubes[i] = new Box();
         double[] volumeVariance = new double[maxColorCount];
         var firstBox = cubes[0];
         firstBox.r1 = INDEX_COUNT - 1;
@@ -277,7 +278,8 @@ public sealed class QuantizerWu: Quantizer
             halfG = bottomG + Top(cube, direction, i, momentsG);
             halfB = bottomB + Top(cube, direction, i, momentsB);
             halfW = bottomW + Top(cube, direction, i, weights);
-            if (halfW == 0) continue;
+            if (halfW == 0)
+                continue;
 
             double tempNumerator = (double)halfR * halfR + (double)halfG * halfG + (double)halfB * halfB;
             double tempDenominator = halfW;
@@ -287,7 +289,8 @@ public sealed class QuantizerWu: Quantizer
             halfG = wholeG - halfG;
             halfB = wholeB - halfB;
             halfW = wholeW - halfW;
-            if (halfW == 0) continue;
+            if (halfW == 0)
+                continue;
 
             tempNumerator = (double)halfR * halfR + (double)halfG * halfG + (double)halfB * halfB;
             tempDenominator = halfW;
@@ -358,7 +361,10 @@ public sealed class QuantizerWu: Quantizer
         };
     }
 
-    private enum Direction { RED, GREEN, BLUE }
+    private enum Direction
+    {
+        RED, GREEN, BLUE
+    }
 
     private sealed class MaximizeResult
     {
