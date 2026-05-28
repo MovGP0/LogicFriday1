@@ -1,7 +1,5 @@
 <Solution>
-  <Folder Name="/Espresso/">
-    <Project Path="Espresso/EspressoII/EspressoII.csproj" />
-  </Folder>
+  <Project Path="LogicFriday1.EspressoII/LogicFriday1.EspressoII.csproj" />
   <Project Path="LogicFriday1.MaterialIcons/LogicFriday1.MaterialIcons.csproj" />
   <Project Path="LogicFriday1.Sis/LogicFriday1.Sis.csproj" />
   <Project Path="LogicFriday1/LogicFriday1.csproj" />

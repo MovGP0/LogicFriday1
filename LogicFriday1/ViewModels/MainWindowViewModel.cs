@@ -249,7 +249,7 @@ public partial class MainWindowViewModel : ObservableObject
 
             SelectedFunctionSummary = mappedSummary;
             SelectedFunctionCount = 1;
-            ShowFunction(mappedFunction);
+            ShowGateDiagramFunction(mappedFunction);
             StatusText = $"Mapped to gates: {mappedSummary.Gates} gates";
             return true;
         }
@@ -531,6 +531,12 @@ public partial class MainWindowViewModel : ObservableObject
 
     public void ShowFunction(LogicFunction logicFunction)
     {
+        if (logicFunction is GateDiagramFunction gateDiagramFunction)
+        {
+            ShowGateDiagramFunction(gateDiagramFunction);
+            return;
+        }
+
         if (logicFunction.MinimizedFunction is null)
         {
             IsMinimizedViewSelected = false;
@@ -555,6 +561,36 @@ public partial class MainWindowViewModel : ObservableObject
         IsGateDiagramVisible = false;
         IsFunctionDetailVisible = true;
         StatusText = $"Showing {logicFunction.OutputNames.Length} output function";
+    }
+
+    private void ShowGateDiagramFunction(GateDiagramFunction logicFunction)
+    {
+        if (logicFunction.MinimizedFunction is null)
+        {
+            IsMinimizedViewSelected = false;
+            NotifyFunctionViewModeChanged();
+        }
+
+        LogicEquationText = logicFunction.EquationText;
+        RefreshFunctionTruthTable(logicFunction);
+        GateDiagramItems.Clear();
+        foreach (var item in logicFunction.Items)
+        {
+            GateDiagramItems.Add(item);
+        }
+
+        GateDiagramWires.Clear();
+        foreach (var wire in logicFunction.Wires)
+        {
+            GateDiagramWires.Add(wire);
+        }
+
+        SelectedGatePaletteItem = null;
+        IsEquationEditorVisible = false;
+        IsTruthTableVisible = false;
+        IsGateDiagramVisible = true;
+        IsFunctionDetailVisible = false;
+        StatusText = $"Showing mapped gate diagram for {logicFunction.OutputNames.Length} output function";
     }
 
     private LogicFunction CreateTruthTableFunction()
