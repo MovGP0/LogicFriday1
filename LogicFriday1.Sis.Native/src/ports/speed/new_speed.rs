@@ -177,7 +177,10 @@ impl NewSpeedGraph {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum NewSpeedError {
-    MissingSisGraphPorts {},
+    SisGraphDependency {
+        operation: &'static str,
+        source: &'static str,
+    },
     UnknownNode(NodeId),
     MissingWeight(NodeId),
     MismatchedDeltaInputs {
@@ -189,9 +192,9 @@ pub enum NewSpeedError {
 impl fmt::Display for NewSpeedError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingSisGraphPorts {} => write!(
+            Self::SisGraphDependency { operation, source } => write!(
                 f,
-                "SIS new_speed optimizer is blocked by unported SIS dependencies"
+                "{operation} requires SIS graph optimization from {source}"
             ),
             Self::UnknownNode(node) => write!(f, "unknown new_speed node {:?}", node),
             Self::MissingWeight(node) => write!(f, "missing transform weight for {:?}", node),
@@ -236,7 +239,10 @@ pub fn new_speed_network_bound<Network>(
     _network: &mut Network,
     _options: &NewSpeedOptions,
 ) -> Result<bool, NewSpeedError> {
-    Err(NewSpeedError::MissingSisGraphPorts {})
+    Err(NewSpeedError::SisGraphDependency {
+        operation: "new_speed",
+        source: "LogicSynthesis/sis/speed/new_speed.c:30",
+    })
 }
 
 pub fn adaptive_initial_threshold(
@@ -1001,7 +1007,10 @@ mod tests {
         let mut network = ();
         assert_eq!(
             new_speed_network_bound(&mut network, &NewSpeedOptions::default()),
-            Err(NewSpeedError::MissingSisGraphPorts {})
+            Err(NewSpeedError::SisGraphDependency {
+                operation: "new_speed",
+                source: "LogicSynthesis/sis/speed/new_speed.c:30",
+            })
         );
     }
 }

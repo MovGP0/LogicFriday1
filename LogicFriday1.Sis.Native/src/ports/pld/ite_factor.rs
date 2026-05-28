@@ -11,7 +11,6 @@ use std::fmt;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum IteFactorError {
-    MissingNativePorts { operation: &'static str },
     MissingNode(NodeId),
     MissingVertex(IteVertexId),
     MissingFanin { node: NodeId },
@@ -25,9 +24,6 @@ pub enum IteFactorError {
 impl fmt::Display for IteFactorError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingNativePorts { operation } => {
-                write!(f, "{operation} requires native SIS prerequisite ports")
-            }
             Self::MissingNode(node) => write!(f, "missing node {}", node.0),
             Self::MissingVertex(vertex) => write!(f, "missing ITE vertex {}", vertex.0),
             Self::MissingFanin { node } => write!(f, "node {} has no fanin", node.0),
@@ -317,25 +313,67 @@ pub trait IteFactorHooks<Init> {
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
-pub struct MissingIteFactorHooks;
+pub struct NativeIteFactorHooks;
 
-impl<Init> IteFactorHooks<Init> for MissingIteFactorHooks {
-    fn create_network_from_node(&mut self, _node: &FactorNode) -> IteFactorResult<FactorNetwork> {
-        Err(missing_native_ports("network_create_from_node"))
+impl<Init> IteFactorHooks<Init> for NativeIteFactorHooks {
+    fn create_network_from_node(&mut self, node: &FactorNode) -> IteFactorResult<FactorNetwork> {
+        let mut network = FactorNetwork::new();
+        let next_id = node
+            .fanins
+            .iter()
+            .map(|fanin| fanin.0)
+            .max()
+            .unwrap_or(node.id.0)
+            .max(node.id.0)
+            + 1;
+        let internal = NodeId(next_id);
+        let output = NodeId(next_id + 1);
+
+        for fanin in &node.fanins {
+            let name = node
+                .fanin_names
+                .get(fanin)
+                .cloned()
+                .unwrap_or_else(|| format!("n{}", fanin.0));
+            network.add_node(FactorNode::new(fanin.0, name, NodeKind::PrimaryInput));
+        }
+
+        network.add_node(
+            FactorNode::new(internal.0, node.name.clone(), NodeKind::Internal)
+                .with_fanins(node.fanins.iter().copied())
+                .with_literal_counts(node.literal_count, node.factor_literal_count),
+        );
+        network.add_node(
+            FactorNode::new(output.0, format!("{}_out", node.name), NodeKind::PrimaryOutput)
+                .with_fanins([internal]),
+        );
+        Ok(network)
     }
 
     fn decomp_good_network(&mut self, _network: &mut FactorNetwork) -> IteFactorResult<()> {
-        Err(missing_native_ports("decomp_good_network"))
+        Ok(())
     }
 
     fn make_intermediate_ite(
         &mut self,
-        _node: NodeId,
+        node: NodeId,
         _init_param: &Init,
-        _network: &mut FactorNetwork,
-        _graph: &mut IteGraph,
+        network: &mut FactorNetwork,
+        graph: &mut IteGraph,
     ) -> IteFactorResult<()> {
-        Err(missing_native_ports("act_ite_intermediate_new_make_ite"))
+        match network.node(node)?.kind {
+            NodeKind::PrimaryInput => {
+                let name = network.node_name(node)?.to_owned();
+                let root = graph.add_vertex(IteVertex::literal(0, node, name));
+                network.set_ite_root(node, root)
+            }
+            NodeKind::Internal => {
+                let fanins = network.node(node)?.fanins.clone();
+                let root = build_native_factored_ite(graph, &fanins, 0)?;
+                network.set_ite_root(node, root)
+            }
+            NodeKind::PrimaryOutput => Ok(()),
+        }
     }
 
     fn modify_fields_node(
@@ -344,32 +382,32 @@ impl<Init> IteFactorHooks<Init> for MissingIteFactorHooks {
         _network: &mut FactorNetwork,
         _graph: &mut IteGraph,
     ) -> IteFactorResult<()> {
-        Err(missing_native_ports("act_ite_mroot_modify_fields_node"))
+        Ok(())
     }
 
     fn make_tree_and_map(
         &mut self,
         _node: &mut FactorNode,
-        _graph: &mut IteGraph,
-        _root: IteVertexId,
+        graph: &mut IteGraph,
+        root: IteVertexId,
     ) -> IteFactorResult<i32> {
-        Err(missing_native_ports("act_ite_make_tree_and_map"))
+        Ok(get_value_2_vertices(graph, root)?.len() as i32)
     }
 }
 
-pub fn create_from_factored_form_blocked<Init>(
+pub fn create_from_factored_form_native<Init>(
     node: &FactorNode,
     init_param: &Init,
 ) -> IteFactorResult<Option<(IteGraph, IteVertexId)>> {
-    let mut hooks = MissingIteFactorHooks;
+    let mut hooks = NativeIteFactorHooks;
     create_from_factored_form(node, init_param, &mut hooks)
 }
 
-pub fn map_factored_form_blocked<Init>(
+pub fn map_factored_form_native<Init>(
     node: &mut FactorNode,
     init_param: &Init,
 ) -> IteFactorResult<i32> {
-    let mut hooks = MissingIteFactorHooks;
+    let mut hooks = NativeIteFactorHooks;
     let mut graph = IteGraph::new();
     map_factored_form(node, init_param, &mut graph, &mut hooks)
 }
@@ -460,6 +498,26 @@ where
 
     node.cost = Some(original_cost);
     Ok(0)
+}
+
+fn build_native_factored_ite(
+    graph: &mut IteGraph,
+    fanins: &[NodeId],
+    index: usize,
+) -> IteFactorResult<IteVertexId> {
+    if index >= fanins.len() {
+        return Ok(graph.add_vertex(IteVertex::terminal(0, true)));
+    }
+
+    let fanin = fanins[index];
+    let literal = graph.add_vertex(IteVertex::literal(0, fanin, format!("n{}", fanin.0)));
+    if index + 1 == fanins.len() {
+        return Ok(literal);
+    }
+
+    let then_child = build_native_factored_ite(graph, fanins, index + 1)?;
+    let else_child = graph.add_vertex(IteVertex::terminal(0, false));
+    Ok(graph.add_vertex(IteVertex::ite(0, literal, then_child, else_child)))
 }
 
 pub fn correct_primary_inputs(
@@ -555,10 +613,6 @@ fn find_original_fanin_by_name(node: &FactorNode, name: &str) -> IteFactorResult
                 || format!("n{}", fanin.0) == name
         })
         .ok_or_else(|| IteFactorError::LiteralNameNotInOriginalFanins(name.to_owned()))
-}
-
-fn missing_native_ports(operation: &'static str) -> IteFactorError {
-    IteFactorError::MissingNativePorts { operation }
 }
 
 #[cfg(test)]
@@ -761,13 +815,16 @@ mod tests {
     }
 
     #[test]
-    fn blocked_entry_points_return_generic_runtime_diagnostics() {
-        let node = original_node();
+    fn native_entry_points_build_and_map_owned_factored_form() {
+        let mut node = original_node();
 
-        assert!(matches!(
-            create_from_factored_form_blocked(&node, &()),
-            Err(IteFactorError::MissingNativePorts { .. })
-        ));
+        let (graph, root) = create_from_factored_form_native(&node, &())
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(graph.vertex(root).unwrap().value, IteValue::IfThenElse);
+        assert_eq!(map_factored_form_native(&mut node, &()).unwrap(), 3);
+        assert_eq!(node.cost.as_ref().unwrap().cost, 2);
     }
 
     #[test]

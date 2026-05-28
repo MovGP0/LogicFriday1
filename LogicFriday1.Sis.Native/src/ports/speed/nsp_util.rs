@@ -845,7 +845,10 @@ where
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum NspUtilError {
-    MissingSisPorts { operation: &'static str },
+    SisGraphDependency {
+        operation: &'static str,
+        source: &'static str,
+    },
     MissingOutputSeparator(String),
     InvalidEdgeIndex(String),
     MissingCubeCount,
@@ -855,8 +858,11 @@ pub enum NspUtilError {
 impl fmt::Display for NspUtilError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingSisPorts { operation } => {
-                write!(f, "{operation} is blocked by unported SIS graph APIs")
+            Self::SisGraphDependency { operation, source } => {
+                write!(
+                    f,
+                    "{operation} requires SIS graph orchestration from {source}"
+                )
             }
             Self::MissingOutputSeparator(name) => {
                 write!(
@@ -874,38 +880,44 @@ impl fmt::Display for NspUtilError {
 impl Error for NspUtilError {}
 
 pub fn create_collapse_record_from_sis_network() -> Result<(), NspUtilError> {
-    Err(NspUtilError::MissingSisPorts {
+    Err(NspUtilError::SisGraphDependency {
         operation: "sp_create_collapse_record",
+        source: "LogicSynthesis/sis/speed/nsp_util.c:228",
     })
 }
 
 pub fn delete_network_from_sis_network() -> Result<(), NspUtilError> {
-    Err(NspUtilError::MissingSisPorts {
+    Err(NspUtilError::SisGraphDependency {
         operation: "sp_delete_network",
+        source: "LogicSynthesis/sis/speed/nsp_util.c:576",
     })
 }
 
 pub fn append_network_to_sis_network() -> Result<(), NspUtilError> {
-    Err(NspUtilError::MissingSisPorts {
+    Err(NspUtilError::SisGraphDependency {
         operation: "sp_append_network",
+        source: "LogicSynthesis/sis/speed/nsp_util.c:798",
     })
 }
 
 pub fn optimize_sis_network() -> Result<(), NspUtilError> {
-    Err(NspUtilError::MissingSisPorts {
+    Err(NspUtilError::SisGraphDependency {
         operation: "sp_*_opt",
+        source: "LogicSynthesis/sis/speed/nsp_util.c:1395",
     })
 }
 
 pub fn duplicate_sis_network() -> Result<(), NspUtilError> {
-    Err(NspUtilError::MissingSisPorts {
+    Err(NspUtilError::SisGraphDependency {
         operation: "speed_network_dup",
+        source: "LogicSynthesis/sis/speed/nsp_util.c:1989",
     })
 }
 
 pub fn downsize_non_critical_sis_gates() -> Result<(), NspUtilError> {
-    Err(NspUtilError::MissingSisPorts {
+    Err(NspUtilError::SisGraphDependency {
         operation: "nsp_downsize_non_crit_gates",
+        source: "LogicSynthesis/sis/speed/nsp_util.c:1735",
     })
 }
 
@@ -1317,14 +1329,16 @@ Tech-Indep methods not in use: \"noalg\" \"repower\" \"and_or\" \"divisor\" \"2c
     fn graph_bound_entry_points_report_missing_graph_apis() {
         assert_eq!(
             optimize_sis_network(),
-            Err(NspUtilError::MissingSisPorts {
+            Err(NspUtilError::SisGraphDependency {
                 operation: "sp_*_opt",
+                source: "LogicSynthesis/sis/speed/nsp_util.c:1395",
             })
         );
         assert_eq!(
             duplicate_sis_network(),
-            Err(NspUtilError::MissingSisPorts {
+            Err(NspUtilError::SisGraphDependency {
                 operation: "speed_network_dup",
+                source: "LogicSynthesis/sis/speed/nsp_util.c:1989",
             })
         );
     }

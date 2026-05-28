@@ -2,10 +2,9 @@
 //!
 //! Generalized bypass is tightly coupled to SIS `network_t`/`node_t` mutation:
 //! Boolean-difference construction, KMS path duplication, fanin patching,
-//! cutset selection, decomposition, and network sweeping all require C modules
-//! that are not native Rust yet. This module ports the timing record and bypass
-//! discovery logic into an owned Rust graph model, and reports explicit missing
-//! dependency errors for the network-rewrite entry points.
+//! cutset selection, decomposition, and network sweeping all belong behind the
+//! native graph backend. This module ports the timing record, bypass discovery,
+//! cut weighting, and transform orchestration into an owned Rust graph model.
 
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
@@ -271,7 +270,6 @@ pub enum GbxError {
     MissingFanin { node: NodeId, fanin: NodeId },
     MissingPinDelay { node: NodeId, pin: usize },
     MissingRecord(NodeId),
-    MissingSisPorts { operation: &'static str },
 }
 
 impl fmt::Display for GbxError {
@@ -287,9 +285,6 @@ impl fmt::Display for GbxError {
                 node
             ),
             Self::MissingRecord(node) => write!(f, "missing GBX timing record for {:?}", node),
-            Self::MissingSisPorts { operation } => {
-                write!(f, "{operation} is blocked by unported SIS dependencies")
-            }
         }
     }
 }
@@ -679,22 +674,195 @@ pub fn critical_node_cut_weights(
     result
 }
 
-pub fn take_bypass_from_sis_network() -> Result<(), GbxError> {
-    Err(GbxError::MissingSisPorts {
-        operation: "take_bypass",
-    })
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct GbxApplyOptions {
+    pub mux_delay: f64,
+    pub actual_mux_delay: f64,
+    pub delay_model: DelayModel,
 }
 
-pub fn do_gbx_transform_from_sis_network() -> Result<GbxTransformResult, GbxError> {
-    Err(GbxError::MissingSisPorts {
-        operation: "do_gbx_transform",
-    })
+impl GbxApplyOptions {
+    pub const fn new(mux_delay: f64, actual_mux_delay: f64, delay_model: DelayModel) -> Self {
+        Self {
+            mux_delay,
+            actual_mux_delay,
+            delay_model,
+        }
+    }
 }
 
-pub fn do_bypass_transform_from_sis_network() -> Result<(), GbxError> {
-    Err(GbxError::MissingSisPorts {
-        operation: "do_bypass_transform",
-    })
+pub trait GbxTransformBackend {
+    type Error: Error + Send + Sync + 'static;
+
+    fn select_cutset(
+        &mut self,
+        cut_weights: &HashMap<NodeId, i32>,
+    ) -> Result<Vec<NodeId>, Self::Error>;
+
+    fn take_bypass(
+        &mut self,
+        bypass: &Bypass,
+        options: GbxApplyOptions,
+    ) -> Result<bool, Self::Error>;
+
+    fn decompose_after_unit_delay(&mut self, options: GbxApplyOptions) -> Result<(), Self::Error>;
+
+    fn sweep(&mut self) -> Result<(), Self::Error>;
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum GbxTransformError<E> {
+    Analysis(GbxError),
+    Backend(E),
+}
+
+impl<E> fmt::Display for GbxTransformError<E>
+where
+    E: fmt::Display,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Analysis(error) => write!(f, "{error}"),
+            Self::Backend(error) => write!(f, "{error}"),
+        }
+    }
+}
+
+impl<E> Error for GbxTransformError<E>
+where
+    E: Error + 'static,
+{
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            Self::Analysis(error) => Some(error),
+            Self::Backend(error) => Some(error),
+        }
+    }
+}
+
+pub fn take_bypass_bound<B>(
+    backend: &mut B,
+    bypass: &Bypass,
+    options: GbxApplyOptions,
+) -> Result<bool, GbxTransformError<B::Error>>
+where
+    B: GbxTransformBackend,
+{
+    backend
+        .take_bypass(bypass, options)
+        .map_err(GbxTransformError::Backend)
+}
+
+pub fn do_gbx_transform_bound<B>(
+    backend: &mut B,
+    network: &GbxNetwork,
+    options: &GbxOptions,
+    actual_mux_delay: f64,
+) -> Result<GbxTransformResult, GbxTransformError<B::Error>>
+where
+    B: GbxTransformBackend,
+{
+    let mut analysis = find_bypasses(network, options).map_err(GbxTransformError::Analysis)?;
+    if analysis.bypasses.is_empty() {
+        return Ok(GbxTransformResult::NoBypassesFound);
+    }
+
+    assign_bypass_weights(&mut analysis.bypasses);
+    let by_last = analysis
+        .bypasses
+        .iter()
+        .map(|bypass| (bypass.last_node, bypass))
+        .collect::<HashMap<_, _>>();
+    let cut_weights = critical_node_cut_weights(
+        network,
+        &analysis.records,
+        &analysis.bypasses,
+        options.epsilon,
+    );
+    let cutset = backend
+        .select_cutset(&cut_weights)
+        .map_err(GbxTransformError::Backend)?;
+    let apply_options =
+        GbxApplyOptions::new(options.mux_delay, actual_mux_delay, options.delay_model);
+    let mut taken = false;
+    let mut no_improvement = false;
+
+    for node in cutset {
+        if let Some(bypass) = by_last.get(&node) {
+            if take_bypass_bound(backend, bypass, apply_options)? {
+                taken = true;
+            }
+        } else if analysis
+            .records
+            .get(&node)
+            .is_some_and(|record| record.slack == 0.0)
+        {
+            no_improvement = true;
+        }
+    }
+
+    if matches!(
+        options.delay_model,
+        DelayModel::Unit | DelayModel::UnitFanout
+    ) && actual_mux_delay > 1.0
+    {
+        backend
+            .decompose_after_unit_delay(apply_options)
+            .map_err(GbxTransformError::Backend)?;
+    }
+    backend.sweep().map_err(GbxTransformError::Backend)?;
+
+    if !taken {
+        Ok(GbxTransformResult::NoCutset)
+    } else if no_improvement {
+        Ok(GbxTransformResult::SomeBypassesNoCutset)
+    } else {
+        Ok(GbxTransformResult::BypassesTaken)
+    }
+}
+
+pub fn do_bypass_transform_bound<B>(
+    backend: &mut B,
+    network: &GbxNetwork,
+    options: &GbxOptions,
+    actual_mux_delay: f64,
+) -> Result<GbxTransformResult, GbxTransformError<B::Error>>
+where
+    B: GbxTransformBackend,
+{
+    let mut analysis = find_bypasses(network, options).map_err(GbxTransformError::Analysis)?;
+    if analysis.bypasses.is_empty() {
+        return Ok(GbxTransformResult::NoBypassesFound);
+    }
+
+    analysis
+        .bypasses
+        .sort_by(|left, right| right.gain.total_cmp(&left.gain));
+    let apply_options =
+        GbxApplyOptions::new(options.mux_delay, actual_mux_delay, options.delay_model);
+    let mut taken = false;
+    for bypass in &analysis.bypasses {
+        if take_bypass_bound(backend, bypass, apply_options)? {
+            taken = true;
+        }
+    }
+
+    if matches!(
+        options.delay_model,
+        DelayModel::Unit | DelayModel::UnitFanout
+    ) && actual_mux_delay > 1.0
+    {
+        backend
+            .decompose_after_unit_delay(apply_options)
+            .map_err(GbxTransformError::Backend)?;
+    }
+    backend.sweep().map_err(GbxTransformError::Backend)?;
+
+    if taken {
+        Ok(GbxTransformResult::BypassesTaken)
+    } else {
+        Ok(GbxTransformResult::NoCutset)
+    }
 }
 
 fn new_find_bypass_nodes(
@@ -1192,25 +1360,169 @@ mod tests {
         assert_eq!(bypasses[1].weight, 3);
     }
 
+    #[derive(Clone, Debug, Eq, PartialEq)]
+    struct TestError;
+
+    impl fmt::Display for TestError {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "failed")
+        }
+    }
+
+    impl Error for TestError {}
+
+    #[derive(Clone, Debug, PartialEq)]
+    enum Event {
+        SelectCutset(Vec<NodeId>),
+        TakeBypass {
+            first: NodeId,
+            last: NodeId,
+            mux_delay: f64,
+            actual_mux_delay: f64,
+        },
+        DecomposeAfterUnitDelay,
+        Sweep,
+    }
+
+    struct RecordingBackend {
+        cutset: Vec<NodeId>,
+        take_results: Vec<bool>,
+        events: Vec<Event>,
+    }
+
+    impl RecordingBackend {
+        fn new(cutset: Vec<NodeId>, take_results: Vec<bool>) -> Self {
+            Self {
+                cutset,
+                take_results,
+                events: Vec::new(),
+            }
+        }
+    }
+
+    impl GbxTransformBackend for RecordingBackend {
+        type Error = TestError;
+
+        fn select_cutset(
+            &mut self,
+            cut_weights: &HashMap<NodeId, i32>,
+        ) -> Result<Vec<NodeId>, Self::Error> {
+            let mut nodes = cut_weights.keys().copied().collect::<Vec<_>>();
+            nodes.sort_by_key(|node| node.0);
+            self.events.push(Event::SelectCutset(nodes));
+            Ok(self.cutset.clone())
+        }
+
+        fn take_bypass(
+            &mut self,
+            bypass: &Bypass,
+            options: GbxApplyOptions,
+        ) -> Result<bool, Self::Error> {
+            self.events.push(Event::TakeBypass {
+                first: bypass.first_node,
+                last: bypass.last_node,
+                mux_delay: options.mux_delay,
+                actual_mux_delay: options.actual_mux_delay,
+            });
+            Ok(self.take_results.pop().unwrap_or(true))
+        }
+
+        fn decompose_after_unit_delay(
+            &mut self,
+            _options: GbxApplyOptions,
+        ) -> Result<(), Self::Error> {
+            self.events.push(Event::DecomposeAfterUnitDelay);
+            Ok(())
+        }
+
+        fn sweep(&mut self) -> Result<(), Self::Error> {
+            self.events.push(Event::Sweep);
+            Ok(())
+        }
+    }
+
+    fn bypass_network() -> (GbxNetwork, NodeId, NodeId, NodeId) {
+        let mut network = GbxNetwork::new();
+        let a = network.add_node(pi("a", 10.0, 0.0));
+        let side1 = network.add_node(pi("side1", 8.0, 0.0));
+        let side2 = network.add_node(pi("side2", 7.0, 0.0));
+        let n1 = network.add_node(node("n1", 0.0, 11.0, 11.0));
+        let n2 = network.add_node(node("n2", 0.0, 12.0, 13.0));
+        network
+            .add_fanin(n1, a, InputPhase::PositiveUnate, DelayTime::new(1.0, 1.0))
+            .unwrap();
+        network
+            .add_fanin(
+                n1,
+                side1,
+                InputPhase::PositiveUnate,
+                DelayTime::new(0.5, 0.5),
+            )
+            .unwrap();
+        network
+            .add_fanin(n2, n1, InputPhase::PositiveUnate, DelayTime::new(2.0, 2.0))
+            .unwrap();
+        network
+            .add_fanin(
+                n2,
+                side2,
+                InputPhase::PositiveUnate,
+                DelayTime::new(0.5, 0.5),
+            )
+            .unwrap();
+
+        (network, a, n1, n2)
+    }
+
     #[test]
-    fn sis_bound_entry_points_report_blocking_ports() {
+    fn gbx_cutset_transform_selects_weighted_cut_and_applies_matching_bypass() {
+        let (network, a, _n1, n2) = bypass_network();
+        let options = GbxOptions::newer(0.0, 1.0, DelayModel::Unit);
+        let mut backend = RecordingBackend::new(vec![n2], vec![true]);
+
         assert_eq!(
-            take_bypass_from_sis_network(),
-            Err(GbxError::MissingSisPorts {
-                operation: "take_bypass",
-            })
+            do_gbx_transform_bound(&mut backend, &network, &options, 2.0),
+            Ok(GbxTransformResult::BypassesTaken)
         );
+
         assert_eq!(
-            do_gbx_transform_from_sis_network(),
-            Err(GbxError::MissingSisPorts {
-                operation: "do_gbx_transform",
-            })
+            backend.events,
+            vec![
+                Event::SelectCutset(vec![NodeId(3), NodeId(4)]),
+                Event::TakeBypass {
+                    first: a,
+                    last: n2,
+                    mux_delay: 1.0,
+                    actual_mux_delay: 2.0,
+                },
+                Event::DecomposeAfterUnitDelay,
+                Event::Sweep,
+            ]
         );
+    }
+
+    #[test]
+    fn gbx_all_bypasses_transform_runs_bypasses_in_gain_order() {
+        let (network, a, _n1, n2) = bypass_network();
+        let options = GbxOptions::newer(0.0, 1.0, DelayModel::Unit);
+        let mut backend = RecordingBackend::new(Vec::new(), vec![true]);
+
         assert_eq!(
-            do_bypass_transform_from_sis_network(),
-            Err(GbxError::MissingSisPorts {
-                operation: "do_bypass_transform",
-            })
+            do_bypass_transform_bound(&mut backend, &network, &options, 1.0),
+            Ok(GbxTransformResult::BypassesTaken)
+        );
+
+        assert_eq!(
+            backend.events,
+            vec![
+                Event::TakeBypass {
+                    first: a,
+                    last: n2,
+                    mux_delay: 1.0,
+                    actual_mux_delay: 1.0,
+                },
+                Event::Sweep,
+            ]
         );
     }
 }

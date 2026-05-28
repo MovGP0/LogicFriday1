@@ -4,9 +4,8 @@
 //! construction of per-node capacitance/probability/delay tables, mapped-delay
 //! normalization, and dispatch to the concrete combinational/sequential/
 //! pipeline/dynamic engines. This port keeps the table-building behavior on
-//! explicit Rust data structures. Direct dispatch from a legacy SIS `network_t`
-//! remains gated with native integration errors until the SIS object model is
-//! available.
+//! explicit Rust data structures and dispatches through a native Rust backend
+//! trait instead of exposing the legacy per-file C ABI.
 
 use std::collections::HashMap;
 use std::error::Error;
@@ -19,33 +18,6 @@ pub const DEFAULT_MAX_INPUT_SIZING: usize = 4;
 pub const DEFAULT_PS_MAX_ALLOWED_ERROR: f64 = 0.01;
 pub const CAP_IN_LATCH: i32 = 4;
 pub const CAP_OUT_LATCH: i32 = 20;
-pub fn sis_power_estimate_blocked() -> Result<(), PowerMainError> {
-    missing_sis_dependencies(PowerMainOperation::PowerEstimate)
-}
-
-pub fn sis_power_main_driver_blocked() -> Result<(), PowerMainError> {
-    missing_sis_dependencies(PowerMainOperation::PowerMainDriver)
-}
-
-pub fn sis_power_command_line_interface_blocked() -> Result<(), PowerMainError> {
-    missing_sis_dependencies(PowerMainOperation::PowerCommandLineInterface)
-}
-
-pub fn sis_power_get_node_info_blocked() -> Result<(), PowerMainError> {
-    missing_sis_dependencies(PowerMainOperation::PowerGetNodeInfo)
-}
-
-fn missing_sis_dependencies(operation: PowerMainOperation) -> Result<(), PowerMainError> {
-    Err(PowerMainError::MissingSisDependencies { operation })
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum PowerMainOperation {
-    PowerCommandLineInterface,
-    PowerEstimate,
-    PowerMainDriver,
-    PowerGetNodeInfo,
-}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum EstimationMode {
@@ -742,6 +714,62 @@ pub fn power_get_mapped_delay(
     Ok(((actual_delay + 0.1) / 0.2) as i32)
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct PowerMainReport {
+    pub options: PowerCommandOptions,
+    pub tables: PowerTables,
+    pub total_power: f64,
+}
+
+impl PowerMainReport {
+    pub fn summary(&self, network_name: &str, word_bits: usize) -> String {
+        command_summary(network_name, &self.options, self.total_power, word_bits)
+    }
+}
+
+pub trait PowerMainBackend {
+    fn estimate_bdd(
+        &mut self,
+        network: &PowerNetwork,
+        tables: &mut PowerTables,
+        options: &PowerCommandOptions,
+    ) -> Result<f64, PowerMainError>;
+
+    fn estimate_sampled(
+        &mut self,
+        network: &PowerNetwork,
+        tables: &mut PowerTables,
+        options: &PowerCommandOptions,
+    ) -> Result<f64, PowerMainError>;
+}
+
+pub fn power_main_driver(
+    network: &PowerNetwork,
+    options: &PowerCommandOptions,
+    overrides: &[PowerInfoOverride],
+    backend: &mut impl PowerMainBackend,
+) -> Result<PowerMainReport, PowerMainError> {
+    let mut tables = power_get_node_info(
+        network,
+        overrides,
+        options.logic_form,
+        options.input_sizing,
+        &options.globals,
+    )?;
+    tables.apply_delay_model(network, options.delay)?;
+
+    let total_power = match options.mode {
+        EstimationMode::Bdd => backend.estimate_bdd(network, &mut tables, options)?,
+        EstimationMode::Sample => backend.estimate_sampled(network, &mut tables, options)?,
+    };
+
+    Ok(PowerMainReport {
+        options: options.clone(),
+        tables,
+        total_power,
+    })
+}
+
 pub fn power_estimate_defaults(
     circuit_type: CircuitType,
     delay: DelayModel,
@@ -755,6 +783,29 @@ pub fn power_estimate_defaults(
         globals: PowerGlobals::default(),
         ..PowerCommandOptions::default()
     }
+}
+
+pub fn power_estimate(
+    network: &PowerNetwork,
+    circuit_type: CircuitType,
+    delay: DelayModel,
+    backend: &mut impl PowerMainBackend,
+) -> Result<PowerMainReport, PowerMainError> {
+    let options = power_estimate_defaults(circuit_type, delay);
+    power_main_driver(network, &options, &[], backend)
+}
+
+pub fn power_command_line_interface(
+    network: &PowerNetwork,
+    args: &[impl AsRef<str>],
+    latch_count: usize,
+    overrides: &[PowerInfoOverride],
+    backend: &mut impl PowerMainBackend,
+    word_bits: usize,
+) -> Result<String, PowerMainError> {
+    let options = PowerCommandOptions::parse_argv(args, latch_count)?;
+    let report = power_main_driver(network, &options, overrides, backend)?;
+    Ok(report.summary(network.name(), word_bits))
 }
 
 pub fn command_summary(
@@ -816,9 +867,6 @@ pub fn command_summary(
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum PowerMainError {
-    MissingSisDependencies {
-        operation: PowerMainOperation,
-    },
     MissingOptionValue(&'static str),
     InvalidNumericValue {
         option: &'static str,
@@ -856,11 +904,6 @@ pub enum PowerMainError {
 impl fmt::Display for PowerMainError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingSisDependencies { operation } => write!(
-                f,
-                "operation {:?} requires native SIS prerequisite ports",
-                operation
-            ),
             Self::MissingOptionValue(option) => write!(f, "missing value for option {option}"),
             Self::InvalidNumericValue { option, value } => {
                 write!(f, "invalid numeric value {value:?} for option {option}")
@@ -924,6 +967,39 @@ impl Error for PowerMainError {}
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[derive(Default)]
+    struct RecordingBackend {
+        bdd_calls: usize,
+        sampled_calls: usize,
+        observed_delay: Option<i32>,
+        observed_sample_gap: Option<usize>,
+    }
+
+    impl PowerMainBackend for RecordingBackend {
+        fn estimate_bdd(
+            &mut self,
+            _network: &PowerNetwork,
+            tables: &mut PowerTables,
+            _options: &PowerCommandOptions,
+        ) -> Result<f64, PowerMainError> {
+            self.bdd_calls += 1;
+            self.observed_delay = Some(tables.node_info(NodeId(2))?.delay);
+            Ok(11.25)
+        }
+
+        fn estimate_sampled(
+            &mut self,
+            _network: &PowerNetwork,
+            tables: &mut PowerTables,
+            options: &PowerCommandOptions,
+        ) -> Result<f64, PowerMainError> {
+            self.sampled_calls += 1;
+            self.observed_delay = Some(tables.node_info(NodeId(2))?.delay);
+            self.observed_sample_gap = options.sample_gap;
+            Ok(22.5)
+        }
+    }
 
     fn sample_network() -> PowerNetwork {
         PowerNetwork::new(
@@ -1100,6 +1176,40 @@ mod tests {
 
         assert_eq!(tables.node_info(NodeId(0)).unwrap().delay, 8);
         assert_eq!(tables.node_info(NodeId(2)).unwrap().delay, 3);
+    }
+
+    #[test]
+    fn main_driver_builds_tables_applies_delay_and_dispatches_bdd_backend() {
+        let network = sample_network();
+        let mut backend = RecordingBackend::default();
+        let options = PowerCommandOptions {
+            delay: DelayModel::General,
+            ..PowerCommandOptions::default()
+        };
+
+        let report = power_main_driver(&network, &options, &[], &mut backend).unwrap();
+
+        assert_eq!(backend.bdd_calls, 1);
+        assert_eq!(backend.sampled_calls, 0);
+        assert_eq!(backend.observed_delay, Some(3));
+        assert_eq!(report.total_power, 11.25);
+        assert_eq!(report.tables.node_info(NodeId(2)).unwrap().delay, 3);
+    }
+
+    #[test]
+    fn command_line_interface_dispatches_sampling_and_formats_summary() {
+        let network = sample_network();
+        let mut backend = RecordingBackend::default();
+        let args = ["power_estimate", "-m", "sample", "-n", "2", "-N", "9"];
+
+        let summary =
+            power_command_line_interface(&network, &args, 0, &[], &mut backend, 64).unwrap();
+
+        assert_eq!(backend.bdd_calls, 0);
+        assert_eq!(backend.sampled_calls, 1);
+        assert_eq!(backend.observed_sample_gap, Some(9));
+        assert!(summary.contains("Using Sampling, #vectors = 128"));
+        assert!(summary.contains("Network: sample, Power = 22.5 uW"));
     }
 
     #[test]

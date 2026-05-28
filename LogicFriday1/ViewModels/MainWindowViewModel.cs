@@ -215,6 +215,52 @@ public partial class MainWindowViewModel : ObservableObject
         }
     }
 
+    public bool MapSelectedFunctionToGates(
+        MapToGatesDialogViewModel options,
+        out string? errorMessage)
+    {
+        errorMessage = null;
+        if (!IsOperationMapToGatesEnabled ||
+            SelectedFunctionSummary is not { LogicFunction: { } logicFunction } summary)
+        {
+            errorMessage = "No function is selected";
+            StatusText = errorMessage;
+            return false;
+        }
+
+        try
+        {
+            var mappedFunction = LogicFunctionGateMapper.Map(logicFunction, options);
+            var mappedSummary = CreateFunctionSummary(mappedFunction) with
+            {
+                Gates = mappedFunction.Items
+                    .Count(static item => item.Kind is not GatePaletteKind.Input and not GatePaletteKind.Output)
+                    .ToString()
+            };
+            var summaryIndex = FunctionSummaries.IndexOf(summary);
+            if (summaryIndex >= 0)
+            {
+                FunctionSummaries[summaryIndex] = mappedSummary;
+            }
+            else
+            {
+                FunctionSummaries.Add(mappedSummary);
+            }
+
+            SelectedFunctionSummary = mappedSummary;
+            SelectedFunctionCount = 1;
+            ShowFunction(mappedFunction);
+            StatusText = $"Mapped to gates: {mappedSummary.Gates} gates";
+            return true;
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Map to Gates failed: {ex.Message}";
+            StatusText = errorMessage;
+            return false;
+        }
+    }
+
     public void StartNewLogicEquation()
     {
         LogicEquationText = "";

@@ -243,6 +243,116 @@ impl fmt::Display for SpeedUpError {
 
 impl Error for SpeedUpError {}
 
+pub trait SpeedUpBackend {
+    type NodeId: Clone + Eq + Hash + Ord + ToString;
+
+    fn set_speed_thresh(&mut self, params: &SpeedParameters) -> Result<(), SpeedUpError>;
+    fn speed_compute_weight(
+        &mut self,
+        params: &SpeedParameters,
+    ) -> Result<HashMap<Self::NodeId, CutsetWeight>, SpeedUpError>;
+    fn cutset(
+        &mut self,
+        weights: &HashMap<Self::NodeId, CutsetWeight>,
+    ) -> Result<Vec<Self::NodeId>, SpeedUpError>;
+    fn cutset_order_context(
+        &self,
+        weights: Option<HashMap<Self::NodeId, CutsetWeight>>,
+        params: &SpeedParameters,
+    ) -> Result<CutsetOrderContext<Self::NodeId>, SpeedUpError>;
+    fn speed_absorb(
+        &mut self,
+        node: &Self::NodeId,
+        params: &SpeedParameters,
+    ) -> Result<(), SpeedUpError>;
+    fn primary_outputs(&self) -> Result<Vec<Self::NodeId>, SpeedUpError>;
+    fn network_nodes(&self) -> Result<Vec<Self::NodeId>, SpeedUpError>;
+    fn network_dfs(&self) -> Result<Vec<Self::NodeId>, SpeedUpError>;
+    fn node_kind(&self, node: &Self::NodeId) -> Result<NodeKind, SpeedUpError>;
+    fn node_function(&self, node: &Self::NodeId) -> Result<NodeFunction, SpeedUpError>;
+    fn node_fanin_count(&self, node: &Self::NodeId) -> Result<usize, SpeedUpError>;
+    fn node_cube_count(&self, node: &Self::NodeId) -> Result<usize, SpeedUpError>;
+    fn node_literal_count(&self, node: &Self::NodeId) -> Result<usize, SpeedUpError>;
+    fn node_fanin_at(
+        &self,
+        node: &Self::NodeId,
+        index: usize,
+    ) -> Result<Self::NodeId, SpeedUpError>;
+    fn node_fanins(&self, node: &Self::NodeId) -> Result<Vec<Self::NodeId>, SpeedUpError>;
+    fn node_fanouts(&self, node: &Self::NodeId) -> Result<Vec<Self::NodeId>, SpeedUpError>;
+    fn node_fanout_count(&self, node: &Self::NodeId) -> Result<usize, SpeedUpError>;
+    fn patch_fanin(
+        &mut self,
+        node: &Self::NodeId,
+        old_fanin: &Self::NodeId,
+        new_fanin: &Self::NodeId,
+    ) -> Result<(), SpeedUpError>;
+    fn node_collapse(
+        &mut self,
+        fanout: &Self::NodeId,
+        source: &Self::NodeId,
+    ) -> Result<(), SpeedUpError>;
+    fn delete_node(&mut self, node: &Self::NodeId) -> Result<(), SpeedUpError>;
+    fn delete_single_fanin_node(&mut self, node: &Self::NodeId) -> Result<(), SpeedUpError>;
+    fn speed_single_level_update(
+        &mut self,
+        node: &Self::NodeId,
+        params: &SpeedParameters,
+    ) -> Result<(), SpeedUpError>;
+    fn speed_decomp(
+        &mut self,
+        node: &Self::NodeId,
+        params: &SpeedParameters,
+        delay_flag: bool,
+    ) -> Result<Vec<DecompCandidate<Self::NodeId>>, SpeedUpError>;
+    fn free_decomp_node(&mut self, node: &Self::NodeId) -> Result<(), SpeedUpError>;
+    fn compute_root_arrival(
+        &mut self,
+        root: &Self::NodeId,
+        params: &SpeedParameters,
+    ) -> Result<(), SpeedUpError>;
+    fn network_add_node(&mut self, node: &Self::NodeId) -> Result<(), SpeedUpError>;
+    fn free_primary_input_stub(&mut self, node: &Self::NodeId) -> Result<(), SpeedUpError>;
+    fn replace_node_with_root(
+        &mut self,
+        original: &Self::NodeId,
+        root: &Self::NodeId,
+    ) -> Result<(), SpeedUpError>;
+    fn set_original_arrival(&mut self, original: &Self::NodeId) -> Result<(), SpeedUpError>;
+    fn simplify_replace(&mut self, node: &Self::NodeId) -> Result<(), SpeedUpError>;
+    fn update_arrival_time(
+        &mut self,
+        node: &Self::NodeId,
+        params: &SpeedParameters,
+    ) -> Result<(), SpeedUpError>;
+    fn try_algebraic_resubstitute(
+        &mut self,
+        node: &Self::NodeId,
+        excluded_nodes: &[Self::NodeId],
+    ) -> Result<bool, SpeedUpError>;
+    fn node_substitute(
+        &mut self,
+        source: &Self::NodeId,
+        target: &Self::NodeId,
+        complement: bool,
+    ) -> Result<bool, SpeedUpError>;
+    fn add_inv_network(&mut self) -> Result<(), SpeedUpError>;
+    fn network_csweep(&mut self) -> Result<(), SpeedUpError>;
+    fn speed_delay_trace(&mut self, params: &SpeedParameters) -> Result<(), SpeedUpError>;
+    fn speed_set_delay_data(
+        &mut self,
+        params: &SpeedParameters,
+        library_acceleration: bool,
+    ) -> Result<(), SpeedUpError>;
+
+    fn fanout_functions(&self, node: &Self::NodeId) -> Result<Vec<NodeFunction>, SpeedUpError> {
+        self.node_fanouts(node)?
+            .iter()
+            .map(|fanout| self.node_function(fanout))
+            .collect()
+    }
+}
+
 pub fn plan_initial_decomp<N: Clone>(
     internal_dfs_nodes: &[N],
     params: &SpeedParameters,
@@ -639,38 +749,268 @@ where
 }
 
 pub fn speed_up_network_bound<Network>(
-    _network: &mut Network,
-    _params: &SpeedParameters,
-) -> Result<(), SpeedUpError> {
-    Err(SpeedUpError::MissingSisPorts {
-        operation: "speed_up_network",
-    })
+    network: &mut Network,
+    params: &SpeedParameters,
+) -> Result<(), SpeedUpError>
+where
+    Network: SpeedUpBackend,
+{
+    network.set_speed_thresh(params)?;
+    let weights = network.speed_compute_weight(params)?;
+    let mincut = network.cutset(&weights)?;
+    let context = network.cutset_order_context(Some(weights), params)?;
+    let mincut = generate_revised_order(&mincut, &context)?;
+
+    for node in &mincut {
+        network.speed_absorb(node, params)?;
+    }
+    for node in &mincut {
+        if network.node_kind(node)? == NodeKind::Internal {
+            speed_up_node_native(network, node.clone(), params, false)?;
+        }
+    }
+
+    cleanup_primary_outputs(network)
 }
 
-pub fn speed_node_interface_bound<Network, Node>(
-    _network: &mut Network,
-    _node: &mut Node,
-    _coeff: f64,
-    _model: DelayModel,
-) -> Result<(), SpeedUpError> {
-    Err(SpeedUpError::MissingSisPorts {
-        operation: "speed_node_interface",
-    })
+pub fn speed_node_interface_bound<Network>(
+    network: &mut Network,
+    node: Network::NodeId,
+    coeff: f64,
+    model: DelayModel,
+) -> Result<(), SpeedUpError>
+where
+    Network: SpeedUpBackend,
+{
+    let params = SpeedParameters {
+        coeff,
+        model,
+        ..SpeedParameters::default()
+    };
+    network.speed_set_delay_data(&params, false)?;
+    speed_up_node_native(network, node, &params, false)
 }
 
 pub fn speed_init_decomp_bound<Network>(
-    _network: &mut Network,
-    _params: &SpeedParameters,
-) -> Result<(), SpeedUpError> {
-    Err(SpeedUpError::MissingSisPorts {
-        operation: "speed_init_decomp",
-    })
+    network: &mut Network,
+    params: &SpeedParameters,
+) -> Result<(), SpeedUpError>
+where
+    Network: SpeedUpBackend,
+{
+    if params.new_mode && params.model == DelayModel::Mapped {
+        return Ok(());
+    }
+
+    if params.add_inv {
+        network.add_inv_network()?;
+    } else {
+        network.network_csweep()?;
+    }
+
+    network.speed_delay_trace(params)?;
+    let mut temporary_params = params.clone();
+    temporary_params.num_tries = 1;
+    temporary_params.debug = false;
+    temporary_params.del_crit_cubes = true;
+
+    for node in network.network_dfs()? {
+        if network.node_kind(&node)? == NodeKind::Internal {
+            network.simplify_replace(&node)?;
+            speed_up_node_native(network, node, &temporary_params, true)?;
+        }
+    }
+
+    if params.area_reclaim {
+        speed_resub_alge_network_bound(network)?;
+    }
+
+    if params.add_inv {
+        network.add_inv_network()
+    } else {
+        network.network_csweep()
+    }
 }
 
-pub fn speed_resub_alge_network_bound<Network>(_network: &mut Network) -> Result<(), SpeedUpError> {
-    Err(SpeedUpError::MissingSisPorts {
-        operation: "speed_resub_alge_network",
-    })
+pub fn speed_resub_alge_network_bound<Network>(network: &mut Network) -> Result<(), SpeedUpError>
+where
+    Network: SpeedUpBackend,
+{
+    let mut not_done = true;
+    while not_done {
+        not_done = false;
+        for node in network.network_nodes()? {
+            if speed_resub_alge_node_native(network, &node, None)? {
+                network.delete_node(&node)?;
+                not_done = true;
+                break;
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn cleanup_primary_outputs<Network>(network: &mut Network) -> Result<(), SpeedUpError>
+where
+    Network: SpeedUpBackend,
+{
+    for primary_output in network.primary_outputs()? {
+        let fanin = network.node_fanin_at(&primary_output, 0)?;
+        match network.node_function(&fanin)? {
+            NodeFunction::Buffer => {
+                let fanin_input = network.node_fanin_at(&fanin, 0)?;
+                network.patch_fanin(&primary_output, &fanin, &fanin_input)?;
+            }
+            NodeFunction::Inverter => {}
+            _ => continue,
+        }
+
+        for fanout in network.node_fanouts(&fanin)? {
+            network.node_collapse(&fanout, &fanin)?;
+        }
+        if network.node_fanout_count(&fanin)? == 0 {
+            network.delete_node(&fanin)?;
+        }
+    }
+
+    Ok(())
+}
+
+fn speed_up_node_native<Network>(
+    network: &mut Network,
+    node: Network::NodeId,
+    params: &SpeedParameters,
+    delay_flag: bool,
+) -> Result<(), SpeedUpError>
+where
+    Network: SpeedUpBackend,
+{
+    match speed_up_node_action(
+        network.node_kind(&node)?,
+        network.node_literal_count(&node)?,
+        network.node_fanin_count(&node)?,
+        network.node_cube_count(&node)?,
+        delay_flag,
+    ) {
+        SpeedUpNodeAction::SingleLevelUpdate => network.speed_single_level_update(&node, params),
+        SpeedUpNodeAction::DecomposeAndReplace { delay_flag } => {
+            let nodes = network.speed_decomp(&node, params, delay_flag)?;
+            speed_replace_native(network, node, &nodes, params)
+        }
+    }
+}
+
+fn speed_replace_native<Network>(
+    network: &mut Network,
+    original: Network::NodeId,
+    decomposed_nodes: &[DecompCandidate<Network::NodeId>],
+    params: &SpeedParameters,
+) -> Result<(), SpeedUpError>
+where
+    Network: SpeedUpBackend,
+{
+    if decomposed_nodes.len() <= 3 {
+        network.simplify_replace(&original)?;
+        return network.update_arrival_time(&original, params);
+    }
+
+    let original_fanin_count_after_replace = network.node_fanin_count(&original)?;
+    let original_has_po_fanout = speed_is_fanout_po(&network.fanout_functions(&original)?);
+    let actions = plan_speed_replace(
+        original,
+        decomposed_nodes,
+        params,
+        original_fanin_count_after_replace,
+        original_has_po_fanout,
+    );
+    let mut resubstituted = HashSet::new();
+
+    for action in actions {
+        match action {
+            ReplaceAction::FreeOriginalDecompNode(node) => network.free_decomp_node(&node)?,
+            ReplaceAction::ComputeRootArrival(node) => {
+                network.compute_root_arrival(&node, params)?
+            }
+            ReplaceAction::AddNode(node) => network.network_add_node(&node)?,
+            ReplaceAction::FreePrimaryInputStub(node) => network.free_primary_input_stub(&node)?,
+            ReplaceAction::ReplaceOriginalWithRoot { original, root } => {
+                network.replace_node_with_root(&original, &root)?;
+            }
+            ReplaceAction::SetOriginalArrival(node) => network.set_original_arrival(&node)?,
+            ReplaceAction::TryAlgebraicResubstitute {
+                node,
+                excluded_nodes,
+            } => {
+                if network.try_algebraic_resubstitute(&node, &excluded_nodes)? {
+                    resubstituted.insert(node);
+                }
+            }
+            ReplaceAction::DeleteResubstitutedNode(node) => {
+                if resubstituted.remove(&node) {
+                    network.delete_node(&node)?;
+                }
+            }
+            ReplaceAction::DeleteSingleFaninNode(node)
+            | ReplaceAction::DeleteOriginalIfSingleFaninNonPo(node) => {
+                network.delete_single_fanin_node(&node)?;
+            }
+            ReplaceAction::SimplifyOriginal(node) => network.simplify_replace(&node)?,
+            ReplaceAction::UpdateOriginalArrival(node) => {
+                network.update_arrival_time(&node, params)?;
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn speed_resub_alge_node_native<Network>(
+    network: &mut Network,
+    source: &Network::NodeId,
+    excluded: Option<&HashSet<Network::NodeId>>,
+) -> Result<bool, SpeedUpError>
+where
+    Network: SpeedUpBackend,
+{
+    if matches!(
+        network.node_kind(source)?,
+        NodeKind::PrimaryInput | NodeKind::PrimaryOutput
+    ) || network.node_literal_count(source)? < 1
+        || network.node_fanout_count(source)? > 1
+    {
+        return Ok(false);
+    }
+
+    let mut targets = HashSet::new();
+    for fanin in network.node_fanins(source)? {
+        for fanout in network.node_fanouts(&fanin)? {
+            if network.node_fanin_count(&fanout)? <= 2
+                && excluded.is_none_or(|excluded| !excluded.contains(&fanout))
+            {
+                targets.insert(fanout);
+            }
+        }
+    }
+
+    let mut targets = targets.into_iter().collect::<Vec<_>>();
+    targets.sort();
+
+    for target in targets {
+        if network.node_fanout_count(&target)? < 2
+            && network.node_substitute(source, &target, false)?
+            && network.node_fanin_count(source)? <= 1
+        {
+            for fanout in network.node_fanouts(source)? {
+                network.node_collapse(&fanout, source)?;
+            }
+            if network.node_fanout_count(source)? == 0 {
+                return Ok(true);
+            }
+        }
+    }
+
+    Ok(false)
 }
 
 #[cfg(test)]
@@ -1023,20 +1363,361 @@ mod tests {
         );
     }
 
+    #[derive(Default)]
+    struct RecordingBackend {
+        log: Vec<String>,
+        po_patched: bool,
+        f_collapsed: bool,
+        f_deleted: bool,
+    }
+
+    impl SpeedUpBackend for RecordingBackend {
+        type NodeId = &'static str;
+
+        fn set_speed_thresh(&mut self, _params: &SpeedParameters) -> Result<(), SpeedUpError> {
+            self.log.push("set_thresh".to_string());
+            Ok(())
+        }
+
+        fn speed_compute_weight(
+            &mut self,
+            _params: &SpeedParameters,
+        ) -> Result<HashMap<Self::NodeId, CutsetWeight>, SpeedUpError> {
+            self.log.push("compute_weight".to_string());
+            Ok(HashMap::from([
+                ("n1", CutsetWeight { best_technique: 0 }),
+                ("n2", CutsetWeight { best_technique: 0 }),
+            ]))
+        }
+
+        fn cutset(
+            &mut self,
+            _weights: &HashMap<Self::NodeId, CutsetWeight>,
+        ) -> Result<Vec<Self::NodeId>, SpeedUpError> {
+            self.log.push("cutset".to_string());
+            Ok(vec!["n1", "n2"])
+        }
+
+        fn cutset_order_context(
+            &self,
+            weights: Option<HashMap<Self::NodeId, CutsetWeight>>,
+            _params: &SpeedParameters,
+        ) -> Result<CutsetOrderContext<Self::NodeId>, SpeedUpError> {
+            Ok(CutsetOrderContext {
+                nodes: HashMap::from([
+                    ("a", cut_node("a", &[])),
+                    ("n1", cut_node("n1", &["a"])),
+                    ("n2", cut_node("n2", &["n1"])),
+                    ("po", cut_node("po", &["n2"])),
+                ]),
+                weights,
+                transforms: vec![CutsetTransformType::Clp],
+            })
+        }
+
+        fn speed_absorb(
+            &mut self,
+            node: &Self::NodeId,
+            _params: &SpeedParameters,
+        ) -> Result<(), SpeedUpError> {
+            self.log.push(format!("absorb:{node}"));
+            Ok(())
+        }
+
+        fn primary_outputs(&self) -> Result<Vec<Self::NodeId>, SpeedUpError> {
+            Ok(vec!["po"])
+        }
+
+        fn network_nodes(&self) -> Result<Vec<Self::NodeId>, SpeedUpError> {
+            Ok(if self.f_deleted {
+                vec!["a", "fo", "target"]
+            } else {
+                vec!["a", "f", "fo", "target"]
+            })
+        }
+
+        fn network_dfs(&self) -> Result<Vec<Self::NodeId>, SpeedUpError> {
+            Ok(vec!["n"])
+        }
+
+        fn node_kind(&self, node: &Self::NodeId) -> Result<NodeKind, SpeedUpError> {
+            Ok(match *node {
+                "a" => NodeKind::PrimaryInput,
+                "po" => NodeKind::PrimaryOutput,
+                _ => NodeKind::Internal,
+            })
+        }
+
+        fn node_function(&self, node: &Self::NodeId) -> Result<NodeFunction, SpeedUpError> {
+            Ok(match *node {
+                "po" => NodeFunction::PrimaryOutput,
+                "n2" => NodeFunction::Buffer,
+                _ => NodeFunction::Other,
+            })
+        }
+
+        fn node_fanin_count(&self, node: &Self::NodeId) -> Result<usize, SpeedUpError> {
+            Ok(self.node_fanins(node)?.len())
+        }
+
+        fn node_cube_count(&self, _node: &Self::NodeId) -> Result<usize, SpeedUpError> {
+            Ok(0)
+        }
+
+        fn node_literal_count(&self, node: &Self::NodeId) -> Result<usize, SpeedUpError> {
+            Ok(usize::from(*node == "f"))
+        }
+
+        fn node_fanin_at(
+            &self,
+            node: &Self::NodeId,
+            index: usize,
+        ) -> Result<Self::NodeId, SpeedUpError> {
+            self.node_fanins(node)?
+                .get(index)
+                .copied()
+                .ok_or_else(|| SpeedUpError::UnknownNode(format!("{node}[{index}]")))
+        }
+
+        fn node_fanins(&self, node: &Self::NodeId) -> Result<Vec<Self::NodeId>, SpeedUpError> {
+            Ok(match *node {
+                "po" if self.po_patched => vec!["n1"],
+                "po" => vec!["n2"],
+                "n2" => vec!["n1"],
+                "n1" | "f" | "target" => vec!["a"],
+                "fo" => vec!["f"],
+                _ => Vec::new(),
+            })
+        }
+
+        fn node_fanouts(&self, node: &Self::NodeId) -> Result<Vec<Self::NodeId>, SpeedUpError> {
+            Ok(match *node {
+                "a" => vec!["n1", "target"],
+                "n1" => vec!["n2"],
+                "n2" if self.po_patched => Vec::new(),
+                "n2" => vec!["po"],
+                "f" if self.f_collapsed => Vec::new(),
+                "f" => vec!["fo"],
+                _ => Vec::new(),
+            })
+        }
+
+        fn node_fanout_count(&self, node: &Self::NodeId) -> Result<usize, SpeedUpError> {
+            Ok(self.node_fanouts(node)?.len())
+        }
+
+        fn patch_fanin(
+            &mut self,
+            node: &Self::NodeId,
+            old_fanin: &Self::NodeId,
+            new_fanin: &Self::NodeId,
+        ) -> Result<(), SpeedUpError> {
+            self.log
+                .push(format!("patch:{node}:{old_fanin}:{new_fanin}"));
+            self.po_patched = true;
+            Ok(())
+        }
+
+        fn node_collapse(
+            &mut self,
+            fanout: &Self::NodeId,
+            source: &Self::NodeId,
+        ) -> Result<(), SpeedUpError> {
+            self.log.push(format!("collapse:{fanout}:{source}"));
+            if *source == "f" {
+                self.f_collapsed = true;
+            }
+            Ok(())
+        }
+
+        fn delete_node(&mut self, node: &Self::NodeId) -> Result<(), SpeedUpError> {
+            self.log.push(format!("delete:{node}"));
+            if *node == "f" {
+                self.f_deleted = true;
+            }
+            Ok(())
+        }
+
+        fn delete_single_fanin_node(&mut self, node: &Self::NodeId) -> Result<(), SpeedUpError> {
+            self.log.push(format!("delete_single:{node}"));
+            Ok(())
+        }
+
+        fn speed_single_level_update(
+            &mut self,
+            node: &Self::NodeId,
+            _params: &SpeedParameters,
+        ) -> Result<(), SpeedUpError> {
+            self.log.push(format!("single:{node}"));
+            Ok(())
+        }
+
+        fn speed_decomp(
+            &mut self,
+            node: &Self::NodeId,
+            _params: &SpeedParameters,
+            delay_flag: bool,
+        ) -> Result<Vec<DecompCandidate<Self::NodeId>>, SpeedUpError> {
+            self.log.push(format!("decomp:{node}:{delay_flag}"));
+            Ok(Vec::new())
+        }
+
+        fn free_decomp_node(&mut self, node: &Self::NodeId) -> Result<(), SpeedUpError> {
+            self.log.push(format!("free:{node}"));
+            Ok(())
+        }
+
+        fn compute_root_arrival(
+            &mut self,
+            root: &Self::NodeId,
+            _params: &SpeedParameters,
+        ) -> Result<(), SpeedUpError> {
+            self.log.push(format!("root_arrival:{root}"));
+            Ok(())
+        }
+
+        fn network_add_node(&mut self, node: &Self::NodeId) -> Result<(), SpeedUpError> {
+            self.log.push(format!("add:{node}"));
+            Ok(())
+        }
+
+        fn free_primary_input_stub(&mut self, node: &Self::NodeId) -> Result<(), SpeedUpError> {
+            self.log.push(format!("free_pi:{node}"));
+            Ok(())
+        }
+
+        fn replace_node_with_root(
+            &mut self,
+            original: &Self::NodeId,
+            root: &Self::NodeId,
+        ) -> Result<(), SpeedUpError> {
+            self.log.push(format!("replace:{original}:{root}"));
+            Ok(())
+        }
+
+        fn set_original_arrival(&mut self, original: &Self::NodeId) -> Result<(), SpeedUpError> {
+            self.log.push(format!("set_arrival:{original}"));
+            Ok(())
+        }
+
+        fn simplify_replace(&mut self, node: &Self::NodeId) -> Result<(), SpeedUpError> {
+            self.log.push(format!("simplify:{node}"));
+            Ok(())
+        }
+
+        fn update_arrival_time(
+            &mut self,
+            node: &Self::NodeId,
+            _params: &SpeedParameters,
+        ) -> Result<(), SpeedUpError> {
+            self.log.push(format!("update_arrival:{node}"));
+            Ok(())
+        }
+
+        fn try_algebraic_resubstitute(
+            &mut self,
+            node: &Self::NodeId,
+            excluded_nodes: &[Self::NodeId],
+        ) -> Result<bool, SpeedUpError> {
+            self.log
+                .push(format!("try_resub:{node}:{}", excluded_nodes.len()));
+            Ok(false)
+        }
+
+        fn node_substitute(
+            &mut self,
+            source: &Self::NodeId,
+            target: &Self::NodeId,
+            complement: bool,
+        ) -> Result<bool, SpeedUpError> {
+            self.log
+                .push(format!("substitute:{source}:{target}:{complement}"));
+            Ok(*source == "f" && *target == "target")
+        }
+
+        fn add_inv_network(&mut self) -> Result<(), SpeedUpError> {
+            self.log.push("add_inv".to_string());
+            Ok(())
+        }
+
+        fn network_csweep(&mut self) -> Result<(), SpeedUpError> {
+            self.log.push("csweep".to_string());
+            Ok(())
+        }
+
+        fn speed_delay_trace(&mut self, _params: &SpeedParameters) -> Result<(), SpeedUpError> {
+            self.log.push("delay_trace".to_string());
+            Ok(())
+        }
+
+        fn speed_set_delay_data(
+            &mut self,
+            _params: &SpeedParameters,
+            library_acceleration: bool,
+        ) -> Result<(), SpeedUpError> {
+            self.log
+                .push(format!("set_delay_data:{library_acceleration}"));
+            Ok(())
+        }
+    }
+
     #[test]
-    fn network_bound_entry_points_report_missing_dependencies() {
-        let mut network = ();
+    fn speed_up_network_applies_weight_cutset_absorb_decompose_and_po_cleanup() {
+        let mut network = RecordingBackend::default();
+
+        speed_up_network_bound(&mut network, &SpeedParameters::default()).unwrap();
+
         assert_eq!(
-            speed_up_network_bound(&mut network, &SpeedParameters::default()),
-            Err(SpeedUpError::MissingSisPorts {
-                operation: "speed_up_network",
-            })
+            network.log,
+            vec![
+                "set_thresh",
+                "compute_weight",
+                "cutset",
+                "absorb:n2",
+                "absorb:n1",
+                "single:n2",
+                "single:n1",
+                "patch:po:n2:n1",
+                "delete:n2",
+            ]
         );
+    }
+
+    #[test]
+    fn node_interface_sets_delay_data_and_speeds_requested_node() {
+        let mut network = RecordingBackend::default();
+
+        speed_node_interface_bound(&mut network, "n", 0.5, DelayModel::Unit).unwrap();
+
+        assert_eq!(network.log, vec!["set_delay_data:false", "single:n"]);
+    }
+
+    #[test]
+    fn initial_decomp_runs_native_sweep_trace_simplify_and_cleanup_flow() {
+        let mut network = RecordingBackend::default();
+
+        speed_init_decomp_bound(&mut network, &SpeedParameters::default()).unwrap();
+
         assert_eq!(
-            speed_init_decomp_bound(&mut network, &SpeedParameters::default()),
-            Err(SpeedUpError::MissingSisPorts {
-                operation: "speed_init_decomp",
-            })
+            network.log,
+            vec!["csweep", "delay_trace", "simplify:n", "single:n", "csweep"]
+        );
+    }
+
+    #[test]
+    fn algebraic_resub_network_repeats_until_substituted_source_is_deleted() {
+        let mut network = RecordingBackend::default();
+
+        speed_resub_alge_network_bound(&mut network).unwrap();
+
+        assert_eq!(
+            network.log,
+            vec![
+                "substitute:f:n1:false",
+                "substitute:f:target:false",
+                "collapse:fo:f",
+                "delete:f",
+            ]
         );
     }
 }

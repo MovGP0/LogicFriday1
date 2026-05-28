@@ -84,9 +84,15 @@ public partial class MainWindow : Window
 
         var dialog = new MapToGatesDialog();
         var result = await dialog.ShowDialog<bool?>(this);
-        if (result == true)
+        if (result != true)
         {
-            viewModel.StatusText = "Map to Gates options selected";
+            return;
+        }
+
+        if (!viewModel.MapSelectedFunctionToGates(dialog.ViewModel, out var errorMessage) &&
+            !string.IsNullOrWhiteSpace(errorMessage))
+        {
+            await ShowMessageAsync(errorMessage, "Map to Gates");
         }
     }
 

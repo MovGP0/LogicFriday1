@@ -1,11 +1,9 @@
-//! Native Rust decision model for `sis/speed/speed_net.c`.
+//! Native Rust orchestration for `sis/speed/speed_net.c`.
 //!
 //! The original routine enumerates SIS kernels, scores each kernel/cokernel
 //! divisor, mutates a `network_t`, and recursively decomposes the affected
-//! nodes. The native SIS network and node APIs are not available yet, so this
-//! module ports the deterministic scoring and decomposition planning behavior
-//! into Rust data models and leaves the mutation-bound entry point as an
-//! explicit blocked operation.
+//! nodes. This module keeps the mutation behavior behind a native Rust backend
+//! contract and ports the deterministic scoring and branch selection directly.
 
 use std::error::Error;
 use std::fmt;
@@ -276,33 +274,160 @@ pub fn plan_speed_decomp_network<N>(input: SpeedNetworkInput<N>) -> SpeedNetwork
     }
 }
 
-pub fn speed_decomp_network_bound<Network, Node>(
-    _network: &mut Network,
-    _node: &mut Node,
-    _options: SpeedNetOptions,
-    _attempt_no: usize,
-) -> Result<(), SpeedNetError> {
-    Err(SpeedNetError::MissingNativePorts {
-        operation: "speed_decomp_network",
-    })
+pub trait SpeedNetBackend {
+    type Node: Clone + Eq;
+    type Error: Error + Send + Sync + 'static;
+
+    fn kernel_timeout_occurred(&self) -> bool;
+
+    fn quick_divisor_exists(&mut self, node: &Self::Node) -> Result<bool, Self::Error>;
+
+    fn fanin_arrivals(&self, node: &Self::Node) -> Result<Vec<DelayTime>, Self::Error>;
+
+    fn divisor_candidates(
+        &mut self,
+        node: &Self::Node,
+        options: SpeedNetOptions,
+        threshold: f64,
+    ) -> Result<Vec<DivisorCandidate<Self::Node>>, Self::Error>;
+
+    fn add_node(&mut self, node: Self::Node) -> Result<(), Self::Error>;
+
+    fn substitute_node(
+        &mut self,
+        node: &Self::Node,
+        divisor: &Self::Node,
+        complement: bool,
+    ) -> Result<bool, Self::Error>;
+
+    fn speed_and_or_decompose(
+        &mut self,
+        node: &Self::Node,
+        options: SpeedNetOptions,
+    ) -> Result<bool, Self::Error>;
+
+    fn delete_single_fanin_node(&mut self, node: &Self::Node) -> Result<(), Self::Error>;
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum SpeedNetError {
-    MissingNativePorts { operation: &'static str },
-}
+pub fn speed_decomp_network_bound<B>(
+    backend: &mut B,
+    node: B::Node,
+    options: SpeedNetOptions,
+    attempt_no: usize,
+) -> Result<(), SpeedNetError<B::Error>>
+where
+    B: SpeedNetBackend,
+{
+    let input = if backend.kernel_timeout_occurred() {
+        SpeedNetworkInput {
+            fanin_arrivals: Vec::new(),
+            attempt_no,
+            kernel_timeout_occurred: true,
+            quick_divisor_exists: false,
+            divisor_candidates: Vec::new(),
+            options,
+        }
+    } else if backend
+        .quick_divisor_exists(&node)
+        .map_err(SpeedNetError::Backend)?
+    {
+        let fanin_arrivals = backend
+            .fanin_arrivals(&node)
+            .map_err(SpeedNetError::Backend)?;
+        let threshold = critical_threshold(&fanin_arrivals, attempt_no);
+        let divisor_candidates = backend
+            .divisor_candidates(&node, options, threshold)
+            .map_err(SpeedNetError::Backend)?;
 
-impl fmt::Display for SpeedNetError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::MissingNativePorts { operation } => {
-                write!(f, "{operation} is blocked by unported SIS dependencies")
+        SpeedNetworkInput {
+            fanin_arrivals,
+            attempt_no,
+            kernel_timeout_occurred: false,
+            quick_divisor_exists: true,
+            divisor_candidates,
+            options,
+        }
+    } else {
+        SpeedNetworkInput {
+            fanin_arrivals: Vec::new(),
+            attempt_no,
+            kernel_timeout_occurred: false,
+            quick_divisor_exists: false,
+            divisor_candidates: Vec::new(),
+            options,
+        }
+    };
+
+    match plan_speed_decomp_network(input).branch {
+        SpeedNetworkBranch::ExtractDivisor { divisor, .. } => {
+            let divisor_node = divisor.node;
+            backend
+                .add_node(divisor_node.clone())
+                .map_err(SpeedNetError::Backend)?;
+
+            if !backend
+                .substitute_node(&node, &divisor_node, false)
+                .map_err(SpeedNetError::Backend)?
+            {
+                return Err(SpeedNetError::SubstituteFailed);
             }
+
+            speed_decomp_network_bound(backend, divisor_node, options, attempt_no)?;
+            speed_decomp_network_bound(backend, node, options, attempt_no)
+        }
+        SpeedNetworkBranch::AndOrDecompose {
+            delete_single_fanin_node,
+            ..
+        } => {
+            if !backend
+                .speed_and_or_decompose(&node, options)
+                .map_err(SpeedNetError::Backend)?
+            {
+                return Err(SpeedNetError::AndOrDecomposeFailed);
+            }
+
+            if delete_single_fanin_node {
+                backend
+                    .delete_single_fanin_node(&node)
+                    .map_err(SpeedNetError::Backend)?;
+            }
+
+            Ok(())
         }
     }
 }
 
-impl Error for SpeedNetError {}
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum SpeedNetError<E> {
+    Backend(E),
+    SubstituteFailed,
+    AndOrDecomposeFailed,
+}
+
+impl<E> fmt::Display for SpeedNetError<E>
+where
+    E: fmt::Display,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Backend(error) => write!(f, "{error}"),
+            Self::SubstituteFailed => write!(f, "failed to substitute selected speed divisor"),
+            Self::AndOrDecomposeFailed => write!(f, "failed to run AND/OR speed decomposition"),
+        }
+    }
+}
+
+impl<E> Error for SpeedNetError<E>
+where
+    E: Error + 'static,
+{
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            Self::Backend(error) => Some(error),
+            Self::SubstituteFailed | Self::AndOrDecomposeFailed => None,
+        }
+    }
+}
 
 fn min_max_arrival(fanin_arrivals: &[DelayTime]) -> (f64, f64) {
     let mut min_time = f64::INFINITY;
@@ -322,6 +447,7 @@ fn min_max_arrival(fanin_arrivals: &[DelayTime]) -> (f64, f64) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::{BTreeMap, VecDeque};
 
     fn arrival(rise: f64, fall: f64) -> DelayTime {
         DelayTime { rise, fall }
@@ -525,25 +651,293 @@ mod tests {
     }
 
     #[test]
-    fn network_bound_entry_point_reports_missing_dependencies() {
-        let mut network = ();
-        let mut node = ();
-        let result = speed_decomp_network_bound(
-            &mut network,
-            &mut node,
-            SpeedNetOptions {
-                coeff: 0.0,
-                add_inv: true,
-                del_crit_cubes: false,
-            },
-            0,
+    fn network_bound_extracts_substitutes_and_recursively_decomposes_divisor_and_remainder() {
+        let options = SpeedNetOptions {
+            coeff: 0.0,
+            add_inv: true,
+            del_crit_cubes: false,
+        };
+        let mut backend = RecordingBackend::new(BTreeMap::from([
+            (
+                "root",
+                NodeScript {
+                    quick_divisor_exists: true,
+                    fanin_arrivals: vec![arrival(1.0, 2.0), arrival(4.0, 5.0)],
+                    divisor_candidates: vec![DivisorCandidate {
+                        node: "div",
+                        cost: NodeCost {
+                            delay: 4.0,
+                            area: 3.0,
+                        },
+                    }],
+                },
+            ),
+            (
+                "div",
+                NodeScript {
+                    quick_divisor_exists: false,
+                    fanin_arrivals: Vec::new(),
+                    divisor_candidates: Vec::new(),
+                },
+            ),
+        ]));
+        backend.root_quick_results = VecDeque::from([true, false]);
+
+        assert_eq!(
+            speed_decomp_network_bound(&mut backend, "root", options, 0),
+            Ok(())
         );
 
         assert_eq!(
-            result,
-            Err(SpeedNetError::MissingNativePorts {
-                operation: "speed_decomp_network",
-            })
+            backend.events,
+            vec![
+                Event::QuickDivisor("root"),
+                Event::FaninArrivals("root"),
+                Event::DivisorCandidates {
+                    node: "root",
+                    threshold: 4.9996,
+                    del_crit_cubes: false,
+                },
+                Event::AddNode("div"),
+                Event::Substitute {
+                    node: "root",
+                    divisor: "div",
+                    complement: false,
+                },
+                Event::QuickDivisor("div"),
+                Event::AndOr {
+                    node: "div",
+                    add_inv: true,
+                },
+                Event::QuickDivisor("root"),
+                Event::AndOr {
+                    node: "root",
+                    add_inv: true,
+                },
+            ]
         );
+    }
+
+    #[test]
+    fn network_bound_falls_back_to_and_or_and_deletes_single_fanin_when_enabled() {
+        let options = SpeedNetOptions {
+            coeff: 0.0,
+            add_inv: false,
+            del_crit_cubes: false,
+        };
+        let mut backend = RecordingBackend::new(BTreeMap::from([(
+            "root",
+            NodeScript {
+                quick_divisor_exists: false,
+                fanin_arrivals: Vec::new(),
+                divisor_candidates: Vec::new(),
+            },
+        )]));
+
+        assert_eq!(
+            speed_decomp_network_bound(&mut backend, "root", options, 1),
+            Ok(())
+        );
+
+        assert_eq!(
+            backend.events,
+            vec![
+                Event::QuickDivisor("root"),
+                Event::AndOr {
+                    node: "root",
+                    add_inv: false,
+                },
+                Event::DeleteSingleFanin("root"),
+            ]
+        );
+    }
+
+    #[test]
+    fn network_bound_reports_substitution_failure_without_recursing() {
+        let options = SpeedNetOptions {
+            coeff: 0.0,
+            add_inv: true,
+            del_crit_cubes: false,
+        };
+        let mut backend = RecordingBackend::new(BTreeMap::from([(
+            "root",
+            NodeScript {
+                quick_divisor_exists: true,
+                fanin_arrivals: vec![arrival(0.0, 2.0), arrival(3.0, 5.0)],
+                divisor_candidates: vec![DivisorCandidate {
+                    node: "div",
+                    cost: NodeCost {
+                        delay: 1.0,
+                        area: 1.0,
+                    },
+                }],
+            },
+        )]));
+        backend.substitute_result = false;
+
+        assert_eq!(
+            speed_decomp_network_bound(&mut backend, "root", options, 0),
+            Err(SpeedNetError::SubstituteFailed)
+        );
+        assert!(
+            !backend
+                .events
+                .iter()
+                .any(|event| matches!(event, Event::AndOr { .. }))
+        );
+    }
+
+    #[test]
+    fn no_legacy_abi_or_tracking_tokens_are_present() {
+        let text = include_str!("speed_net.rs");
+
+        assert!(!text.contains(concat!("no", "_", "mangle")));
+        assert!(!text.contains(concat!("pub ", "extern")));
+        assert!(!text.contains(concat!("extern ", "\"", "C", "\"")));
+        assert!(!text.contains(concat!("REQUIRED", "_")));
+        assert!(!text.contains(concat!("Port", "Dependency")));
+        assert!(!text.contains(concat!("bead", "_", "id")));
+        assert!(!text.contains(concat!("source", "_", "file")));
+    }
+
+    #[derive(Clone, Debug, PartialEq)]
+    struct NodeScript {
+        quick_divisor_exists: bool,
+        fanin_arrivals: Vec<DelayTime>,
+        divisor_candidates: Vec<DivisorCandidate<&'static str>>,
+    }
+
+    #[derive(Clone, Debug, Eq, PartialEq)]
+    enum TestError {
+        MissingNode(&'static str),
+    }
+
+    impl fmt::Display for TestError {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            match self {
+                Self::MissingNode(node) => write!(f, "missing node {node}"),
+            }
+        }
+    }
+
+    impl Error for TestError {}
+
+    #[derive(Clone, Debug, PartialEq)]
+    enum Event {
+        QuickDivisor(&'static str),
+        FaninArrivals(&'static str),
+        DivisorCandidates {
+            node: &'static str,
+            threshold: f64,
+            del_crit_cubes: bool,
+        },
+        AddNode(&'static str),
+        Substitute {
+            node: &'static str,
+            divisor: &'static str,
+            complement: bool,
+        },
+        AndOr {
+            node: &'static str,
+            add_inv: bool,
+        },
+        DeleteSingleFanin(&'static str),
+    }
+
+    struct RecordingBackend {
+        scripts: BTreeMap<&'static str, NodeScript>,
+        root_quick_results: VecDeque<bool>,
+        substitute_result: bool,
+        events: Vec<Event>,
+    }
+
+    impl RecordingBackend {
+        fn new(scripts: BTreeMap<&'static str, NodeScript>) -> Self {
+            Self {
+                scripts,
+                root_quick_results: VecDeque::new(),
+                substitute_result: true,
+                events: Vec::new(),
+            }
+        }
+
+        fn script(&self, node: &'static str) -> Result<&NodeScript, TestError> {
+            self.scripts.get(node).ok_or(TestError::MissingNode(node))
+        }
+    }
+
+    impl SpeedNetBackend for RecordingBackend {
+        type Node = &'static str;
+        type Error = TestError;
+
+        fn kernel_timeout_occurred(&self) -> bool {
+            false
+        }
+
+        fn quick_divisor_exists(&mut self, node: &Self::Node) -> Result<bool, Self::Error> {
+            self.events.push(Event::QuickDivisor(*node));
+            if *node == "root" {
+                if let Some(result) = self.root_quick_results.pop_front() {
+                    return Ok(result);
+                }
+            }
+
+            Ok(self.script(*node)?.quick_divisor_exists)
+        }
+
+        fn fanin_arrivals(&self, node: &Self::Node) -> Result<Vec<DelayTime>, Self::Error> {
+            Ok(self.script(*node)?.fanin_arrivals.clone())
+        }
+
+        fn divisor_candidates(
+            &mut self,
+            node: &Self::Node,
+            options: SpeedNetOptions,
+            threshold: f64,
+        ) -> Result<Vec<DivisorCandidate<Self::Node>>, Self::Error> {
+            self.events.push(Event::FaninArrivals(*node));
+            self.events.push(Event::DivisorCandidates {
+                node: *node,
+                threshold,
+                del_crit_cubes: options.del_crit_cubes,
+            });
+            Ok(self.script(*node)?.divisor_candidates.clone())
+        }
+
+        fn add_node(&mut self, node: Self::Node) -> Result<(), Self::Error> {
+            self.events.push(Event::AddNode(node));
+            Ok(())
+        }
+
+        fn substitute_node(
+            &mut self,
+            node: &Self::Node,
+            divisor: &Self::Node,
+            complement: bool,
+        ) -> Result<bool, Self::Error> {
+            self.events.push(Event::Substitute {
+                node: *node,
+                divisor: *divisor,
+                complement,
+            });
+            Ok(self.substitute_result)
+        }
+
+        fn speed_and_or_decompose(
+            &mut self,
+            node: &Self::Node,
+            options: SpeedNetOptions,
+        ) -> Result<bool, Self::Error> {
+            self.events.push(Event::AndOr {
+                node: *node,
+                add_inv: options.add_inv,
+            });
+            Ok(true)
+        }
+
+        fn delete_single_fanin_node(&mut self, node: &Self::Node) -> Result<(), Self::Error> {
+            self.events.push(Event::DeleteSingleFanin(*node));
+            Ok(())
+        }
     }
 }

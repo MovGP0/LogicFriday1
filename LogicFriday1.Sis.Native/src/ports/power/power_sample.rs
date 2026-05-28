@@ -3,9 +3,9 @@
 //! The C file estimates power by generating packed random PI words, simulating
 //! a symbolic network one machine word at a time, counting PO one bits, and
 //! summing `switching_prob * cap_factor * CAPACITANCE * 250.0`. This module
-//! ports that sampling core to owned Rust data structures. Direct binding to
-//! legacy SIS `network_t`, delay tracing, and symbolic-network construction is
-//! reported as an explicit missing native integration.
+//! ports that sampling core to owned Rust data structures. Native callers pass
+//! a sample-ready symbolic network; integration with higher-level SIS-style
+//! network construction belongs in the surrounding power modules.
 
 use std::collections::HashMap;
 use std::error::Error;
@@ -89,15 +89,8 @@ impl PowerSimulationOptions {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum PowerSampleOperation {
-    LegacySampleEstimate,
-    LegacySimulationEstimate,
-}
-
 #[derive(Clone, Debug, PartialEq)]
 pub enum PowerSampleError {
-    MissingSisDependencies { operation: PowerSampleOperation },
     MissingNode,
     MissingFanin,
     MissingOutputDriver,
@@ -106,16 +99,13 @@ pub enum PowerSampleError {
     ProbabilityOutOfRange(f64),
     OutputOneCountMismatch { outputs: usize, counts: usize },
     EmptySampleCount,
+    DynamicCircuitUnsupported,
+    InvalidSetSize(usize),
 }
 
 impl fmt::Display for PowerSampleError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingSisDependencies { operation } => write!(
-                f,
-                "operation {:?} requires native SIS prerequisite ports",
-                operation
-            ),
             Self::MissingNode => write!(f, "sample network references a missing node"),
             Self::MissingFanin => write!(f, "sample network node references a missing fanin"),
             Self::MissingOutputDriver => write!(f, "sample network output has no driver"),
@@ -130,6 +120,18 @@ impl fmt::Display for PowerSampleError {
                 write!(f, "got {counts} output counts for {outputs} outputs")
             }
             Self::EmptySampleCount => write!(f, "power sampling requires at least one word sample"),
+            Self::DynamicCircuitUnsupported => {
+                write!(
+                    f,
+                    "sample-mode power estimation does not support dynamic circuits"
+                )
+            }
+            Self::InvalidSetSize(set_size) => {
+                write!(
+                    f,
+                    "present-state approximation set size must be at least 1, got {set_size}"
+                )
+            }
         }
     }
 }
@@ -386,20 +388,44 @@ pub struct PowerSampleEstimate {
     pub progress: Vec<ProgressPower>,
 }
 
-pub fn legacy_power_sample_estimate_blocked(
-    _options: PowerSimulationOptions,
-) -> Result<f64, PowerSampleError> {
-    Err(PowerSampleError::MissingSisDependencies {
-        operation: PowerSampleOperation::LegacySampleEstimate,
-    })
+pub fn power_sample_estimate<N>(
+    network: &mut PowerSampleNetwork<N>,
+    circuit_type: PowerCircuitType,
+    delay: DelaySelection,
+    num_samples: usize,
+    seed: u32,
+) -> Result<PowerSampleEstimate, PowerSampleError>
+where
+    N: Eq + Hash,
+{
+    power_simulation_estimate(
+        network,
+        &PowerSimulationOptions::simple(circuit_type, delay, num_samples),
+        seed,
+    )
 }
 
-pub fn legacy_power_simulation_estimate_blocked(
-    _options: PowerSimulationOptions,
-) -> Result<f64, PowerSampleError> {
-    Err(PowerSampleError::MissingSisDependencies {
-        operation: PowerSampleOperation::LegacySimulationEstimate,
-    })
+pub fn power_simulation_estimate<N>(
+    network: &mut PowerSampleNetwork<N>,
+    options: &PowerSimulationOptions,
+    seed: u32,
+) -> Result<PowerSampleEstimate, PowerSampleError>
+where
+    N: Eq + Hash,
+{
+    prepare_sample_options(options)?;
+    network.sample_estimate(options.num_samples, options.sample_gap, seed)
+}
+
+fn prepare_sample_options(options: &PowerSimulationOptions) -> Result<(), PowerSampleError> {
+    if matches!(options.circuit_type, PowerCircuitType::Dynamic) {
+        return Err(PowerSampleError::DynamicCircuitUnsupported);
+    }
+    if options.defaults.set_size == 0 {
+        return Err(PowerSampleError::InvalidSetSize(options.defaults.set_size));
+    }
+
+    Ok(())
 }
 
 pub fn gen_random_pattern(
@@ -635,6 +661,56 @@ mod tests {
         assert_eq!(estimate.total_power, 3.0 * CAPACITANCE * 250.0);
         assert_eq!(estimate.progress.len(), 1);
         assert_eq!(estimate.progress[0].bit_iteration, WORD_BITS * 2);
+    }
+
+    #[test]
+    fn simple_sample_estimate_uses_bounded_native_network_path() {
+        let mut network = and_or_network();
+        let estimate = power_sample_estimate(
+            &mut network,
+            PowerCircuitType::Combinational,
+            DelaySelection::Unit,
+            2,
+            7,
+        )
+        .unwrap();
+
+        assert_eq!(estimate.output_one_counts, vec![0, WORD_BITS * 2]);
+        assert_eq!(estimate.total_power, 3.0 * CAPACITANCE * 250.0);
+    }
+
+    #[test]
+    fn simulation_estimate_rejects_dynamic_circuits_like_c_sample_mode() {
+        let mut network = and_or_network();
+        let options = PowerSimulationOptions {
+            circuit_type: PowerCircuitType::Dynamic,
+            delay: DelaySelection::Zero,
+            ps_probability: PresentStateProbability::Approximation,
+            num_samples: 1,
+            sample_gap: 1,
+            defaults: PowerSampleDefaults::default(),
+        };
+
+        assert_eq!(
+            power_simulation_estimate(&mut network, &options, 7),
+            Err(PowerSampleError::DynamicCircuitUnsupported)
+        );
+    }
+
+    #[test]
+    fn simulation_estimate_rejects_invalid_present_state_set_size() {
+        let mut network = and_or_network();
+        let mut options = PowerSimulationOptions::simple(
+            PowerCircuitType::Sequential,
+            DelaySelection::Zero,
+            1,
+        );
+        options.defaults.set_size = 0;
+
+        assert_eq!(
+            power_simulation_estimate(&mut network, &options, 7),
+            Err(PowerSampleError::InvalidSetSize(0))
+        );
     }
 
     #[test]

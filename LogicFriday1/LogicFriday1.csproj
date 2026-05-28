@@ -16,6 +16,7 @@
     <ProjectReference Include="..\MaterialDesign3.MaterialColorUtilities\MaterialColorUtilities.csproj" />
     <ProjectReference Include="..\LogicFriday1.MaterialIcons\LogicFriday1.MaterialIcons.csproj" />
     <ProjectReference Include="..\Espresso\EspressoII\EspressoII.csproj" />
+    <ProjectReference Include="..\LogicFriday1.Sis\LogicFriday1.Sis.csproj" />
   </ItemGroup>
 
   <ItemGroup>

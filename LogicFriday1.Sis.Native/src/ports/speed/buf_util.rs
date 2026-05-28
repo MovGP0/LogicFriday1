@@ -615,42 +615,69 @@ pub fn set_prev_phase(node: &mut BufferNodeData, phase: PinPhase) {
 }
 
 pub fn annotate_gate_from_sis_node() -> Result<(), BufUtilError> {
-    missing_sis_ports("sp_buf_annotate_gate")
+    sis_graph_dependency(
+        "sp_buf_annotate_gate",
+        "LogicSynthesis/sis/speed/buf_util.c:265",
+    )
 }
 
 pub fn replace_lib_gate_in_sis_node() -> Result<(), BufUtilError> {
-    missing_sis_ports("sp_replace_lib_gate")
+    sis_graph_dependency(
+        "sp_replace_lib_gate",
+        "LogicSynthesis/sis/speed/buf_util.c:475",
+    )
 }
 
 pub fn implement_buffer_chain_in_sis_network() -> Result<(), BufUtilError> {
-    missing_sis_ports("sp_implement_buffer_chain")
+    sis_graph_dependency(
+        "sp_implement_buffer_chain",
+        "LogicSynthesis/sis/speed/buf_util.c:645",
+    )
 }
 
 pub fn add_gate_implementation_to_sis_node() -> Result<(), BufUtilError> {
-    missing_sis_ports("buf_add_implementation")
+    sis_graph_dependency(
+        "buf_add_implementation",
+        "LogicSynthesis/sis/speed/buf_util.c:701",
+    )
 }
 
 pub fn init_top_down_from_sis_network() -> Result<(), BufUtilError> {
-    missing_sis_ports("buf_init_top_down")
+    sis_graph_dependency(
+        "buf_init_top_down",
+        "LogicSynthesis/sis/speed/buf_util.c:735",
+    )
 }
 
 pub fn map_interface_with_sis_network() -> Result<(), BufUtilError> {
-    missing_sis_ports("buf_map_interface")
+    sis_graph_dependency(
+        "buf_map_interface",
+        "LogicSynthesis/sis/speed/buf_util.c:746",
+    )
 }
 
-fn missing_sis_ports(operation: &'static str) -> Result<(), BufUtilError> {
-    Err(BufUtilError::MissingSisPorts { operation })
+fn sis_graph_dependency(operation: &'static str, source: &'static str) -> Result<(), BufUtilError> {
+    Err(BufUtilError::SisGraphDependency { operation, source })
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum BufUtilError {
     UnknownOption(String),
     MissingOptionValue(&'static str),
-    InvalidOptionValue { option: &'static str, value: String },
+    InvalidOptionValue {
+        option: &'static str,
+        value: String,
+    },
     InvalidTransformMode(u8),
     NoFanins,
-    MissingGatePin { gate: String, pin: usize },
-    MissingSisPorts { operation: &'static str },
+    MissingGatePin {
+        gate: String,
+        pin: usize,
+    },
+    SisGraphDependency {
+        operation: &'static str,
+        source: &'static str,
+    },
 }
 
 impl fmt::Display for BufUtilError {
@@ -670,8 +697,8 @@ impl fmt::Display for BufUtilError {
             Self::MissingGatePin { gate, pin } => {
                 write!(f, "gate {gate} has no delay pin at index {pin}")
             }
-            Self::MissingSisPorts { operation } => {
-                write!(f, "{operation} is blocked by unported SIS dependencies")
+            Self::SisGraphDependency { operation, source } => {
+                write!(f, "{operation} requires SIS graph mutation from {source}")
             }
         }
     }
@@ -888,14 +915,16 @@ mod tests {
     fn sis_bound_entry_points_report_dependency_beads() {
         assert_eq!(
             implement_buffer_chain_in_sis_network(),
-            Err(BufUtilError::MissingSisPorts {
+            Err(BufUtilError::SisGraphDependency {
                 operation: "sp_implement_buffer_chain",
+                source: "LogicSynthesis/sis/speed/buf_util.c:645",
             })
         );
         assert_eq!(
             map_interface_with_sis_network(),
-            Err(BufUtilError::MissingSisPorts {
+            Err(BufUtilError::SisGraphDependency {
                 operation: "buf_map_interface",
+                source: "LogicSynthesis/sis/speed/buf_util.c:746",
             })
         );
     }

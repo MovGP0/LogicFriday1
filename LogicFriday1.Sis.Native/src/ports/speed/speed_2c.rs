@@ -245,6 +245,21 @@ pub struct Speed2cDecision {
     pub plan: Vec<DecompositionPlan>,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Speed2cOptions {
+    pub add_inv: bool,
+    pub delete_critical_cubes: bool,
+}
+
+impl Speed2cOptions {
+    pub const fn new(add_inv: bool, delete_critical_cubes: bool) -> Self {
+        Self {
+            add_inv,
+            delete_critical_cubes,
+        }
+    }
+}
+
 pub fn plan_speed_2c_decomposition(input: Speed2cInput) -> Result<Speed2cDecision, Speed2cError> {
     if input.timeout_occurred {
         return Ok(Speed2cDecision {
@@ -281,14 +296,123 @@ pub fn plan_speed_2c_decomposition(input: Speed2cInput) -> Result<Speed2cDecisio
     })
 }
 
-pub fn speed_2c_decomp_network_bound<Network, Node>(
-    _network: &mut Network,
-    _node: &mut Node,
-    _attempt_no: usize,
-) -> Result<(), Speed2cError> {
-    Err(Speed2cError::MissingNativePorts {
-        operation: "speed_2c_decomp",
-    })
+pub trait Speed2cBackend {
+    type Node: Clone + Eq;
+    type Error: Error + Send + Sync + 'static;
+
+    fn two_cube_timeout_occurred(&self) -> bool;
+
+    fn quick_divisor_exists(&mut self, node: &Self::Node) -> Result<bool, Self::Error>;
+
+    fn fanin_arrivals(&self, node: &Self::Node) -> Result<Vec<DelayTime>, Self::Error>;
+
+    fn kernel_candidates(
+        &mut self,
+        node: &Self::Node,
+        threshold: f64,
+        delete_critical_cubes: bool,
+    ) -> Result<Vec<KernelCandidate>, Self::Error>;
+
+    fn extract_kernel(
+        &mut self,
+        node: &Self::Node,
+        best: &BestKernel,
+        threshold: f64,
+        delete_critical_cubes: bool,
+    ) -> Result<Self::Node, Self::Error>;
+
+    fn add_node(&mut self, node: Self::Node) -> Result<(), Self::Error>;
+
+    fn substitute_node(
+        &mut self,
+        node: &Self::Node,
+        divisor: &Self::Node,
+        positive_phase: bool,
+    ) -> Result<bool, Self::Error>;
+
+    fn speed_and_or_decompose(
+        &mut self,
+        node: &Self::Node,
+        options: Speed2cOptions,
+    ) -> Result<bool, Self::Error>;
+
+    fn delete_single_fanin_node(&mut self, node: &Self::Node) -> Result<(), Self::Error>;
+}
+
+pub fn speed_2c_decomp_network_bound<B>(
+    backend: &mut B,
+    node: B::Node,
+    options: Speed2cOptions,
+    attempt_no: usize,
+) -> Result<(), Speed2cNetworkError<B::Error>>
+where
+    B: Speed2cBackend,
+{
+    if backend.two_cube_timeout_occurred() {
+        return speed_2c_and_or_fallback(backend, &node, options);
+    }
+
+    if !backend
+        .quick_divisor_exists(&node)
+        .map_err(Speed2cNetworkError::Backend)?
+    {
+        return speed_2c_and_or_fallback(backend, &node, options);
+    }
+
+    let arrivals = backend
+        .fanin_arrivals(&node)
+        .map_err(Speed2cNetworkError::Backend)?;
+    let threshold =
+        threshold_for_attempt(&arrivals, attempt_no).map_err(Speed2cNetworkError::Planning)?;
+    let candidates = backend
+        .kernel_candidates(&node, threshold, options.delete_critical_cubes)
+        .map_err(Speed2cNetworkError::Backend)?;
+    let Some(best) =
+        select_best_kernel(&candidates, false).map_err(Speed2cNetworkError::Planning)?
+    else {
+        return speed_2c_and_or_fallback(backend, &node, options);
+    };
+
+    let divisor = backend
+        .extract_kernel(&node, &best, threshold, options.delete_critical_cubes)
+        .map_err(Speed2cNetworkError::Backend)?;
+    backend
+        .add_node(divisor.clone())
+        .map_err(Speed2cNetworkError::Backend)?;
+
+    if !backend
+        .substitute_node(&node, &divisor, true)
+        .map_err(Speed2cNetworkError::Backend)?
+    {
+        return Err(Speed2cNetworkError::SubstituteFailed);
+    }
+
+    speed_2c_decomp_network_bound(backend, divisor, options, attempt_no)?;
+    speed_2c_decomp_network_bound(backend, node, options, attempt_no)
+}
+
+fn speed_2c_and_or_fallback<B>(
+    backend: &mut B,
+    node: &B::Node,
+    options: Speed2cOptions,
+) -> Result<(), Speed2cNetworkError<B::Error>>
+where
+    B: Speed2cBackend,
+{
+    if !backend
+        .speed_and_or_decompose(node, options)
+        .map_err(Speed2cNetworkError::Backend)?
+    {
+        return Err(Speed2cNetworkError::AndOrDecomposeFailed);
+    }
+
+    if !options.add_inv {
+        backend
+            .delete_single_fanin_node(node)
+            .map_err(Speed2cNetworkError::Backend)?;
+    }
+
+    Ok(())
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -297,7 +421,6 @@ pub enum Speed2cError {
     NonFiniteArrival,
     NonFiniteCost,
     MissingCokernelCost,
-    MissingNativePorts { operation: &'static str },
 }
 
 impl fmt::Display for Speed2cError {
@@ -307,18 +430,51 @@ impl fmt::Display for Speed2cError {
             Self::NonFiniteArrival => write!(f, "fanin arrival time is not finite"),
             Self::NonFiniteCost => write!(f, "kernel cost is not finite"),
             Self::MissingCokernelCost => write!(f, "useful cokernel candidate has no cost"),
-            Self::MissingNativePorts { operation } => {
-                write!(f, "{operation} requires native SIS network integration")
-            }
         }
     }
 }
 
 impl Error for Speed2cError {}
 
+#[derive(Clone, Debug, PartialEq)]
+pub enum Speed2cNetworkError<E> {
+    Backend(E),
+    Planning(Speed2cError),
+    SubstituteFailed,
+    AndOrDecomposeFailed,
+}
+
+impl<E> fmt::Display for Speed2cNetworkError<E>
+where
+    E: fmt::Display,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Backend(error) => write!(f, "{error}"),
+            Self::Planning(error) => write!(f, "{error}"),
+            Self::SubstituteFailed => write!(f, "failed to substitute selected 2c kernel"),
+            Self::AndOrDecomposeFailed => write!(f, "failed to run AND/OR speed decomposition"),
+        }
+    }
+}
+
+impl<E> Error for Speed2cNetworkError<E>
+where
+    E: Error + 'static,
+{
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            Self::Backend(error) => Some(error),
+            Self::Planning(error) => Some(error),
+            Self::SubstituteFailed | Self::AndOrDecomposeFailed => None,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::{BTreeMap, VecDeque};
 
     fn candidate(id: &str) -> KernelCandidate {
         KernelCandidate {
@@ -547,15 +703,311 @@ mod tests {
         );
     }
 
+    #[derive(Clone, Debug, Eq, PartialEq)]
+    enum TestError {
+        MissingNode(&'static str),
+    }
+
+    impl fmt::Display for TestError {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            match self {
+                Self::MissingNode(node) => write!(f, "missing node {node}"),
+            }
+        }
+    }
+
+    impl Error for TestError {}
+
+    #[derive(Clone, Debug, PartialEq)]
+    struct NodeScript {
+        quick_divisor_exists: bool,
+        fanin_arrivals: Vec<DelayTime>,
+        candidates: Vec<KernelCandidate>,
+        extracted: &'static str,
+    }
+
+    #[derive(Clone, Debug, PartialEq)]
+    enum Event {
+        QuickDivisor(&'static str),
+        KernelCandidates {
+            node: &'static str,
+            threshold: f64,
+            delete_critical_cubes: bool,
+        },
+        Extract {
+            node: &'static str,
+            best: String,
+            side: CandidateSide,
+            threshold: f64,
+            delete_critical_cubes: bool,
+        },
+        AddNode(&'static str),
+        Substitute {
+            node: &'static str,
+            divisor: &'static str,
+            positive_phase: bool,
+        },
+        AndOr {
+            node: &'static str,
+            add_inv: bool,
+        },
+        DeleteSingleFanin(&'static str),
+    }
+
+    struct RecordingBackend {
+        scripts: BTreeMap<&'static str, NodeScript>,
+        root_quick_results: VecDeque<bool>,
+        substitute_result: bool,
+        events: Vec<Event>,
+    }
+
+    impl RecordingBackend {
+        fn new(scripts: BTreeMap<&'static str, NodeScript>) -> Self {
+            Self {
+                scripts,
+                root_quick_results: VecDeque::new(),
+                substitute_result: true,
+                events: Vec::new(),
+            }
+        }
+
+        fn script(&self, node: &'static str) -> Result<&NodeScript, TestError> {
+            self.scripts.get(node).ok_or(TestError::MissingNode(node))
+        }
+    }
+
+    impl Speed2cBackend for RecordingBackend {
+        type Node = &'static str;
+        type Error = TestError;
+
+        fn two_cube_timeout_occurred(&self) -> bool {
+            false
+        }
+
+        fn quick_divisor_exists(&mut self, node: &Self::Node) -> Result<bool, Self::Error> {
+            self.events.push(Event::QuickDivisor(*node));
+            if *node == "root" {
+                if let Some(result) = self.root_quick_results.pop_front() {
+                    return Ok(result);
+                }
+            }
+
+            Ok(self.script(*node)?.quick_divisor_exists)
+        }
+
+        fn fanin_arrivals(&self, node: &Self::Node) -> Result<Vec<DelayTime>, Self::Error> {
+            Ok(self.script(*node)?.fanin_arrivals.clone())
+        }
+
+        fn kernel_candidates(
+            &mut self,
+            node: &Self::Node,
+            threshold: f64,
+            delete_critical_cubes: bool,
+        ) -> Result<Vec<KernelCandidate>, Self::Error> {
+            self.events.push(Event::KernelCandidates {
+                node: *node,
+                threshold,
+                delete_critical_cubes,
+            });
+            Ok(self.script(*node)?.candidates.clone())
+        }
+
+        fn extract_kernel(
+            &mut self,
+            node: &Self::Node,
+            best: &BestKernel,
+            threshold: f64,
+            delete_critical_cubes: bool,
+        ) -> Result<Self::Node, Self::Error> {
+            self.events.push(Event::Extract {
+                node: *node,
+                best: best.id.clone(),
+                side: best.side,
+                threshold,
+                delete_critical_cubes,
+            });
+            Ok(self.script(*node)?.extracted)
+        }
+
+        fn add_node(&mut self, node: Self::Node) -> Result<(), Self::Error> {
+            self.events.push(Event::AddNode(node));
+            Ok(())
+        }
+
+        fn substitute_node(
+            &mut self,
+            node: &Self::Node,
+            divisor: &Self::Node,
+            positive_phase: bool,
+        ) -> Result<bool, Self::Error> {
+            self.events.push(Event::Substitute {
+                node: *node,
+                divisor: *divisor,
+                positive_phase,
+            });
+            Ok(self.substitute_result)
+        }
+
+        fn speed_and_or_decompose(
+            &mut self,
+            node: &Self::Node,
+            options: Speed2cOptions,
+        ) -> Result<bool, Self::Error> {
+            self.events.push(Event::AndOr {
+                node: *node,
+                add_inv: options.add_inv,
+            });
+            Ok(true)
+        }
+
+        fn delete_single_fanin_node(&mut self, node: &Self::Node) -> Result<(), Self::Error> {
+            self.events.push(Event::DeleteSingleFanin(*node));
+            Ok(())
+        }
+    }
+
     #[test]
-    fn network_bound_entry_point_reports_missing_native_ports() {
-        let mut network = ();
-        let mut node = ();
+    fn network_bound_extracts_substitutes_and_recursively_decomposes_kernel_and_remainder() {
+        let mut selected = candidate("k");
+        selected.kernel_time_cost = 2.0;
+        let mut backend = RecordingBackend::new(BTreeMap::from([
+            (
+                "root",
+                NodeScript {
+                    quick_divisor_exists: true,
+                    fanin_arrivals: vec![
+                        DelayTime {
+                            rise: 1.0,
+                            fall: 2.0,
+                        },
+                        DelayTime {
+                            rise: 4.0,
+                            fall: 5.0,
+                        },
+                    ],
+                    candidates: vec![selected],
+                    extracted: "div",
+                },
+            ),
+            (
+                "div",
+                NodeScript {
+                    quick_divisor_exists: false,
+                    fanin_arrivals: Vec::new(),
+                    candidates: Vec::new(),
+                    extracted: "unused",
+                },
+            ),
+        ]));
+        backend.root_quick_results = VecDeque::from([true, false]);
+
         assert_eq!(
-            speed_2c_decomp_network_bound(&mut network, &mut node, 0),
-            Err(Speed2cError::MissingNativePorts {
-                operation: "speed_2c_decomp",
-            })
+            speed_2c_decomp_network_bound(&mut backend, "root", Speed2cOptions::new(true, true), 0),
+            Ok(())
+        );
+
+        assert_eq!(
+            backend.events,
+            vec![
+                Event::QuickDivisor("root"),
+                Event::KernelCandidates {
+                    node: "root",
+                    threshold: 4.9996,
+                    delete_critical_cubes: true,
+                },
+                Event::Extract {
+                    node: "root",
+                    best: "k".to_string(),
+                    side: CandidateSide::Kernel,
+                    threshold: 4.9996,
+                    delete_critical_cubes: true,
+                },
+                Event::AddNode("div"),
+                Event::Substitute {
+                    node: "root",
+                    divisor: "div",
+                    positive_phase: true,
+                },
+                Event::QuickDivisor("div"),
+                Event::AndOr {
+                    node: "div",
+                    add_inv: true,
+                },
+                Event::QuickDivisor("root"),
+                Event::AndOr {
+                    node: "root",
+                    add_inv: true,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn network_bound_fallback_deletes_single_fanin_when_inverters_are_not_added() {
+        let mut backend = RecordingBackend::new(BTreeMap::from([(
+            "root",
+            NodeScript {
+                quick_divisor_exists: false,
+                fanin_arrivals: Vec::new(),
+                candidates: Vec::new(),
+                extracted: "unused",
+            },
+        )]));
+
+        assert_eq!(
+            speed_2c_decomp_network_bound(
+                &mut backend,
+                "root",
+                Speed2cOptions::new(false, false),
+                0,
+            ),
+            Ok(())
+        );
+
+        assert_eq!(
+            backend.events,
+            vec![
+                Event::QuickDivisor("root"),
+                Event::AndOr {
+                    node: "root",
+                    add_inv: false,
+                },
+                Event::DeleteSingleFanin("root"),
+            ]
+        );
+    }
+
+    #[test]
+    fn network_bound_reports_substitution_failure() {
+        let mut backend = RecordingBackend::new(BTreeMap::from([(
+            "root",
+            NodeScript {
+                quick_divisor_exists: true,
+                fanin_arrivals: vec![
+                    DelayTime {
+                        rise: 1.0,
+                        fall: 2.0,
+                    },
+                    DelayTime {
+                        rise: 4.0,
+                        fall: 5.0,
+                    },
+                ],
+                candidates: vec![candidate("k")],
+                extracted: "div",
+            },
+        )]));
+        backend.substitute_result = false;
+
+        assert_eq!(
+            speed_2c_decomp_network_bound(
+                &mut backend,
+                "root",
+                Speed2cOptions::new(true, false),
+                0,
+            ),
+            Err(Speed2cNetworkError::SubstituteFailed)
         );
     }
 }

@@ -2,14 +2,18 @@
 //!
 //! The C file is a shared PLD utility layer over SIS `node_t`, `network_t`,
 //! `array_t`, `st_table`, and sparse-matrix APIs. This port models the
-//! independent Boolean cube, fanin-set, replacement, and sparse deletion
-//! behavior with owned Rust data. Entry points that still require direct SIS
-//! graph mutation report explicit missing dependency errors with bead IDs and
-//! source files.
+//! Boolean cube, fanin-set, replacement, simplification, and sparse deletion
+//! behavior with owned Rust data.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
 use std::fmt;
+
+use crate::ports::node::node::{Cover, Cube, Node, NodeError, node_num_cube, node_num_literal};
+use crate::ports::simplify::simp::{
+    NativeSimplifyNode, NodeMetrics, SimAccept, SimDcType, SimFilter, SimMethod, SimpDcParameters,
+    SimplifyError, SimplifyNodeOptions, simplify_node_native,
+};
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct NodeId(pub usize);
@@ -226,17 +230,119 @@ impl PldNetwork {
         target.cubes = replacement.cubes;
         Ok(added)
     }
+
+    pub fn replace_node_by_network(
+        &mut self,
+        node: NodeId,
+        replacement_network: &PldNetwork,
+    ) -> PldUtilResult<Vec<NodeId>> {
+        self.node(node)?;
+
+        let mut correspondence = remap_init_corr(self, replacement_network)?;
+        let internal_nodes = replacement_network.internal_node_ids();
+        let Some((&replacement_output, intermediate_nodes)) = internal_nodes.split_last() else {
+            return Err(PldUtilError::NoReplacementOutput);
+        };
+
+        let mut added = Vec::new();
+        for replacement_node in intermediate_nodes {
+            let source = replacement_network.node(*replacement_node)?;
+            let products = remap_get_node(source, &correspondence)?;
+            let mapped = pld_node_from_products(source.name.clone(), source.kind, products)?;
+            let mapped_id = self.add_node(mapped);
+            correspondence.insert(*replacement_node, mapped_id);
+            added.push(mapped_id);
+        }
+
+        let source = replacement_network.node(replacement_output)?;
+        let products = remap_get_node(source, &correspondence)?;
+        let mapped = pld_node_from_products(source.name.clone(), source.kind, products)?;
+        let target = self.node_mut(node)?;
+        target.fanins = mapped.fanins;
+        target.cubes = mapped.cubes;
+        Ok(added)
+    }
+
+    pub fn simplify_network_without_dc(&mut self) -> PldUtilResult<Vec<PldSimplifyReport>> {
+        let node_ids = self.internal_node_ids();
+        let mut reports = Vec::new();
+
+        for node_id in node_ids {
+            let source = self.node(node_id)?.clone();
+            let native = native_node_from_pld_node(self, &source)?;
+            let metrics = metrics_for_node(&native)?;
+            let mut simplify_node = NativeSimplifyNode::new(native, metrics);
+            let outcome = simplify_node_native(
+                &mut simplify_node,
+                SimplifyNodeOptions {
+                    method: SimMethod::SNoComp,
+                    dctype: SimDcType::None,
+                    accept: SimAccept::SopLiterals,
+                    filter: SimFilter::None,
+                    parameters: SimpDcParameters {
+                        fanin_level: 0,
+                        fanin_fanout_level: 0,
+                    },
+                },
+            )
+            .map_err(|error| map_simplify_error("pld_simplify_network_without_dc", error))?;
+
+            let simplified = pld_node_from_native_node(self, &source, &simplify_node.value)?;
+            let target = self.node_mut(node_id)?;
+            target.fanins = simplified.fanins;
+            target.cubes = simplified.cubes;
+            reports.push(PldSimplifyReport {
+                node: node_id,
+                replaced: outcome.replaced,
+            });
+        }
+
+        Ok(reports)
+    }
+
+    fn internal_node_ids(&self) -> Vec<NodeId> {
+        self.nodes
+            .iter()
+            .enumerate()
+            .filter_map(|(index, node)| (node.kind == NodeKind::Internal).then_some(NodeId(index)))
+            .collect()
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PldSimplifyReport {
+    pub node: NodeId,
+    pub replaced: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum PldUtilError {
     UnknownNode(NodeId),
     MissingFaninMapping(NodeId),
-    MissingPrimaryInput { name: String },
-    CubeArityMismatch { fanins: usize, literals: usize },
+    MissingPrimaryInput {
+        name: String,
+    },
+    MissingSimplifiedFanin {
+        name: String,
+    },
+    CubeArityMismatch {
+        fanins: usize,
+        literals: usize,
+    },
+    ConflictingProductLiteral {
+        node: NodeId,
+    },
     EmptyReplacementArray,
+    NoReplacementOutput,
     MissingTableNode(NodeId),
-    MissingNativePorts { operation: &'static str },
+    Node {
+        operation: &'static str,
+        reason: String,
+    },
+    Simplify {
+        operation: &'static str,
+        reason: String,
+    },
 }
 
 impl fmt::Display for PldUtilError {
@@ -252,16 +358,29 @@ impl fmt::Display for PldUtilError {
                     "replacement primary input {name} is absent from target network"
                 )
             }
+            Self::MissingSimplifiedFanin { name } => {
+                write!(f, "simplified fanin {name} is absent from PLD network")
+            }
             Self::CubeArityMismatch { fanins, literals } => write!(
                 f,
                 "cube literal count {literals} does not match fanin count {fanins}"
             ),
+            Self::ConflictingProductLiteral { node } => {
+                write!(
+                    f,
+                    "product contains conflicting phases for fanin {:?}",
+                    node
+                )
+            }
             Self::EmptyReplacementArray => write!(f, "node replacement array is empty"),
+            Self::NoReplacementOutput => write!(f, "replacement network has no internal output"),
             Self::MissingTableNode(node) => write!(f, "node {:?} is absent from table", node),
-            Self::MissingNativePorts { operation } => write!(
-                f,
-                "{operation} requires native Rust ports for SIS dependencies"
-            ),
+            Self::Node { operation, reason } => {
+                write!(f, "{operation} failed in native node port: {reason}")
+            }
+            Self::Simplify { operation, reason } => {
+                write!(f, "{operation} failed in native simplify port: {reason}")
+            }
         }
     }
 }
@@ -269,10 +388,6 @@ impl fmt::Display for PldUtilError {
 impl Error for PldUtilError {}
 
 pub type PldUtilResult<T> = Result<T, PldUtilError>;
-
-pub fn sis_bound_operation_unavailable(operation: &'static str) -> PldUtilResult<()> {
-    Err(missing_native_ports(operation))
-}
 
 pub fn remap_init_corr(
     target_network: &PldNetwork,
@@ -360,10 +475,10 @@ pub fn get_array_of_fanins(node: &PldNode) -> Option<Vec<NodeId>> {
     (node.kind != NodeKind::PrimaryInput).then(|| node.fanins().to_vec())
 }
 
-pub fn simplify_network_without_dc_blocked<Network>(_network: &mut Network) -> PldUtilResult<()> {
-    Err(missing_native_ports(
-        "pld_simplify_network_without_dc SIS integration",
-    ))
+pub fn simplify_network_without_dc(
+    network: &mut PldNetwork,
+) -> PldUtilResult<Vec<PldSimplifyReport>> {
+    network.simplify_network_without_dc()
 }
 
 pub fn is_network_feasible(network: &PldNetwork, support: usize) -> bool {
@@ -406,13 +521,12 @@ pub fn delete_array_nodes_from_table(
     Ok(())
 }
 
-pub fn replace_node_by_network_blocked<Node, Network>(
-    _node: &mut Node,
-    _network: &Network,
-) -> PldUtilResult<()> {
-    Err(missing_native_ports(
-        "pld_replace_node_by_network SIS integration",
-    ))
+pub fn replace_node_by_network(
+    network: &mut PldNetwork,
+    node: NodeId,
+    replacement_network: &PldNetwork,
+) -> PldUtilResult<Vec<NodeId>> {
+    network.replace_node_by_network(node, replacement_network)
 }
 
 fn make_product_from_cube(
@@ -445,8 +559,141 @@ fn identity_mapping(fanins: &[NodeId]) -> BTreeMap<NodeId, NodeId> {
     fanins.iter().copied().map(|fanin| (fanin, fanin)).collect()
 }
 
-fn missing_native_ports(operation: &'static str) -> PldUtilError {
-    PldUtilError::MissingNativePorts { operation }
+fn pld_node_from_products(
+    name: String,
+    kind: NodeKind,
+    products: Vec<ProductTerm>,
+) -> PldUtilResult<PldNode> {
+    let fanins = products
+        .iter()
+        .flat_map(|product| product.literals().iter().map(|literal| literal.node))
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>();
+    let mut cubes = Vec::new();
+
+    for product in products {
+        let mut literals = vec![CubeLiteral::DontCare; fanins.len()];
+        for literal in product.literals() {
+            let index = fanins
+                .iter()
+                .position(|fanin| *fanin == literal.node)
+                .expect("product fanin should be present in collected fanins");
+            let cube_literal = match literal.phase {
+                LiteralPhase::Positive => CubeLiteral::One,
+                LiteralPhase::Negative => CubeLiteral::Zero,
+            };
+            if literals[index] != CubeLiteral::DontCare && literals[index] != cube_literal {
+                return Err(PldUtilError::ConflictingProductLiteral { node: literal.node });
+            }
+            literals[index] = cube_literal;
+        }
+        cubes.push(PldCube::new(literals));
+    }
+
+    Ok(PldNode::new(name, kind, fanins, cubes))
+}
+
+fn native_node_from_pld_node(network: &PldNetwork, node: &PldNode) -> PldUtilResult<Node> {
+    let fanin_names = node
+        .fanins()
+        .iter()
+        .map(|fanin| {
+            network
+                .node(*fanin)
+                .map(|fanin_node| fanin_node.name.clone())
+        })
+        .collect::<PldUtilResult<Vec<_>>>()?;
+    let cubes = node
+        .cubes()
+        .iter()
+        .map(|cube| {
+            Cube::new(
+                cube.literals()
+                    .iter()
+                    .map(|literal| match literal {
+                        CubeLiteral::Zero => Some(false),
+                        CubeLiteral::One => Some(true),
+                        CubeLiteral::DontCare => None,
+                    })
+                    .collect(),
+            )
+        })
+        .collect();
+    let cover = Cover::new(fanin_names.len(), cubes)
+        .map_err(|error| map_node_error("PLD to native node conversion", error))?;
+    let mut native = Node::new(cover, fanin_names);
+    native.name = Some(node.name.clone());
+    native.short_name = Some(node.name.clone());
+    Ok(native)
+}
+
+fn pld_node_from_native_node(
+    network: &PldNetwork,
+    original: &PldNode,
+    native: &Node,
+) -> PldUtilResult<PldNode> {
+    let fanins = native
+        .fanins
+        .iter()
+        .map(|name| {
+            network
+                .find_node_by_name(name)
+                .ok_or_else(|| PldUtilError::MissingSimplifiedFanin { name: name.clone() })
+        })
+        .collect::<PldUtilResult<Vec<_>>>()?;
+    let Some(function) = native.function() else {
+        return Ok(PldNode::new(
+            original.name.clone(),
+            original.kind,
+            fanins,
+            Vec::new(),
+        ));
+    };
+    let cubes = function
+        .cubes()
+        .iter()
+        .map(|cube| {
+            PldCube::new(cube.inputs().iter().map(|input| match input {
+                Some(false) => CubeLiteral::Zero,
+                Some(true) => CubeLiteral::One,
+                None => CubeLiteral::DontCare,
+            }))
+        })
+        .collect();
+
+    Ok(PldNode::new(
+        original.name.clone(),
+        original.kind,
+        fanins,
+        cubes,
+    ))
+}
+
+fn metrics_for_node(node: &Node) -> PldUtilResult<NodeMetrics> {
+    let sop_literals =
+        node_num_literal(node).map_err(|error| map_node_error("node literal metrics", error))?;
+    let cubes = node_num_cube(node).map_err(|error| map_node_error("node cube metrics", error))?;
+    Ok(NodeMetrics::new(
+        sop_literals,
+        sop_literals,
+        cubes,
+        node.fanins.len(),
+    ))
+}
+
+fn map_node_error(operation: &'static str, error: NodeError) -> PldUtilError {
+    PldUtilError::Node {
+        operation,
+        reason: error.to_string(),
+    }
+}
+
+fn map_simplify_error(operation: &'static str, error: SimplifyError) -> PldUtilError {
+    PldUtilError::Simplify {
+        operation,
+        reason: error.to_string(),
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -687,6 +934,77 @@ mod tests {
         assert!(table.contains(&NodeId(2)));
         delete_array_nodes_from_table(&mut table, &[target, NodeId(2)]).unwrap();
         assert_eq!(table, BTreeSet::new());
+    }
+
+    #[test]
+    fn replace_node_by_network_remaps_primary_inputs_and_intermediate_nodes() {
+        let mut target = PldNetwork::new();
+        let a = target.add_node(PldNode::primary_input("a"));
+        let b = target.add_node(PldNode::primary_input("b"));
+        let out = target.add_node(PldNode::constant_zero());
+
+        let mut replacement = PldNetwork::new();
+        let ra = replacement.add_node(PldNode::primary_input("a"));
+        let rb = replacement.add_node(PldNode::primary_input("b"));
+        let and = replacement.add_node(PldNode::internal(
+            "and",
+            vec![ra, rb],
+            vec![PldCube::new([CubeLiteral::One, CubeLiteral::One])],
+        ));
+        replacement.add_node(PldNode::internal(
+            "final",
+            vec![and, rb],
+            vec![PldCube::new([CubeLiteral::One, CubeLiteral::Zero])],
+        ));
+
+        let added = replace_node_by_network(&mut target, out, &replacement).unwrap();
+
+        assert_eq!(added, vec![NodeId(3)]);
+        assert_eq!(
+            target.node(NodeId(3)).unwrap(),
+            &PldNode::internal(
+                "and",
+                vec![a, b],
+                vec![PldCube::new([CubeLiteral::One, CubeLiteral::One])]
+            )
+        );
+        assert_eq!(
+            target.node(out).unwrap(),
+            &PldNode::internal(
+                "$zero",
+                vec![b, NodeId(3)],
+                vec![PldCube::new([CubeLiteral::Zero, CubeLiteral::One])]
+            )
+        );
+    }
+
+    #[test]
+    fn simplify_network_without_dc_runs_snocomp_on_internal_nodes() {
+        let mut network = PldNetwork::new();
+        let a = network.add_node(PldNode::primary_input("a"));
+        let b = network.add_node(PldNode::primary_input("b"));
+        let target = network.add_node(PldNode::internal(
+            "f",
+            vec![a, b],
+            vec![
+                PldCube::new([CubeLiteral::One, CubeLiteral::One]),
+                PldCube::new([CubeLiteral::One, CubeLiteral::Zero]),
+            ],
+        ));
+
+        let reports = simplify_network_without_dc(&mut network).unwrap();
+
+        assert_eq!(
+            reports,
+            vec![PldSimplifyReport {
+                node: target,
+                replaced: true
+            }]
+        );
+        assert_eq!(
+            network.node(target).unwrap(),
+            &PldNode::internal("f", vec![a], vec![PldCube::new([CubeLiteral::One])])
+        );
     }
 
     #[test]

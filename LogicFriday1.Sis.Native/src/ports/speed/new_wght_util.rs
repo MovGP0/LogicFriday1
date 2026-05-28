@@ -27,18 +27,27 @@ pub const BEST_BANG_FOR_BUCK: i32 = 1;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum NewWeightError {
-    MissingSisPorts { operation: &'static str },
+    SisGraphDependency {
+        operation: &'static str,
+        source: &'static str,
+    },
     MissingNode(String),
     InvalidTransformIndex(usize),
-    NonFiniteCost { transform_index: usize, value: f64 },
-    SelectionVariableOutOfRange { variable: usize, variables: usize },
+    NonFiniteCost {
+        transform_index: usize,
+        value: f64,
+    },
+    SelectionVariableOutOfRange {
+        variable: usize,
+        variables: usize,
+    },
 }
 
 impl fmt::Display for NewWeightError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingSisPorts { operation } => {
-                write!(f, "{operation} is blocked by unported SIS dependencies")
+            Self::SisGraphDependency { operation, source } => {
+                write!(f, "{operation} requires SIS graph weighting from {source}")
             }
             Self::MissingNode(node) => write!(f, "new weight graph references missing node {node}"),
             Self::InvalidTransformIndex(index) => {
@@ -65,14 +74,16 @@ impl fmt::Display for NewWeightError {
 impl Error for NewWeightError {}
 
 pub fn compute_weight_from_sis_network() -> Result<(), NewWeightError> {
-    Err(NewWeightError::MissingSisPorts {
+    Err(NewWeightError::SisGraphDependency {
         operation: "new_speed_compute_weight",
+        source: "LogicSynthesis/sis/speed/new_wght_util.c:38",
     })
 }
 
 pub fn select_xform_from_sis_network() -> Result<(), NewWeightError> {
-    Err(NewWeightError::MissingSisPorts {
+    Err(NewWeightError::SisGraphDependency {
         operation: "new_speed_select_xform",
+        source: "LogicSynthesis/sis/speed/new_wght_util.c:1038",
     })
 }
 
@@ -1147,14 +1158,16 @@ mod tests {
     fn sis_backed_entry_points_report_explicit_dependencies() {
         assert_eq!(
             compute_weight_from_sis_network(),
-            Err(NewWeightError::MissingSisPorts {
+            Err(NewWeightError::SisGraphDependency {
                 operation: "new_speed_compute_weight",
+                source: "LogicSynthesis/sis/speed/new_wght_util.c:38",
             })
         );
         assert_eq!(
             select_xform_from_sis_network(),
-            Err(NewWeightError::MissingSisPorts {
+            Err(NewWeightError::SisGraphDependency {
                 operation: "new_speed_select_xform",
+                source: "LogicSynthesis/sis/speed/new_wght_util.c:1038",
             })
         );
     }

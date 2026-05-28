@@ -1,4 +1,4 @@
-//! Native Boolean node operations for the SIS node package.
+﻿//! Native Boolean node operations for the SIS node package.
 //!
 //! This module models the behavior of the legacy `node_t` Boolean cover
 //! operations with owned Rust data. It deliberately exposes Rust APIs only;
@@ -10,6 +10,9 @@ use std::error::Error;
 use std::fmt;
 
 pub type NodeResult<T> = Result<T, NodeError>;
+
+const MAX_NATIVE_SNOCOMP_INPUTS: usize = 12;
+const MAX_EXACT_SNOCOMP_PRIMES: usize = 64;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum NodeType {
@@ -46,12 +49,24 @@ pub enum SimplifyMode {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum NodeError {
-    MissingFunction { operation: &'static str },
+    MissingFunction {
+        operation: &'static str,
+    },
     InvalidConstantPhase(i32),
     InvalidLiteralPhase(i32),
-    IncompatibleCubeSize { expected: usize, actual: usize },
+    IncompatibleCubeSize {
+        expected: usize,
+        actual: usize,
+    },
     FunctionIsNotMinimumBase,
-    NativeSupportUnavailable { operation: &'static str },
+    NativeMinimizationTooLarge {
+        operation: &'static str,
+        inputs: usize,
+        max_inputs: usize,
+    },
+    NativeSupportUnavailable {
+        operation: &'static str,
+    },
 }
 
 impl fmt::Display for NodeError {
@@ -71,6 +86,16 @@ impl fmt::Display for NodeError {
             }
             Self::FunctionIsNotMinimumBase => {
                 write!(f, "node function is not in minimum base")
+            }
+            Self::NativeMinimizationTooLarge {
+                operation,
+                inputs,
+                max_inputs,
+            } => {
+                write!(
+                    f,
+                    "{operation} supports at most {max_inputs} inputs, got {inputs}"
+                )
             }
             Self::NativeSupportUnavailable { operation } => {
                 write!(f, "{operation} requires native minimization support")
@@ -817,12 +842,12 @@ pub fn node_simplify(f: &Node, d: Option<&Node>, mode: SimplifyMode) -> NodeResu
             node.minimum_base();
             Ok(node)
         }
+        SimplifyMode::SingleOutputNoComplement => simplify_single_output_no_complement(f, d),
         SimplifyMode::Espresso
         | SimplifyMode::Exact
         | SimplifyMode::ExactLiterals
         | SimplifyMode::DontCareSimplify
-        | SimplifyMode::NoComplement
-        | SimplifyMode::SingleOutputNoComplement => Err(NodeError::NativeSupportUnavailable {
+        | SimplifyMode::NoComplement => Err(NodeError::NativeSupportUnavailable {
             operation: "cover minimization",
         }),
     }
@@ -929,6 +954,377 @@ fn common_base(f: &Node, g: &Node, sort_by_name: bool) -> NodeResult<(Vec<String
         left.remap(&f.fanins, &fanins),
         right.remap(&g.fanins, &fanins),
     ))
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct NativeImplicant {
+    cube: Cube,
+    covered_onset: Vec<usize>,
+}
+
+fn simplify_single_output_no_complement(f: &Node, d: Option<&Node>) -> NodeResult<Node> {
+    let function = f.required_function("node_simplify")?;
+    let (fanins, onset, dont_care) = if let Some(d) = d {
+        let (fanins, onset, dont_care) = common_base(f, d, false)?;
+        (fanins, onset, dont_care)
+    } else {
+        (
+            f.fanins.clone(),
+            function.clone(),
+            Cover::zero(function.input_count()),
+        )
+    };
+
+    let minimized = minimize_single_output_cover(&onset, &dont_care)?;
+    let mut node = Node::new(minimized, fanins);
+    node.is_dup_free = true;
+    node.is_scc_minimal = true;
+    node.minimum_base();
+    Ok(node)
+}
+
+fn minimize_single_output_cover(onset: &Cover, dont_care: &Cover) -> NodeResult<Cover> {
+    let input_count = onset.input_count();
+    if input_count != dont_care.input_count() {
+        return Err(NodeError::IncompatibleCubeSize {
+            expected: input_count,
+            actual: dont_care.input_count(),
+        });
+    }
+    if input_count > MAX_NATIVE_SNOCOMP_INPUTS {
+        return Err(NodeError::NativeMinimizationTooLarge {
+            operation: "single-output no-complement minimization",
+            inputs: input_count,
+            max_inputs: MAX_NATIVE_SNOCOMP_INPUTS,
+        });
+    }
+
+    let (onset_minterms, allowed_minterms) = collect_minterms(onset, dont_care);
+    if onset_minterms.is_empty() {
+        return Ok(Cover::zero(input_count));
+    }
+    if allowed_minterms.len() == (1usize << input_count) {
+        return Ok(Cover::one(input_count));
+    }
+
+    let primes = prime_implicants(input_count, &onset_minterms, &allowed_minterms);
+    if primes.is_empty() {
+        return Ok(onset.clone().contained());
+    }
+
+    let selected = select_implicants(&primes, &onset_minterms);
+    Cover::new(
+        input_count,
+        selected
+            .into_iter()
+            .map(|index| primes[index].cube.clone())
+            .collect(),
+    )
+}
+
+fn collect_minterms(onset: &Cover, dont_care: &Cover) -> (Vec<usize>, Vec<usize>) {
+    let mut onset_minterms = Vec::new();
+    let mut allowed_minterms = Vec::new();
+    visit_assignments(onset.input_count(), &mut Vec::new(), &mut |assignment| {
+        let index = assignment_index(assignment);
+        let in_onset = onset.evaluate(assignment);
+        if in_onset {
+            onset_minterms.push(index);
+            allowed_minterms.push(index);
+        } else if dont_care.evaluate(assignment) {
+            allowed_minterms.push(index);
+        }
+    });
+    (onset_minterms, allowed_minterms)
+}
+
+fn prime_implicants(
+    input_count: usize,
+    onset_minterms: &[usize],
+    allowed_minterms: &[usize],
+) -> Vec<NativeImplicant> {
+    let mut current = allowed_minterms
+        .iter()
+        .copied()
+        .map(|minterm| cube_from_minterm(minterm, input_count))
+        .collect::<Vec<_>>();
+    let mut primes = Vec::new();
+
+    loop {
+        let mut used = vec![false; current.len()];
+        let mut next = Vec::new();
+        for left_index in 0..current.len() {
+            for right_index in (left_index + 1)..current.len() {
+                if let Some(merged) = current[left_index].merge_distance_one(&current[right_index])
+                {
+                    if cube_is_allowed(&merged, input_count, allowed_minterms)
+                        && !next.contains(&merged)
+                    {
+                        next.push(merged);
+                    }
+                    used[left_index] = true;
+                    used[right_index] = true;
+                }
+            }
+        }
+
+        for (cube, was_used) in current.into_iter().zip(used) {
+            let covered_onset = covered_onset_minterms(&cube, input_count, onset_minterms);
+            if !was_used
+                && !covered_onset.is_empty()
+                && !primes
+                    .iter()
+                    .any(|prime: &NativeImplicant| prime.cube == cube)
+            {
+                primes.push(NativeImplicant {
+                    cube,
+                    covered_onset,
+                });
+            }
+        }
+
+        if next.is_empty() {
+            break;
+        }
+        current = next;
+    }
+
+    primes
+}
+
+fn select_implicants(primes: &[NativeImplicant], onset_minterms: &[usize]) -> Vec<usize> {
+    let mut uncovered = onset_minterms.to_vec();
+    let mut selected = Vec::new();
+
+    loop {
+        let mut changed = false;
+        for minterm in uncovered.clone() {
+            let covering = primes
+                .iter()
+                .enumerate()
+                .filter(|(_, prime)| prime.covered_onset.contains(&minterm))
+                .map(|(index, _)| index)
+                .collect::<Vec<_>>();
+            if covering.len() == 1 && !selected.contains(&covering[0]) {
+                selected.push(covering[0]);
+                changed = true;
+            }
+        }
+        if !changed {
+            break;
+        }
+        remove_covered_minterms(&mut uncovered, primes, &selected);
+    }
+
+    if uncovered.is_empty() {
+        return selected;
+    }
+
+    let candidates = primes
+        .iter()
+        .enumerate()
+        .filter(|(index, prime)| {
+            !selected.contains(index)
+                && prime
+                    .covered_onset
+                    .iter()
+                    .any(|minterm| uncovered.contains(minterm))
+        })
+        .map(|(index, _)| index)
+        .collect::<Vec<_>>();
+
+    let mut extra = if candidates.len() <= MAX_EXACT_SNOCOMP_PRIMES {
+        exact_cover_selection(primes, &candidates, &uncovered)
+    } else {
+        greedy_cover_selection(primes, &candidates, &uncovered)
+    };
+    selected.append(&mut extra);
+    remove_redundant_selected(primes, onset_minterms, &mut selected);
+    selected
+}
+
+fn exact_cover_selection(
+    primes: &[NativeImplicant],
+    candidates: &[usize],
+    uncovered: &[usize],
+) -> Vec<usize> {
+    let mut best: Option<Vec<usize>> = None;
+    let mut current = Vec::new();
+    exact_cover_branch(primes, candidates, uncovered, &mut current, &mut best);
+    best.unwrap_or_else(|| greedy_cover_selection(primes, candidates, uncovered))
+}
+
+fn exact_cover_branch(
+    primes: &[NativeImplicant],
+    candidates: &[usize],
+    uncovered: &[usize],
+    current: &mut Vec<usize>,
+    best: &mut Option<Vec<usize>>,
+) {
+    if uncovered.is_empty() {
+        if best
+            .as_ref()
+            .is_none_or(|best_selection| selection_is_better(primes, current, best_selection))
+        {
+            *best = Some(current.clone());
+        }
+        return;
+    }
+    if best
+        .as_ref()
+        .is_some_and(|best_selection| current.len() >= best_selection.len())
+    {
+        return;
+    }
+
+    let target = uncovered[0];
+    let mut covering = candidates
+        .iter()
+        .copied()
+        .filter(|index| !current.contains(index) && primes[*index].covered_onset.contains(&target))
+        .collect::<Vec<_>>();
+    covering.sort_by_key(|index| {
+        (
+            std::cmp::Reverse(primes[*index].covered_onset.len()),
+            primes[*index].cube.literal_count(),
+        )
+    });
+
+    for index in covering {
+        current.push(index);
+        let remaining = uncovered
+            .iter()
+            .copied()
+            .filter(|minterm| !primes[index].covered_onset.contains(minterm))
+            .collect::<Vec<_>>();
+        exact_cover_branch(primes, candidates, &remaining, current, best);
+        current.pop();
+    }
+}
+
+fn greedy_cover_selection(
+    primes: &[NativeImplicant],
+    candidates: &[usize],
+    uncovered: &[usize],
+) -> Vec<usize> {
+    let mut selected = Vec::new();
+    let mut uncovered = uncovered.to_vec();
+    while !uncovered.is_empty() {
+        let Some(best) = candidates
+            .iter()
+            .copied()
+            .filter(|index| !selected.contains(index))
+            .max_by_key(|index| {
+                let covered = primes[*index]
+                    .covered_onset
+                    .iter()
+                    .filter(|minterm| uncovered.contains(minterm))
+                    .count();
+                (
+                    covered,
+                    std::cmp::Reverse(primes[*index].cube.literal_count()),
+                )
+            })
+        else {
+            break;
+        };
+        selected.push(best);
+        uncovered.retain(|minterm| !primes[best].covered_onset.contains(minterm));
+    }
+    selected
+}
+
+fn remove_covered_minterms(
+    uncovered: &mut Vec<usize>,
+    primes: &[NativeImplicant],
+    selected: &[usize],
+) {
+    uncovered.retain(|minterm| {
+        !selected
+            .iter()
+            .any(|index| primes[*index].covered_onset.contains(minterm))
+    });
+}
+
+fn remove_redundant_selected(
+    primes: &[NativeImplicant],
+    onset_minterms: &[usize],
+    selected: &mut Vec<usize>,
+) {
+    selected.sort_unstable();
+    selected.dedup();
+    let mut index = 0;
+    while index < selected.len() {
+        let candidate = selected[index];
+        let covered_without = onset_minterms.iter().all(|minterm| {
+            selected.iter().copied().any(|selected_index| {
+                selected_index != candidate
+                    && primes[selected_index].covered_onset.contains(minterm)
+            })
+        });
+        if covered_without {
+            selected.remove(index);
+        } else {
+            index += 1;
+        }
+    }
+}
+
+fn selection_is_better(
+    primes: &[NativeImplicant],
+    candidate: &[usize],
+    incumbent: &[usize],
+) -> bool {
+    let candidate_literals = selection_literal_count(primes, candidate);
+    let incumbent_literals = selection_literal_count(primes, incumbent);
+    candidate.len() < incumbent.len()
+        || (candidate.len() == incumbent.len() && candidate_literals < incumbent_literals)
+}
+
+fn selection_literal_count(primes: &[NativeImplicant], selected: &[usize]) -> usize {
+    selected
+        .iter()
+        .map(|index| primes[*index].cube.literal_count())
+        .sum()
+}
+
+fn covered_onset_minterms(cube: &Cube, input_count: usize, onset_minterms: &[usize]) -> Vec<usize> {
+    onset_minterms
+        .iter()
+        .copied()
+        .filter(|minterm| cube.evaluate(&assignment_from_index(*minterm, input_count)))
+        .collect()
+}
+
+fn cube_is_allowed(cube: &Cube, input_count: usize, allowed_minterms: &[usize]) -> bool {
+    let mut allowed = true;
+    visit_assignments(input_count, &mut Vec::new(), &mut |assignment| {
+        if cube.evaluate(assignment) && !allowed_minterms.contains(&assignment_index(assignment)) {
+            allowed = false;
+        }
+    });
+    allowed
+}
+
+fn cube_from_minterm(minterm: usize, input_count: usize) -> Cube {
+    Cube::new(
+        assignment_from_index(minterm, input_count)
+            .into_iter()
+            .map(Some)
+            .collect(),
+    )
+}
+
+fn assignment_from_index(minterm: usize, input_count: usize) -> Vec<bool> {
+    (0..input_count)
+        .map(|index| minterm & (1usize << (input_count - index - 1)) != 0)
+        .collect()
+}
+
+fn assignment_index(assignment: &[bool]) -> usize {
+    assignment
+        .iter()
+        .fold(0usize, |index, value| (index << 1) | usize::from(*value))
 }
 
 fn visit_assignments<F>(input_count: usize, partial: &mut Vec<bool>, visit: &mut F)
@@ -1038,6 +1434,47 @@ mod tests {
 
         assert_eq!(sum.fanins, vec!["a"]);
         assert_eq!(node_function(&sum).unwrap(), NodeFunction::Buffer);
+    }
+
+    #[test]
+    fn single_output_no_complement_minimizes_cover_without_dont_cares() {
+        let function = Cover::new(
+            2,
+            vec![
+                Cube::new(vec![Some(true), Some(true)]),
+                Cube::new(vec![Some(true), Some(false)]),
+            ],
+        )
+        .unwrap();
+        let node = Node::new(function, vec!["a".to_string(), "b".to_string()]);
+
+        let simplified =
+            node_simplify(&node, None, SimplifyMode::SingleOutputNoComplement).unwrap();
+
+        assert_eq!(simplified.fanins, vec!["a"]);
+        assert_eq!(node_function(&simplified).unwrap(), NodeFunction::Buffer);
+        assert!(node_equal(&node, &simplified).unwrap());
+    }
+
+    #[test]
+    fn single_output_no_complement_uses_dont_cares_for_larger_implicant() {
+        let function = Cover::new(2, vec![Cube::new(vec![Some(true), Some(true)])]).unwrap();
+        let dont_care = Node::new(
+            Cover::new(2, vec![Cube::new(vec![Some(true), Some(false)])]).unwrap(),
+            vec!["a".to_string(), "b".to_string()],
+        );
+        let node = Node::new(function, vec!["a".to_string(), "b".to_string()]);
+
+        let simplified = node_simplify(
+            &node,
+            Some(&dont_care),
+            SimplifyMode::SingleOutputNoComplement,
+        )
+        .unwrap();
+
+        assert_eq!(simplified.fanins, vec!["a"]);
+        assert_eq!(node_function(&simplified).unwrap(), NodeFunction::Buffer);
+        assert!(node_contains(&simplified, &node).unwrap());
     }
 
     #[test]

@@ -11,6 +11,10 @@
 use std::error::Error;
 use std::fmt;
 
+use crate::ports::node::node::{
+    Node, NodeError, SimplifyMode, node_constant, node_num_cube, node_num_literal, node_simplify,
+};
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SimMethod {
     SimpComp,
@@ -284,7 +288,18 @@ pub enum SimplifyError {
     UnknownMethod,
     UnknownAcceptCriteria,
     UnknownDontCareType,
-    MissingSisPorts { operation: &'static str },
+    UnsupportedNativeSimplifyOptions {
+        method: SimMethod,
+        dctype: SimDcType,
+        filter: SimFilter,
+    },
+    Node {
+        operation: &'static str,
+        reason: String,
+    },
+    MissingSisPorts {
+        operation: &'static str,
+    },
 }
 
 impl fmt::Display for SimplifyError {
@@ -295,6 +310,17 @@ impl fmt::Display for SimplifyError {
                 write!(f, "unknown SIS simplification acceptance criteria")
             }
             Self::UnknownDontCareType => write!(f, "unknown SIS simplify don't-care type"),
+            Self::UnsupportedNativeSimplifyOptions {
+                method,
+                dctype,
+                filter,
+            } => write!(
+                f,
+                "native simplify_node supports only SNoComp with no don't-cares and no filter, got {method:?}/{dctype:?}/{filter:?}"
+            ),
+            Self::Node { operation, reason } => {
+                write!(f, "{operation} failed in native node port: {reason}")
+            }
             Self::MissingSisPorts { operation } => write!(
                 f,
                 "{operation} requires native Rust SIS ports that are not available yet"
@@ -605,10 +631,66 @@ pub fn execute_simplify_cspf_node<N, D>(
     })
 }
 
-pub fn simplify_node_native() -> Result<(), SimplifyError> {
-    Err(SimplifyError::MissingSisPorts {
-        operation: "simplify_node",
-    })
+pub fn simplify_node_native(
+    node: &mut NativeSimplifyNode<Node>,
+    options: SimplifyNodeOptions,
+) -> Result<SimplifyNodeOutcome<Node>, SimplifyError> {
+    if options.method != SimMethod::SNoComp
+        || options.dctype != SimDcType::None
+        || options.filter != SimFilter::None
+    {
+        return Err(SimplifyError::UnsupportedNativeSimplifyOptions {
+            method: options.method,
+            dctype: options.dctype,
+            filter: options.filter,
+        });
+    }
+
+    execute_simplify_node(
+        node,
+        options,
+        |source| {
+            if source != DcSource::ConstantZero {
+                return Err(SimplifyError::UnsupportedNativeSimplifyOptions {
+                    method: options.method,
+                    dctype: options.dctype,
+                    filter: options.filter,
+                });
+            }
+
+            Ok(NativeDontCare::new(
+                node_constant(0).map_err(|error| map_node_error("constant zero DC", error))?,
+                Some(NodeMetrics::new(0, 0, 0, 0)),
+            ))
+        },
+        |_, dc, filter| {
+            if filter != SimFilter::None {
+                return Err(SimplifyError::UnsupportedNativeSimplifyOptions {
+                    method: options.method,
+                    dctype: options.dctype,
+                    filter,
+                });
+            }
+
+            Ok(dc)
+        },
+        |node_value, dc, sim_type| {
+            if sim_type != NodeSimType::SNoComp {
+                return Err(SimplifyError::UnsupportedNativeSimplifyOptions {
+                    method: options.method,
+                    dctype: options.dctype,
+                    filter: options.filter,
+                });
+            }
+
+            let simplified =
+                node_simplify(node_value, Some(dc), SimplifyMode::SingleOutputNoComplement)
+                    .map_err(|error| map_node_error("SNOCOMP minimization", error))?;
+            let metrics = node_metrics(&simplified)
+                .map_err(|error| map_node_error("SNOCOMP metrics", error))?;
+            Ok(NativeSimplifyCandidate::new(simplified, metrics))
+        },
+    )
 }
 
 pub fn simplify_cspf_node_native() -> Result<(), SimplifyError> {
@@ -617,13 +699,40 @@ pub fn simplify_cspf_node_native() -> Result<(), SimplifyError> {
     })
 }
 
+fn node_metrics(node: &Node) -> Result<NodeMetrics, NodeError> {
+    let sop_literals = node_num_literal(node)?;
+    Ok(NodeMetrics::new(
+        sop_literals,
+        sop_literals,
+        node_num_cube(node)?,
+        node.fanins.len(),
+    ))
+}
+
+fn map_node_error(operation: &'static str, error: NodeError) -> SimplifyError {
+    SimplifyError::Node {
+        operation,
+        reason: error.to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ports::node::node::{Cover, Cube, Node, NodeFunction, node_function};
     use std::cell::RefCell;
 
     fn metrics(factor_literals: usize, sop_literals: usize, cubes: usize) -> NodeMetrics {
         NodeMetrics::new(factor_literals, sop_literals, cubes, 0)
+    }
+
+    fn node_metrics_for(node: &Node) -> NodeMetrics {
+        NodeMetrics::new(
+            node.function().unwrap().literal_count(),
+            node.function().unwrap().literal_count(),
+            node.function().unwrap().cube_count(),
+            node.fanins.len(),
+        )
     }
 
     #[test]
@@ -1071,13 +1180,78 @@ mod tests {
     }
 
     #[test]
-    fn node_bound_entries_report_missing_sis_ports() {
+    fn simplify_node_native_runs_snocomp_without_dont_cares() {
+        let function = Cover::new(
+            2,
+            vec![
+                Cube::new(vec![Some(true), Some(true)]),
+                Cube::new(vec![Some(true), Some(false)]),
+            ],
+        )
+        .unwrap();
+        let source = Node::new(function, vec!["a".to_string(), "b".to_string()]);
+        let mut node = NativeSimplifyNode::new(source, NodeMetrics::new(4, 4, 2, 2));
+
+        let outcome = simplify_node_native(
+            &mut node,
+            SimplifyNodeOptions {
+                method: SimMethod::SNoComp,
+                dctype: SimDcType::None,
+                accept: SimAccept::SopLiterals,
+                filter: SimFilter::None,
+                parameters: SimpDcParameters {
+                    fanin_level: 0,
+                    fanin_fanout_level: 0,
+                },
+            },
+        )
+        .unwrap();
+
+        assert!(outcome.replaced);
+        assert_eq!(outcome.dc_source, DcSource::ConstantZero);
+        assert_eq!(node.value.fanins, vec!["a"]);
+        assert_eq!(node_function(&node.value).unwrap(), NodeFunction::Buffer);
+        assert_eq!(node.metrics, node_metrics_for(&node.value));
         assert_eq!(
-            simplify_node_native(),
-            Err(SimplifyError::MissingSisPorts {
-                operation: "simplify_node",
+            node.sim_flag,
+            Some(SimFlag {
+                method: SimMethod::SNoComp,
+                accept: SimAccept::SopLiterals,
+                dctype: SimDcType::None,
             })
         );
+    }
+
+    #[test]
+    fn simplify_node_native_rejects_non_snocomp_options() {
+        let function = Cover::new(1, vec![Cube::new(vec![Some(true)])]).unwrap();
+        let source = Node::new(function, vec!["a".to_string()]);
+        let mut node = NativeSimplifyNode::new(source, NodeMetrics::new(1, 1, 1, 1));
+
+        assert_eq!(
+            simplify_node_native(
+                &mut node,
+                SimplifyNodeOptions {
+                    method: SimMethod::Espresso,
+                    dctype: SimDcType::None,
+                    accept: SimAccept::SopLiterals,
+                    filter: SimFilter::None,
+                    parameters: SimpDcParameters {
+                        fanin_level: 0,
+                        fanin_fanout_level: 0,
+                    },
+                },
+            ),
+            Err(SimplifyError::UnsupportedNativeSimplifyOptions {
+                method: SimMethod::Espresso,
+                dctype: SimDcType::None,
+                filter: SimFilter::None,
+            })
+        );
+    }
+
+    #[test]
+    fn cspf_node_bound_entry_reports_missing_sis_ports() {
         assert_eq!(
             simplify_cspf_node_native(),
             Err(SimplifyError::MissingSisPorts {

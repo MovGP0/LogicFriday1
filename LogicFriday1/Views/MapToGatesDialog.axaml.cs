@@ -48,6 +48,12 @@ public partial class MapToGatesDialog : Window
 
     private void OkButton_OnClick(object? sender, RoutedEventArgs e)
     {
+        if (!ViewModel.HasRequiredGateFamily())
+        {
+            _ = ShowMessageAsync("Select at least one NAND or NOR gate family.");
+            return;
+        }
+
         Close(true);
     }
 

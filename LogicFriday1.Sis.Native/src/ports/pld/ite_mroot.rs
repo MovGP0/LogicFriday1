@@ -14,9 +14,6 @@ use std::fmt;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum IteMrootError {
-    MissingNativePorts {
-        operation: &'static str,
-    },
     MissingNode(NodeId),
     MissingIteForNode(NodeId),
     MissingVertex(IteVertexId),
@@ -40,10 +37,6 @@ pub enum IteMrootError {
 impl fmt::Display for IteMrootError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingNativePorts { operation } => write!(
-                f,
-                "{operation} is blocked by unported SIS C-file dependencies"
-            ),
             Self::MissingNode(node) => write!(f, "missing SIS node {}", node.0),
             Self::MissingIteForNode(node) => write!(f, "node {} has no ITE root", node.0),
             Self::MissingVertex(vertex) => write!(f, "missing ITE vertex {}", vertex.0),
@@ -386,26 +379,51 @@ pub struct FreeReport {
     pub freed_vertices: Vec<IteVertexId>,
 }
 
-pub fn missing_native_ports(operation: &'static str) -> IteMrootError {
-    IteMrootError::MissingNativePorts { operation }
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct CreateAndMapReport {
+    pub modify: ModifyReport,
+    pub mapping: MappingReport,
+    pub free: FreeReport,
 }
 
-pub fn create_and_map_mroot_network_blocked<Network, Init>(
-    _network: &mut Network,
-    _init_param: &Init,
+type IteBuilder<'a, Init> =
+    dyn FnMut(NodeId, &Init, &SisNetwork, &mut IteGraph) -> IteMrootResult<Option<IteVertexId>> + 'a;
+
+type IteMapper<'a> = dyn FnMut(IteVertexId, &mut IteGraph) -> IteMrootResult<i32> + 'a;
+
+pub fn create_and_map_mroot_network<Init>(
+    network: &mut SisNetwork,
+    graph: &mut IteGraph,
+    init_param: &Init,
+    builder: &mut IteBuilder<'_, Init>,
+    mapper: &mut IteMapper<'_>,
+) -> IteMrootResult<CreateAndMapReport> {
+    let modify = create_mroot_ite_network(network, graph, init_param, builder)?;
+    let mapping = make_tree_and_map(network, graph, mapper)?;
+    let free = traverse_and_free(network, graph)?;
+
+    Ok(CreateAndMapReport {
+        modify,
+        mapping,
+        free,
+    })
+}
+
+pub fn create_mroot_ite_network<Init>(
+    network: &mut SisNetwork,
+    graph: &mut IteGraph,
+    init_param: &Init,
+    builder: &mut IteBuilder<'_, Init>,
+) -> IteMrootResult<ModifyReport> {
+    create_mroot_ite_network_with_builder(network, graph, init_param, builder)
+}
+
+pub fn make_tree_and_map(
+    network: &SisNetwork,
+    graph: &mut IteGraph,
+    mapper: &mut IteMapper<'_>,
 ) -> IteMrootResult<MappingReport> {
-    Err(missing_native_ports("act_ite_create_and_map_mroot_network"))
-}
-
-pub fn create_mroot_ite_network_blocked<Network, Init>(
-    _network: &mut Network,
-    _init_param: &Init,
-) -> IteMrootResult<()> {
-    Err(missing_native_ports("act_ite_create_mroot_ite_network"))
-}
-
-pub fn make_tree_and_map_blocked<Network>(_network: &mut Network) -> IteMrootResult<MappingReport> {
-    Err(missing_native_ports("act_ite_mroot_make_tree_and_map"))
+    make_tree_and_map_with_mapper(network, graph, mapper)
 }
 
 pub fn create_mroot_ite_network_with_builder<Init, Builder>(

@@ -421,6 +421,14 @@ pub struct PartialCollapseReport {
     pub scores: HashMap<NodeId, i32>,
 }
 
+type FanoutMapper<'a> = dyn FnMut(
+        &IteCollapseNetwork,
+        NodeId,
+        &[NodeId],
+        &ActIteInitParam,
+    ) -> Result<Vec<CollapsedFanout>, IteCollapseError>
+    + 'a;
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum IteCollapseError {
     MissingNode(NodeId),
@@ -430,7 +438,7 @@ pub enum IteCollapseError {
     NotAFanin { fanout: NodeId, fanin: NodeId },
     UnknownMappedFanout(NodeId),
     UnknownMapMethod(MapMethod),
-    MissingNativePorts { operation: &'static str },
+    AmbiguousMappedCost { node: NodeId },
 }
 
 impl fmt::Display for IteCollapseError {
@@ -449,8 +457,12 @@ impl fmt::Display for IteCollapseError {
                 write!(f, "collapse mapper did not return fanout {}", fanout.0)
             }
             Self::UnknownMapMethod(method) => write!(f, "mapping method {method:?} is not known"),
-            Self::MissingNativePorts { operation } => {
-                write!(f, "{operation} requires native SIS prerequisite ports")
+            Self::AmbiguousMappedCost { node } => {
+                write!(
+                    f,
+                    "mapped cost for node {} contains both ITE and ACT graphs",
+                    node.0
+                )
             }
         }
     }
@@ -458,19 +470,24 @@ impl fmt::Display for IteCollapseError {
 
 impl Error for IteCollapseError {}
 
-pub fn act_ite_partial_collapse_blocked<Network>(
-    _network: &mut Network,
-    _init_param: &ActIteInitParam,
+pub fn act_ite_partial_collapse(
+    network: &mut IteCollapseNetwork,
+    init_param: &ActIteInitParam,
+    map_collapsed_fanouts: &mut FanoutMapper<'_>,
 ) -> Result<i32, IteCollapseError> {
-    Err(missing_native_ports("act_ite_partial_collapse"))
+    partial_collapse_network(network, init_param, map_collapsed_fanouts)
+        .map(|report| report.total_gain)
 }
 
-pub fn act_ite_partial_collapse_node_blocked<Network, Node>(
-    _network: &mut Network,
-    _node: &Node,
-    _init_param: &ActIteInitParam,
+pub fn act_ite_partial_collapse_node(
+    network: &mut IteCollapseNetwork,
+    node: NodeId,
+    init_param: &ActIteInitParam,
+    scores: &mut HashMap<NodeId, i32>,
+    map_collapsed_fanouts: &mut FanoutMapper<'_>,
 ) -> Result<i32, IteCollapseError> {
-    Err(missing_native_ports("act_ite_partial_collapse_node"))
+    let attempt = partial_collapse_node(network, node, init_param, scores, map_collapsed_fanouts)?;
+    Ok(if attempt.accepted { attempt.gain } else { 0 })
 }
 
 pub fn assign_score_node(
@@ -640,7 +657,7 @@ pub fn update_ite_fields(
         }
         graph.put_node_names(network)?;
         if cost.act.is_some() {
-            return Err(missing_native_ports("ambiguous ITE/ACT cost slot"));
+            return Err(IteCollapseError::AmbiguousMappedCost { node });
         }
         return Ok(());
     }
@@ -842,10 +859,6 @@ fn rescore_after_collapse(
         }
     }
     Ok(())
-}
-
-fn missing_native_ports(operation: &'static str) -> IteCollapseError {
-    IteCollapseError::MissingNativePorts { operation }
 }
 
 #[cfg(test)]
