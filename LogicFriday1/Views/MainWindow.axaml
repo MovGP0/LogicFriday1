@@ -155,6 +155,7 @@
                 <MenuItem Header="_Submit (Enter)"
                           Click="TruthTableSubmit_OnClick" />
                 <MenuItem Header="_Cancel (Esc)"
+                          IsEnabled="{Binding IsTruthTableVisible}"
                           Click="TruthTableCancel_OnClick" />
             </MenuItem>
 

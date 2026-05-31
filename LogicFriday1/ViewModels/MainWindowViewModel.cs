@@ -404,12 +404,27 @@ public partial class MainWindowViewModel : ObservableObject
 
     public void CancelTruthTableEditing()
     {
+        if (!IsTruthTableVisible)
+        {
+            return;
+        }
+
+        var selectedFunction = SelectedFunctionSummary?.LogicFunction;
         TruthTableRows.Clear();
         _truthTableInputNames = [];
         _truthTableOutputNames = [];
         _truthTableEditTarget = null;
         IsTruthTableVisible = false;
-        IsFunctionDetailVisible = false;
+
+        if (selectedFunction is not null)
+        {
+            ShowFunction(selectedFunction);
+        }
+        else
+        {
+            IsFunctionDetailVisible = false;
+        }
+
         StatusText = "Ready";
     }
 
