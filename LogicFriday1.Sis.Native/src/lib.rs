@@ -1,6 +1,56 @@
+#![allow(special_module_name)]
+
 mod facade;
 
-pub mod ports;
+pub mod array;
+pub mod astg;
+pub mod atpg;
+pub mod avl;
+pub mod bdd_cmu;
+pub mod bdd_ucb;
+pub mod clock;
+pub mod command;
+pub mod decomp;
+pub mod delay;
+pub mod enc;
+pub mod error;
+pub mod espresso;
+pub mod extract;
+pub mod factor;
+pub mod gcd;
+pub mod genlib;
+pub mod graph;
+pub mod graphics;
+pub mod io;
+pub mod latch;
+pub mod linsolv;
+pub mod list;
+pub mod main;
+pub mod map;
+pub mod maxflow;
+pub mod mincov;
+pub mod minimize;
+pub mod network;
+pub mod node;
+pub mod ntbdd;
+pub mod octio;
+pub mod order;
+pub mod phase;
+pub mod pld;
+pub mod power;
+pub mod resub;
+pub mod retime;
+pub mod seqbdd;
+pub mod sim;
+pub mod simplify;
+pub mod sparse;
+pub mod speed;
+pub mod st;
+pub mod stg;
+pub mod test;
+pub mod timing;
+pub mod util;
+pub mod var_set;
 
 /// Returns the native SIS interop ABI version.
 ///

@@ -4,10 +4,10 @@ use std::collections::HashMap;
 use std::slice;
 use std::str;
 
-use crate::ports::map::com_map;
-use crate::ports::map::library as genlib_library;
-use crate::ports::map::map_interface;
-use crate::ports::map::two_level;
+use crate::map::com_map;
+use crate::map::library as genlib_library;
+use crate::map::map_interface;
+use crate::map::two_level;
 
 thread_local! {
     static LAST_ERROR: RefCell<String> = RefCell::new(String::new());
