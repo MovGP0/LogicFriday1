@@ -738,7 +738,7 @@ public partial class MainWindowViewModel : ObservableObject
             PI: logicFunction.MinimizedFunction is null
                 ? "Unminimized"
                 : logicFunction.MinimizedFunction.Products.Count.ToString(),
-            Gates: "Not Mapped",
+            Gates: "Not mapped",
             LogicFunction: logicFunction);
     }
 
