@@ -3,6 +3,7 @@ name = "logicfriday1_espresso"
 version = "0.1.0"
 edition = "2024"
 build = "build.rs"
+autobins = false
 
 [lib]
 crate-type = ["cdylib", "rlib"]
