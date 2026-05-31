@@ -150,7 +150,10 @@
                 <MenuItem Header="_True" />
                 <MenuItem Header="_False" />
                 <MenuItem Header="_Don't Care" />
-                <MenuItem Header="_Invert" />
+                <MenuItem x:Name="TruthTableInvertMainMenuItem"
+                          Header="_Invert"
+                          IsEnabled="False"
+                          Click="TruthTableInvert_OnClick" />
                 <Separator />
                 <MenuItem Header="_Submit (Enter)"
                           Click="TruthTableSubmit_OnClick" />
@@ -468,6 +471,7 @@
                           CanUserReorderColumns="False"
                           CanUserSortColumns="False"
                           SelectionMode="Extended"
+                          SelectionChanged="TruthTableDataGrid_OnSelectionChanged"
                           GridLinesVisibility="All"
                           HeadersVisibility="Column"
                           Background="{DynamicResource LogicFriday.Brush.SurfaceContainerLowest}"

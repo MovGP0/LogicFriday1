@@ -27,13 +27,39 @@ public partial class MainWindow : Window
     private const string ActiveGatePaletteButtonClass = "active";
     private TruthTableRow? _truthTableContextRow;
     private Button? _activeGatePaletteButton;
+    private INotifyPropertyChanged? _propertyChangedDataContext;
 
     public MainWindow()
     {
         InitializeComponent();
+        DataContextChanged += MainWindow_OnDataContextChanged;
         TruthTableDataGrid.AddHandler(PointerPressedEvent, TruthTableDataGrid_OnPointerPressed, RoutingStrategies.Tunnel);
         GateDiagramSurface.VariableNameRequested += GateDiagramSurface_OnVariableNameRequested;
         GateDiagramSurface.PaletteSelectionCleared += GateDiagramSurface_OnPaletteSelectionCleared;
+    }
+
+    private void MainWindow_OnDataContextChanged(object? sender, EventArgs e)
+    {
+        if (_propertyChangedDataContext is not null)
+        {
+            _propertyChangedDataContext.PropertyChanged -= DataContext_OnPropertyChanged;
+        }
+
+        _propertyChangedDataContext = DataContext as INotifyPropertyChanged;
+        if (_propertyChangedDataContext is not null)
+        {
+            _propertyChangedDataContext.PropertyChanged += DataContext_OnPropertyChanged;
+        }
+
+        UpdateTruthTableInvertMainMenuState();
+    }
+
+    private void DataContext_OnPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(MainWindowViewModel.IsTruthTableVisible))
+        {
+            UpdateTruthTableInvertMainMenuState();
+        }
     }
 
     private async void HelpContents_OnClick(object? sender, RoutedEventArgs e)
@@ -63,15 +89,25 @@ public partial class MainWindow : Window
         }
     }
 
-    private void Minimize_OnClick(object? sender, RoutedEventArgs e)
+    private async void Minimize_OnClick(object? sender, RoutedEventArgs e)
     {
-        if (DataContext is MainWindowViewModel viewModel)
+        if (DataContext is not MainWindowViewModel { IsOperationMinimizeEnabled: true } viewModel ||
+            viewModel.GetSelectedFunction() is not { } selectedFunction)
         {
-            viewModel.MinimizeSelectedFunction();
-            if (viewModel.GetSelectedFunction() is { } logicFunction)
-            {
-                ConfigureTruthTableColumns(FunctionTruthTableDataGrid, logicFunction.InputNames, logicFunction.OutputNames);
-            }
+            return;
+        }
+
+        var dialog = new MinimizeDialog(selectedFunction.OutputNames.Length);
+        var result = await dialog.ShowDialog<bool?>(this);
+        if (result != true)
+        {
+            return;
+        }
+
+        viewModel.MinimizeSelectedFunction(dialog.ViewModel.ToMinimizeOptions());
+        if (viewModel.GetSelectedFunction() is { } logicFunction)
+        {
+            ConfigureTruthTableColumns(FunctionTruthTableDataGrid, logicFunction.InputNames, logicFunction.OutputNames);
         }
     }
 
@@ -147,6 +183,7 @@ public partial class MainWindow : Window
 
         viewModel.StartNewTruthTable(dialog.ViewModel.InputNames, dialog.ViewModel.OutputNames);
         ConfigureTruthTableColumns(TruthTableDataGrid, dialog.ViewModel.InputNames, dialog.ViewModel.OutputNames);
+        UpdateTruthTableInvertMainMenuState();
     }
 
     private void ModifyTruthTable_OnClick(object? sender, RoutedEventArgs e)
@@ -159,6 +196,7 @@ public partial class MainWindow : Window
         }
 
         ConfigureTruthTableColumns(TruthTableDataGrid, logicFunction.InputNames, logicFunction.OutputNames);
+        UpdateTruthTableInvertMainMenuState();
     }
 
     private void NewLogicEquation_OnClick(object? sender, RoutedEventArgs e)
@@ -212,6 +250,7 @@ public partial class MainWindow : Window
 
             viewModel.StartImportedTruthTable(import.InputNames, import.OutputNames, import.OutputValues);
             ConfigureTruthTableColumns(TruthTableDataGrid, import.InputNames, import.OutputNames);
+            UpdateTruthTableInvertMainMenuState();
         }
         catch (TruthTableImportException ex)
         {
@@ -472,6 +511,18 @@ public partial class MainWindow : Window
 
         ConfigureTruthTableColumns(FunctionTruthTableDataGrid, logicFunction.InputNames, logicFunction.OutputNames);
         viewModel.ShowFunction(logicFunction);
+    }
+
+    private void TruthTableDataGrid_OnSelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        UpdateTruthTableInvertMainMenuState();
+    }
+
+    private void UpdateTruthTableInvertMainMenuState()
+    {
+        TruthTableInvertMainMenuItem.IsEnabled =
+            DataContext is MainWindowViewModel { IsTruthTableVisible: true } &&
+            TruthTableDataGrid.SelectedItems.OfType<TruthTableRow>().Any();
     }
 
     private void ConfigureTruthTableColumns(DataGrid dataGrid, string[] inputNames, string[] outputNames)
@@ -744,6 +795,8 @@ public partial class MainWindow : Window
         {
             TruthTableDataGrid.SelectedItems.Add(row);
         }
+
+        UpdateTruthTableInvertMainMenuState();
     }
 
     private void TruthTableSetTrue_OnClick(object? sender, RoutedEventArgs e)
@@ -816,6 +869,7 @@ public partial class MainWindow : Window
             }
 
             TruthTableDataGrid.Columns.Clear();
+            UpdateTruthTableInvertMainMenuState();
         }
     }
 
@@ -825,6 +879,7 @@ public partial class MainWindow : Window
         {
             viewModel.CancelTruthTableEditing();
             TruthTableDataGrid.Columns.Clear();
+            UpdateTruthTableInvertMainMenuState();
         }
     }
 

@@ -190,7 +190,7 @@ public partial class MainWindowViewModel : ObservableObject
         StatusText = "Showing minimized function view";
     }
 
-    public void MinimizeSelectedFunction()
+    public void MinimizeSelectedFunction(MinimizeOptions options)
     {
         if (!IsOperationMinimizeEnabled || SelectedFunctionSummary is not { LogicFunction: { } logicFunction } summary)
         {
@@ -200,7 +200,7 @@ public partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            var minimizedFunction = LogicFunctionMinimizer.Minimize(logicFunction);
+            var minimizedFunction = LogicFunctionMinimizer.Minimize(logicFunction, options);
             var updatedFunction = WithMinimizedFunction(logicFunction, minimizedFunction);
             var updatedSummary = CreateFunctionSummary(updatedFunction);
             var summaryIndex = FunctionSummaries.IndexOf(summary);

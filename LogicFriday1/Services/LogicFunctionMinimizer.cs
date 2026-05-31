@@ -8,6 +8,24 @@ public static class LogicFunctionMinimizer
 {
     public static MinimizedLogicFunction Minimize(LogicFunction logicFunction)
     {
+        return Minimize(logicFunction, MinimizeOptions.Default);
+    }
+
+    public static MinimizedLogicFunction Minimize(LogicFunction logicFunction, MinimizeOptions options)
+    {
+        if (options.UseExactMode)
+        {
+            throw new NotSupportedException(
+                "Exact minimization requires the native Espresso Rust port and is not available yet.");
+        }
+
+        return options.MinimizeOutputsIndependently && logicFunction.OutputNames.Length > 1
+            ? MinimizeOutputsIndependently(logicFunction)
+            : MinimizeJointOutputs(logicFunction);
+    }
+
+    private static MinimizedLogicFunction MinimizeJointOutputs(LogicFunction logicFunction)
+    {
         var plaText = BuildPla(logicFunction);
         if (PlaReader.Read(new StringReader(plaText), true, out var pla) == -1 ||
             pla?.F is null ||
@@ -22,6 +40,39 @@ public static class LogicFunctionMinimizer
         var minimizedPlaText = WritePla(pla, PlaData.FType);
         var products = ParseMinimizedProducts(minimizedPlaText, logicFunction.OutputNames.Length);
         var equationText = GenerateMinimizedEquation(
+            logicFunction.InputNames,
+            logicFunction.OutputNames,
+            products);
+
+        return new MinimizedLogicFunction(products, equationText, minimizedPlaText);
+    }
+
+    private static MinimizedLogicFunction MinimizeOutputsIndependently(LogicFunction logicFunction)
+    {
+        var products = new List<MinimizedProductTerm>();
+        for (var outputIndex = 0; outputIndex < logicFunction.OutputNames.Length; outputIndex++)
+        {
+            var singleOutputFunction = new TruthTableLogicFunction(
+                logicFunction.InputNames,
+                [logicFunction.OutputNames[outputIndex]],
+                logicFunction.OutputValues
+                    .Select(row => new[] { row[outputIndex] })
+                    .ToArray(),
+                logicFunction.EquationText);
+
+            foreach (var product in MinimizeJointOutputs(singleOutputFunction).Products)
+            {
+                var outputValues = Enumerable.Repeat("0", logicFunction.OutputNames.Length).ToArray();
+                outputValues[outputIndex] = product.OutputValues[0];
+                products.Add(new MinimizedProductTerm(product.InputPattern, outputValues));
+            }
+        }
+
+        var equationText = GenerateMinimizedEquation(
+            logicFunction.InputNames,
+            logicFunction.OutputNames,
+            products);
+        var minimizedPlaText = BuildMinimizedPla(
             logicFunction.InputNames,
             logicFunction.OutputNames,
             products);
@@ -145,6 +196,43 @@ public static class LogicFunctionMinimizer
         return string.Join(Environment.NewLine, equations);
     }
 
+    private static string BuildMinimizedPla(
+        string[] inputNames,
+        string[] outputNames,
+        IReadOnlyList<MinimizedProductTerm> products)
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine($".i {inputNames.Length}");
+        builder.AppendLine($".o {outputNames.Length}");
+        builder.Append(".ilb");
+        foreach (var inputName in inputNames)
+        {
+            builder.Append(' ').Append(inputName);
+        }
+
+        builder.AppendLine();
+        builder.Append(".ob");
+        foreach (var outputName in outputNames)
+        {
+            builder.Append(' ').Append(outputName);
+        }
+
+        builder.AppendLine();
+        builder.AppendLine(".type f");
+        builder.AppendLine($".p {products.Count}");
+        foreach (var product in products)
+        {
+            builder
+                .Append(product.InputPattern)
+                .Append(' ')
+                .AppendJoin("", product.OutputValues)
+                .AppendLine();
+        }
+
+        builder.AppendLine(".e");
+        return builder.ToString();
+    }
+
     private static string BuildProductTerm(string inputPattern, string[] inputNames)
     {
         var literals = new List<string>();
@@ -173,4 +261,13 @@ public static class LogicFunctionMinimizer
 
         return new string(chars);
     }
+}
+
+public sealed record MinimizeOptions(
+    bool UseExactMode,
+    bool MinimizeOutputsIndependently)
+{
+    public static MinimizeOptions Default { get; } = new(
+        UseExactMode: false,
+        MinimizeOutputsIndependently: true);
 }

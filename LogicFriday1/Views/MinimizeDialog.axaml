@@ -1,0 +1,63 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:LogicFriday1.ViewModels"
+        x:Class="LogicFriday1.Views.MinimizeDialog"
+        x:DataType="vm:MinimizeDialogViewModel"
+        Title="Minimize"
+        Width="420"
+        Height="280"
+        MinWidth="420"
+        MinHeight="280"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False">
+
+    <Grid RowDefinitions="*,Auto"
+          Margin="12"
+          RowSpacing="10">
+        <StackPanel Spacing="10">
+            <GroupBox Header="Mode">
+                <StackPanel Margin="4"
+                            Spacing="8">
+                    <RadioButton Content="Fast"
+                                 GroupName="MinimizeMode"
+                                 IsChecked="{Binding UseFastMode, Mode=TwoWay}"
+                                 Click="FastMode_OnClick" />
+                    <RadioButton Content="Exact (may be slow for large problems)"
+                                 GroupName="MinimizeMode"
+                                 IsChecked="{Binding UseExactMode, Mode=TwoWay}"
+                                 Click="ExactMode_OnClick" />
+                </StackPanel>
+            </GroupBox>
+
+            <GroupBox Header="Multiple Outputs"
+                      IsEnabled="{Binding CanChooseMultipleOutputMode}">
+                <StackPanel Margin="4"
+                            Spacing="8">
+                    <RadioButton Content="Minimize each output independently"
+                                 GroupName="MinimizeOutputs"
+                                 IsChecked="{Binding MinimizeOutputsIndependently, Mode=TwoWay}"
+                                 Click="IndependentOutputs_OnClick" />
+                    <RadioButton Content="Minimize jointly for smallest number of product terms"
+                                 GroupName="MinimizeOutputs"
+                                 IsChecked="{Binding MinimizeOutputsJointly, Mode=TwoWay}"
+                                 Click="JointOutputs_OnClick" />
+                </StackPanel>
+            </GroupBox>
+        </StackPanel>
+
+        <Grid Grid.Row="1"
+              ColumnDefinitions="*,Auto,Auto"
+              ColumnSpacing="8">
+            <Button Grid.Column="1"
+                    Content="OK"
+                    MinWidth="80"
+                    IsDefault="True"
+                    Click="OkButton_OnClick" />
+            <Button Grid.Column="2"
+                    Content="Cancel"
+                    MinWidth="80"
+                    IsCancel="True"
+                    Click="CancelButton_OnClick" />
+        </Grid>
+    </Grid>
+</Window>

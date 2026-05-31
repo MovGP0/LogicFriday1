@@ -1,0 +1,68 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <EspressoNativeManifest>$(MSBuildThisFileDirectory)..\LogicFriday1.Espresso.Native\Cargo.toml</EspressoNativeManifest>
+    <EspressoNativeLibraryName>logicfriday1_espresso</EspressoNativeLibraryName>
+    <EspressoCargoProfile Condition="'$(Configuration)' == 'Release'">release</EspressoCargoProfile>
+    <EspressoCargoProfile Condition="'$(EspressoCargoProfile)' == ''">debug</EspressoCargoProfile>
+    <EspressoCargoProfileArg Condition="'$(Configuration)' == 'Release'">--release</EspressoCargoProfileArg>
+    <EspressoNativeRid Condition="'$(RuntimeIdentifier)' != ''">$(RuntimeIdentifier)</EspressoNativeRid>
+    <EspressoNativeRid Condition="'$(EspressoNativeRid)' == '' and '$(OS)' == 'Windows_NT' and '$(PROCESSOR_ARCHITECTURE)' == 'ARM64'">win-arm64</EspressoNativeRid>
+    <EspressoNativeRid Condition="'$(EspressoNativeRid)' == '' and '$(OS)' == 'Windows_NT'">win-x64</EspressoNativeRid>
+    <EspressoNativeRid Condition="'$(EspressoNativeRid)' == '' and $([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform($([System.Runtime.InteropServices.OSPlatform]::Linux))) and $([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture) == 'Arm64'">linux-arm64</EspressoNativeRid>
+    <EspressoNativeRid Condition="'$(EspressoNativeRid)' == '' and $([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform($([System.Runtime.InteropServices.OSPlatform]::Linux)))">linux-x64</EspressoNativeRid>
+    <EspressoNativeRid Condition="'$(EspressoNativeRid)' == '' and $([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform($([System.Runtime.InteropServices.OSPlatform]::OSX))) and $([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture) == 'Arm64'">osx-arm64</EspressoNativeRid>
+    <EspressoNativeRid Condition="'$(EspressoNativeRid)' == '' and $([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform($([System.Runtime.InteropServices.OSPlatform]::OSX)))">osx-x64</EspressoNativeRid>
+    <EspressoNativeFileName>$(EspressoNativeLibraryName).dll</EspressoNativeFileName>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(EspressoNativeRid)' == 'win-x64'">
+    <EspressoRustTarget>x86_64-pc-windows-msvc</EspressoRustTarget>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(EspressoNativeRid)' == 'win-arm64'">
+    <EspressoRustTarget>aarch64-pc-windows-msvc</EspressoRustTarget>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(EspressoNativeRid)' == 'linux-x64'">
+    <EspressoRustTarget>x86_64-unknown-linux-gnu</EspressoRustTarget>
+    <EspressoNativeFileName>lib$(EspressoNativeLibraryName).so</EspressoNativeFileName>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(EspressoNativeRid)' == 'linux-arm64'">
+    <EspressoRustTarget>aarch64-unknown-linux-gnu</EspressoRustTarget>
+    <EspressoNativeFileName>lib$(EspressoNativeLibraryName).so</EspressoNativeFileName>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(EspressoNativeRid)' == 'osx-x64'">
+    <EspressoRustTarget>x86_64-apple-darwin</EspressoRustTarget>
+    <EspressoNativeFileName>lib$(EspressoNativeLibraryName).dylib</EspressoNativeFileName>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(EspressoNativeRid)' == 'osx-arm64'">
+    <EspressoRustTarget>aarch64-apple-darwin</EspressoRustTarget>
+    <EspressoNativeFileName>lib$(EspressoNativeLibraryName).dylib</EspressoNativeFileName>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <EspressoNativeTargetDir>$(MSBuildThisFileDirectory)..\LogicFriday1.Espresso.Native\target\$(EspressoRustTarget)\$(EspressoCargoProfile)\</EspressoNativeTargetDir>
+    <EspressoNativeOutputPath>$(EspressoNativeTargetDir)$(EspressoNativeFileName)</EspressoNativeOutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="NativeMethods.g.cs" />
+  </ItemGroup>
+
+  <Target Name="BuildEspressoNative" BeforeTargets="CoreCompile">
+    <Error Condition="'$(EspressoRustTarget)' == ''" Text="Unsupported RuntimeIdentifier '$(EspressoNativeRid)' for LogicFriday1.Espresso native Rust build. Supported RIDs: win-x64, win-arm64, linux-x64, linux-arm64, osx-x64, osx-arm64." />
+    <Exec Command="cargo build --manifest-path &quot;$(EspressoNativeManifest)&quot; --target $(EspressoRustTarget) $(EspressoCargoProfileArg)" EnvironmentVariables="CARGO_INCREMENTAL=0;LOGICFRIDAY1_ESPRESSO_BINDGEN_FORCE=$([System.DateTime]::UtcNow.Ticks)" />
+    <Copy SourceFiles="$(EspressoNativeOutputPath)" DestinationFolder="$(OutputPath)runtimes\$(EspressoNativeRid)\native\" SkipUnchangedFiles="true" />
+    <ItemGroup>
+      <Compile Include="NativeMethods.g.cs" />
+      <ContentWithTargetPath Include="$(EspressoNativeOutputPath)" CopyToOutputDirectory="PreserveNewest" TargetPath="runtimes\$(EspressoNativeRid)\native\$(EspressoNativeFileName)" />
+    </ItemGroup>
+  </Target>
+</Project>
