@@ -17,14 +17,21 @@ public partial class MinimizeDialogViewModel : ObservableObject
     [ObservableProperty]
     private bool _minimizeOutputsJointly;
 
-    public MinimizeDialogViewModel(int outputCount)
-    {
-        CanChooseMultipleOutputMode = outputCount > 1;
-    }
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanChooseMultipleOutputMode))]
+    private int _outputCount = 1;
 
     public bool CanChooseMultipleOutputMode
     {
-        get;
+        get => OutputCount > 1;
+    }
+
+    partial void OnOutputCountChanged(int value)
+    {
+        if (value <= 1)
+        {
+            SelectIndependentOutputs();
+        }
     }
 
     public void SelectFastMode()

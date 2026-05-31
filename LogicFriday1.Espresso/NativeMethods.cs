@@ -9,6 +9,16 @@ internal static partial class NativeMethods
 {
     private const string NativeLibraryName = "logicfriday1_espresso";
 
+    [StructLayout(LayoutKind.Sequential)]
+    internal readonly struct StringResult
+    {
+        public readonly int Status;
+
+        public readonly nint Value;
+
+        public readonly nint Error;
+    }
+
     static NativeMethods()
     {
         NativeLibrary.SetDllImportResolver(typeof(NativeMethods).Assembly, ResolveNativeLibrary);
@@ -68,4 +78,12 @@ internal static partial class NativeMethods
 
         return $"lib{NativeLibraryName}.so";
     }
+
+    [DllImport(NativeLibraryName, EntryPoint = "logicfriday1_espresso_minimize_pla", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+    internal static extern StringResult MinimizePla(
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string input,
+        int mode);
+
+    [DllImport(NativeLibraryName, EntryPoint = "logicfriday1_espresso_string_free", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+    internal static extern void FreeString(nint value);
 }

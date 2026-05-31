@@ -6,16 +6,22 @@ namespace LogicFriday1.Views;
 
 public partial class MinimizeDialog : Window
 {
-    public MinimizeDialog(int outputCount)
+    public MinimizeDialog()
     {
         InitializeComponent();
-        ViewModel = new MinimizeDialogViewModel(outputCount);
+        ViewModel = new MinimizeDialogViewModel();
         DataContext = ViewModel;
     }
 
     public MinimizeDialogViewModel ViewModel
     {
         get;
+    }
+
+    public int OutputCount
+    {
+        get => ViewModel.OutputCount;
+        set => ViewModel.OutputCount = value;
     }
 
     private void FastMode_OnClick(object? sender, RoutedEventArgs e)

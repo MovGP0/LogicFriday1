@@ -106,6 +106,7 @@ impl Pla {
         let mut f = Cover::default();
         let mut d = Cover::default();
         let mut r = Cover::default();
+        let mut pending_cube: Option<(usize, String)> = None;
 
         for (line_index, raw_line) in input.lines().enumerate() {
             let line_no = line_index + 1;
@@ -163,8 +164,29 @@ impl Pla {
             let mut cube_tokens = Vec::with_capacity(2);
             cube_tokens.push(first);
             cube_tokens.extend(parts);
-            let (input_token, output_token) = split_cube_tokens(&cube_tokens, ni, no, line_no)?;
-            let input_parts = parse_input_pattern(&input_token, ni, line_no)?;
+            let compact = compact_cube_tokens(&cube_tokens);
+            let (cube_line, cube_text) = if let Some((cube_line, mut pending)) = pending_cube.take()
+            {
+                pending.push_str(&compact);
+                (cube_line, pending)
+            } else {
+                (line_no, compact)
+            };
+
+            if cube_text.len() < ni + no {
+                pending_cube = Some((cube_line, cube_text));
+                continue;
+            }
+
+            let (input_token, output_token) = if cube_text.len() == ni + no {
+                (
+                    cube_text[..ni].to_string(),
+                    cube_text[ni..ni + no].to_string(),
+                )
+            } else {
+                split_cube_tokens(&cube_tokens, ni, no, line_no)?
+            };
+            let input_parts = parse_input_pattern(&input_token, ni, cube_line)?;
             let output_chars: Vec<char> = output_token.chars().collect();
 
             add_cube_by_output(
@@ -194,6 +216,13 @@ impl Pla {
                 R_TYPE,
                 &['0', '3'],
             );
+        }
+
+        if let Some((line, _)) = pending_cube {
+            return Err(PlaError::InvalidCube {
+                line,
+                message: "cube is missing wrapped input/output parts".to_string(),
+            });
         }
 
         let input_count = input_count.ok_or(PlaError::MissingInputCount)?;
@@ -461,14 +490,12 @@ fn split_cube_tokens(
         }
     }
 
-    if tokens.len() == 1 {
-        let compact: String = tokens[0].chars().filter(|ch| *ch != '|').collect();
-        if compact.len() == input_count + output_count {
-            return Ok((
-                compact[..input_count].to_string(),
-                compact[input_count..].to_string(),
-            ));
-        }
+    let compact = compact_cube_tokens(tokens);
+    if compact.len() == input_count + output_count {
+        return Ok((
+            compact[..input_count].to_string(),
+            compact[input_count..].to_string(),
+        ));
     }
 
     let input = tokens
@@ -506,6 +533,14 @@ fn split_cube_tokens(
         });
     }
     Ok((input, output))
+}
+
+fn compact_cube_tokens(tokens: &[&str]) -> String {
+    tokens
+        .iter()
+        .flat_map(|token| token.chars())
+        .filter(|ch| *ch != '|')
+        .collect()
 }
 
 fn parse_input_pattern(

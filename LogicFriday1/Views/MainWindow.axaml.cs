@@ -97,7 +97,10 @@ public partial class MainWindow : Window
             return;
         }
 
-        var dialog = new MinimizeDialog(selectedFunction.OutputNames.Length);
+        var dialog = new MinimizeDialog
+        {
+            OutputCount = selectedFunction.OutputNames.Length
+        };
         var result = await dialog.ShowDialog<bool?>(this);
         if (result != true)
         {
