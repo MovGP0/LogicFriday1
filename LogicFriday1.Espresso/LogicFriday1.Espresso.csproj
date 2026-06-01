@@ -62,7 +62,17 @@
     <Copy SourceFiles="$(EspressoNativeOutputPath)" DestinationFolder="$(OutputPath)runtimes\$(EspressoNativeRid)\native\" SkipUnchangedFiles="true" />
     <ItemGroup>
       <Compile Include="NativeMethods.g.cs" />
-      <ContentWithTargetPath Include="$(EspressoNativeOutputPath)" CopyToOutputDirectory="PreserveNewest" TargetPath="runtimes\$(EspressoNativeRid)\native\$(EspressoNativeFileName)" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="AddEspressoNativeCopyItems"
+          DependsOnTargets="BuildEspressoNative"
+          BeforeTargets="GetCopyToOutputDirectoryItems;_GetCopyToOutputDirectoryItemsFromThisProject;GetCopyToPublishDirectoryItems">
+    <ItemGroup>
+      <ContentWithTargetPath Include="$(EspressoNativeOutputPath)"
+                             CopyToOutputDirectory="PreserveNewest"
+                             CopyToPublishDirectory="PreserveNewest"
+                             TargetPath="runtimes\$(EspressoNativeRid)\native\$(EspressoNativeFileName)" />
     </ItemGroup>
   </Target>
 </Project>

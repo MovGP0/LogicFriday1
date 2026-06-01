@@ -565,7 +565,7 @@ public partial class MainWindowViewModel : ObservableObject
         }
 
         LogicEquationText = IsMinimizedViewSelected && logicFunction.MinimizedFunction is { } minimizedFunction
-            ? minimizedFunction.EquationText
+            ? AppendMinimizedEquationText(logicFunction.EquationText, minimizedFunction.EquationText)
             : logicFunction.EquationText;
 
         if (IsMinimizedViewSelected && logicFunction.MinimizedFunction is not null)
@@ -792,6 +792,22 @@ public partial class MainWindowViewModel : ObservableObject
             },
             _ => throw new InvalidOperationException("Unsupported function type.")
         };
+    }
+
+    private static string AppendMinimizedEquationText(
+        string equationText,
+        string minimizedEquationText)
+    {
+        if (string.IsNullOrWhiteSpace(equationText))
+        {
+            return minimizedEquationText;
+        }
+
+        return string.Join(
+            Environment.NewLine,
+            equationText.TrimEnd(),
+            "",
+            minimizedEquationText);
     }
 
     private void RefreshFunctionTruthTable(LogicFunction logicFunction)

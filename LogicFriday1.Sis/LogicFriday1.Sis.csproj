@@ -62,7 +62,17 @@
     <Copy SourceFiles="$(SisNativeOutputPath)" DestinationFolder="$(OutputPath)runtimes\$(SisNativeRid)\native\" SkipUnchangedFiles="true" />
     <ItemGroup>
       <Compile Include="NativeMethods.g.cs" />
-      <ContentWithTargetPath Include="$(SisNativeOutputPath)" CopyToOutputDirectory="PreserveNewest" TargetPath="runtimes\$(SisNativeRid)\native\$(SisNativeFileName)" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="AddSisNativeCopyItems"
+          DependsOnTargets="BuildSisNative"
+          BeforeTargets="GetCopyToOutputDirectoryItems;_GetCopyToOutputDirectoryItemsFromThisProject;GetCopyToPublishDirectoryItems">
+    <ItemGroup>
+      <ContentWithTargetPath Include="$(SisNativeOutputPath)"
+                             CopyToOutputDirectory="PreserveNewest"
+                             CopyToPublishDirectory="PreserveNewest"
+                             TargetPath="runtimes\$(SisNativeRid)\native\$(SisNativeFileName)" />
     </ItemGroup>
   </Target>
 </Project>
