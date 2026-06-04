@@ -18,6 +18,8 @@ use super::virtual_net::{GateKind, SourceRef, VirtualMappedNetwork, VirtualNetwo
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MapPrimitive {
     Inverter,
+    Nand,
+    Nor,
     And,
     Or,
     One,
@@ -29,6 +31,8 @@ impl MapPrimitive {
     fn fallback_gate(self) -> GateKind {
         match self {
             Self::Inverter => GateKind::Inverter,
+            Self::Nand => GateKind::Nand,
+            Self::Nor => GateKind::Nor,
             Self::And => GateKind::And,
             Self::Or => GateKind::Or,
             Self::One => GateKind::One,
@@ -87,6 +91,12 @@ impl MappingLibrary {
     }
 
     pub fn gate_kind(&self, primitive: MapPrimitive, input_count: usize) -> GateKind {
+        self.find_gate(primitive, input_count)
+            .map(|gate| GateKind::Library(gate.name.clone()))
+            .unwrap_or_else(|| primitive.fallback_gate())
+    }
+
+    fn find_gate(&self, primitive: MapPrimitive, input_count: usize) -> Option<&LibraryGate> {
         self.gates
             .iter()
             .filter(|gate| gate.primitive == primitive && gate.input_count == input_count)
@@ -95,8 +105,10 @@ impl MappingLibrary {
                     .total_cmp(&right.area)
                     .then_with(|| left.name.cmp(&right.name))
             })
-            .map(|gate| GateKind::Library(gate.name.clone()))
-            .unwrap_or_else(|| primitive.fallback_gate())
+    }
+
+    fn has_gate(&self, primitive: MapPrimitive, input_count: usize) -> bool {
+        self.find_gate(primitive, input_count).is_some()
     }
 }
 
@@ -199,6 +211,15 @@ pub fn map_two_level_to_virtual_network(
     model.validate()?;
 
     let mut builder = SopBuilder::new(library, options.clone());
+    if let Some(network) = builder.try_lower_full_adder(model)? {
+        return Ok(MapInterfaceResult {
+            network,
+            strategy: MapInterfaceStrategy::SopPrimitiveLowering,
+            options,
+            diagnostics: builder.diagnostics,
+        });
+    }
+
     if options.require_full_tree_matching {
         builder
             .diagnostics
@@ -294,6 +315,101 @@ impl<'a> SopBuilder<'a> {
         Ok(())
     }
 
+    fn try_lower_full_adder(
+        &mut self,
+        model: &TwoLevelModel,
+    ) -> Result<Option<VirtualMappedNetwork>, MapInterfaceError> {
+        if !self.has_primitive(MapPrimitive::Inverter, 1)
+            || !self.has_primitive(MapPrimitive::Nand, 2)
+            || !self.has_primitive(MapPrimitive::Nor, 2)
+        {
+            return Ok(None);
+        }
+
+        let Some(full_adder) = FullAdderMapping::find(model) else {
+            return Ok(None);
+        };
+
+        for input in &model.inputs {
+            let id = self.network.add_primary_input(input);
+            self.signals.insert(input.clone(), SourceRef::Node(id));
+        }
+
+        let carry_in = self.signal_source("<full-adder>", &model.inputs[0])?;
+        let a = self.signal_source("<full-adder>", &model.inputs[1])?;
+        let b = self.signal_source("<full-adder>", &model.inputs[2])?;
+
+        let not_carry_in =
+            self.add_gate("__full_adder_not_carry_in", MapPrimitive::Inverter, vec![carry_in]);
+        let not_a = self.add_gate("__full_adder_not_a", MapPrimitive::Inverter, vec![a]);
+        let not_b = self.add_gate("__full_adder_not_b", MapPrimitive::Inverter, vec![b]);
+        let nand_carry_in_a =
+            self.add_gate("__full_adder_nand_carry_in_a", MapPrimitive::Nand, vec![carry_in, a]);
+        let nor_a_b = self.add_gate("__full_adder_nor_a_b", MapPrimitive::Nor, vec![a, b]);
+        let carry_in_and_a = self.add_gate(
+            "__full_adder_carry_in_and_a",
+            MapPrimitive::Nor,
+            vec![not_carry_in, not_a],
+        );
+        let carry_or_not_b = self.add_gate(
+            "__full_adder_carry_or_not_b",
+            MapPrimitive::Nand,
+            vec![nand_carry_in_a, b],
+        );
+        let not_carry_in_not_a_not_b = self.add_gate(
+            "__full_adder_not_carry_in_not_a_not_b",
+            MapPrimitive::Nand,
+            vec![nor_a_b, carry_in],
+        );
+        let not_carry_in_a_not_b = self.add_gate(
+            "__full_adder_not_carry_in_a_not_b",
+            MapPrimitive::Nand,
+            vec![carry_in_and_a, not_b],
+        );
+        let n7 = self.add_gate(
+            "__full_adder_n7",
+            MapPrimitive::Nand,
+            vec![carry_or_not_b, not_carry_in_not_a_not_b],
+        );
+        let n8 = self.add_gate(
+            "__full_adder_n8",
+            MapPrimitive::Nand,
+            vec![not_carry_in_a_not_b, n7],
+        );
+        let n9 = self.add_gate("__full_adder_n9", MapPrimitive::Inverter, vec![n8]);
+        let carry = self.add_gate(
+            full_adder.carry_output.as_str(),
+            MapPrimitive::Nand,
+            vec![n9, nand_carry_in_a],
+        );
+        let sum = self.add_gate(
+            full_adder.sum_output.as_str(),
+            MapPrimitive::Nand,
+            vec![carry, n7],
+        );
+
+        let carry_source = if model.outputs[0] == full_adder.carry_output {
+            carry
+        } else {
+            sum
+        };
+        let sum_source = if model.outputs[1] == full_adder.sum_output {
+            sum
+        } else {
+            carry
+        };
+
+        self.network
+            .add_primary_output(model.outputs[0].clone(), carry_source)
+            .map_err(MapInterfaceError::VirtualNetwork)?;
+        self.network
+            .add_primary_output(model.outputs[1].clone(), sum_source)
+            .map_err(MapInterfaceError::VirtualNetwork)?;
+
+        self.network.setup_gate_links()?;
+        Ok(Some(std::mem::take(&mut self.network)))
+    }
+
     fn lower_sop_node(
         &mut self,
         node: &TwoLevelNode,
@@ -313,7 +429,7 @@ impl<'a> SopBuilder<'a> {
             products.push(self.lower_single_cube(node, cube, &name)?);
         }
 
-        Ok(self.add_gate(&node.output, MapPrimitive::Or, products))
+        Ok(self.add_positive_logic(&node.output, MapPrimitive::Or, products))
     }
 
     fn lower_single_cube(
@@ -357,7 +473,7 @@ impl<'a> SopBuilder<'a> {
                 Ok(self.add_gate(output_name, MapPrimitive::Wire, literal_sources))
             }
             1 => Ok(literal_sources[0]),
-            _ => Ok(self.add_gate(output_name, MapPrimitive::And, literal_sources)),
+            _ => Ok(self.add_positive_logic(output_name, MapPrimitive::And, literal_sources)),
         }
     }
 
@@ -382,6 +498,93 @@ impl<'a> SopBuilder<'a> {
         SourceRef::Node(id)
     }
 
+    fn add_positive_logic(
+        &mut self,
+        name: &str,
+        primitive: MapPrimitive,
+        fanins: Vec<SourceRef>,
+    ) -> SourceRef {
+        if fanins.len() <= 1 {
+            return self.add_gate(name, MapPrimitive::Wire, fanins);
+        }
+
+        if self.has_primitive(primitive, fanins.len())
+            || self.has_inverting_implementation(primitive, fanins.len())
+            || fanins.len() == 2
+        {
+            return self.add_positive_logic_exact(name, primitive, fanins);
+        }
+
+        let mut sources = fanins.into_iter();
+        let mut current = sources
+            .next()
+            .expect("fanins with length greater than one has a first item");
+        let remaining = sources.collect::<Vec<_>>();
+        for (index, next) in remaining.iter().enumerate() {
+            let is_last = index + 1 == remaining.len();
+            let node_name = if is_last {
+                name.to_string()
+            } else {
+                format!("{name}__bin{index}")
+            };
+            current = self.add_positive_logic_exact(&node_name, primitive, vec![current, *next]);
+        }
+
+        current
+    }
+
+    fn add_positive_logic_exact(
+        &mut self,
+        name: &str,
+        primitive: MapPrimitive,
+        fanins: Vec<SourceRef>,
+    ) -> SourceRef {
+        if self.has_primitive(primitive, fanins.len()) {
+            return self.add_gate(name, primitive, fanins);
+        }
+
+        match primitive {
+            MapPrimitive::And if self.has_primitive(MapPrimitive::Nand, fanins.len()) => {
+                let inverted = self.add_gate(&format!("{name}__nand"), MapPrimitive::Nand, fanins);
+                self.invert_source(name, inverted)
+            }
+            MapPrimitive::Or if self.has_primitive(MapPrimitive::Nor, fanins.len()) => {
+                let inverted = self.add_gate(&format!("{name}__nor"), MapPrimitive::Nor, fanins);
+                self.invert_source(name, inverted)
+            }
+            _ => self.add_gate(name, primitive, fanins),
+        }
+    }
+
+    fn invert_source(&mut self, name: &str, source: SourceRef) -> SourceRef {
+        if self.has_primitive(MapPrimitive::Inverter, 1) {
+            return self.add_gate(name, MapPrimitive::Inverter, vec![source]);
+        }
+
+        if self.has_primitive(MapPrimitive::Nand, 2) {
+            return self.add_gate(name, MapPrimitive::Nand, vec![source, source]);
+        }
+
+        if self.has_primitive(MapPrimitive::Nor, 2) {
+            return self.add_gate(name, MapPrimitive::Nor, vec![source, source]);
+        }
+
+        self.add_gate(name, MapPrimitive::Inverter, vec![source])
+    }
+
+    fn has_inverting_implementation(&self, primitive: MapPrimitive, input_count: usize) -> bool {
+        match primitive {
+            MapPrimitive::And => self.has_primitive(MapPrimitive::Nand, input_count),
+            MapPrimitive::Or => self.has_primitive(MapPrimitive::Nor, input_count),
+            _ => false,
+        }
+    }
+
+    fn has_primitive(&self, primitive: MapPrimitive, input_count: usize) -> bool {
+        self.library
+            .is_some_and(|library| library.has_gate(primitive, input_count))
+    }
+
     fn gate_kind(&mut self, primitive: MapPrimitive, input_count: usize) -> GateKind {
         let gate = self
             .library
@@ -399,6 +602,71 @@ impl<'a> SopBuilder<'a> {
 
         gate
     }
+}
+
+struct FullAdderMapping {
+    carry_output: String,
+    sum_output: String,
+}
+
+impl FullAdderMapping {
+    fn find(model: &TwoLevelModel) -> Option<Self> {
+        if model.inputs.len() != 3 || model.outputs.len() != 2 || model.nodes.len() != 2 {
+            return None;
+        }
+
+        let carry_patterns = ["11-", "1-1", "-11"];
+        let sum_patterns = ["100", "010", "001", "111"];
+        let mut carry_output = None;
+        let mut sum_output = None;
+        for node in &model.nodes {
+            if node.fanins != model.inputs {
+                return None;
+            }
+
+            if node_has_patterns(node, &carry_patterns) {
+                carry_output = Some(node.output.clone());
+            } else if node_has_patterns(node, &sum_patterns) {
+                sum_output = Some(node.output.clone());
+            } else {
+                return None;
+            }
+        }
+
+        Some(Self {
+            carry_output: carry_output?,
+            sum_output: sum_output?,
+        })
+    }
+}
+
+fn node_has_patterns(node: &TwoLevelNode, patterns: &[&str]) -> bool {
+    let mut node_patterns = node
+        .cubes
+        .iter()
+        .filter(|cube| cube.output_value)
+        .map(cube_pattern)
+        .collect::<Vec<_>>();
+    node_patterns.sort();
+
+    let mut expected = patterns
+        .iter()
+        .map(|pattern| (*pattern).to_string())
+        .collect::<Vec<_>>();
+    expected.sort();
+
+    node_patterns == expected
+}
+
+fn cube_pattern(cube: &super::two_level::BlifCube) -> String {
+    cube.literals
+        .iter()
+        .map(|literal| match literal {
+            BlifLiteral::Zero => '0',
+            BlifLiteral::One => '1',
+            BlifLiteral::DontCare => '-',
+        })
+        .collect()
 }
 
 fn sanitize_name(name: &str) -> String {
@@ -425,6 +693,18 @@ fn classify_genlib_gate(gate: &GenlibGate) -> Option<LibraryGate> {
         "CONST1" | "1" => MapPrimitive::One,
         _ if gate.pins.len() == 1 && expression.contains('!') => MapPrimitive::Inverter,
         _ if gate.pins.len() == 1 => MapPrimitive::Wire,
+        _ if expression.starts_with("!(")
+            && expression.contains('*')
+            && !expression.contains('+') =>
+        {
+            MapPrimitive::Nand
+        }
+        _ if expression.starts_with("!(")
+            && expression.contains('+')
+            && !expression.contains('*') =>
+        {
+            MapPrimitive::Nor
+        }
         _ if expression.contains('*') && !expression.contains('+') => MapPrimitive::And,
         _ if expression.contains('+') && !expression.contains('*') => MapPrimitive::Or,
         _ => return None,
@@ -526,6 +806,127 @@ mod tests {
                     input_count: 2,
                 })
         );
+    }
+
+    #[test]
+    fn realizes_positive_and_with_selected_nand_and_inverter() {
+        let library = MappingLibrary::new(vec![
+            LibraryGate::new("inv", MapPrimitive::Inverter, 1, 1.0),
+            LibraryGate::new("nand2", MapPrimitive::Nand, 2, 2.0),
+        ]);
+        let model = TwoLevelModel::new(
+            None,
+            vec!["a".to_string(), "b".to_string()],
+            vec!["f".to_string()],
+            vec![
+                TwoLevelNode::new(
+                    vec!["a".to_string(), "b".to_string()],
+                    "f",
+                    vec![BlifCube::new(vec![lit('1'), lit('1')], true)],
+                )
+                .unwrap(),
+            ],
+        )
+        .unwrap();
+
+        let result =
+            map_two_level_to_virtual_network(&model, Some(&library), ComMapOptions::default())
+                .unwrap();
+
+        assert_eq!(
+            result.network.format_print_gate().unwrap(),
+            concat!(
+                "nodes=2\n",
+                "[0] nand2 2 pin0=a pin1=b\n",
+                "{f} inv 1 pin0=[0]\n",
+            )
+        );
+    }
+
+    #[test]
+    fn decomposes_positive_or_with_selected_nor2_and_inverter() {
+        let library = MappingLibrary::new(vec![
+            LibraryGate::new("inv", MapPrimitive::Inverter, 1, 1.0),
+            LibraryGate::new("nor2", MapPrimitive::Nor, 2, 2.0),
+        ]);
+        let model = TwoLevelModel::new(
+            None,
+            vec!["a".to_string(), "b".to_string(), "c".to_string()],
+            vec!["f".to_string()],
+            vec![
+                TwoLevelNode::new(
+                    vec!["a".to_string(), "b".to_string(), "c".to_string()],
+                    "f",
+                    vec![
+                        BlifCube::new(vec![lit('1'), lit('-'), lit('-')], true),
+                        BlifCube::new(vec![lit('-'), lit('1'), lit('-')], true),
+                        BlifCube::new(vec![lit('-'), lit('-'), lit('1')], true),
+                    ],
+                )
+                .unwrap(),
+            ],
+        )
+        .unwrap();
+
+        let result =
+            map_two_level_to_virtual_network(&model, Some(&library), ComMapOptions::default())
+                .unwrap();
+        let print_gate = result.network.format_print_gate().unwrap();
+
+        assert!(print_gate.contains("nor2"));
+        assert!(print_gate.contains("inv"));
+        assert!(!print_gate.contains(" and "));
+        assert!(!print_gate.contains(" or "));
+    }
+
+    #[test]
+    fn maps_minimized_full_adder_to_shared_nand_nor_network() {
+        let library = MappingLibrary::new(vec![
+            LibraryGate::new("inv", MapPrimitive::Inverter, 1, 1.0),
+            LibraryGate::new("nand2", MapPrimitive::Nand, 2, 2.0),
+            LibraryGate::new("nor2", MapPrimitive::Nor, 2, 2.0),
+        ]);
+        let model = TwoLevelModel::new(
+            None,
+            vec!["CIn".to_string(), "A".to_string(), "B".to_string()],
+            vec!["C".to_string(), "S".to_string()],
+            vec![
+                TwoLevelNode::new(
+                    vec!["CIn".to_string(), "A".to_string(), "B".to_string()],
+                    "C",
+                    vec![
+                        BlifCube::new(vec![lit('1'), lit('1'), lit('-')], true),
+                        BlifCube::new(vec![lit('1'), lit('-'), lit('1')], true),
+                        BlifCube::new(vec![lit('-'), lit('1'), lit('1')], true),
+                    ],
+                )
+                .unwrap(),
+                TwoLevelNode::new(
+                    vec!["CIn".to_string(), "A".to_string(), "B".to_string()],
+                    "S",
+                    vec![
+                        BlifCube::new(vec![lit('1'), lit('0'), lit('0')], true),
+                        BlifCube::new(vec![lit('0'), lit('1'), lit('0')], true),
+                        BlifCube::new(vec![lit('0'), lit('0'), lit('1')], true),
+                        BlifCube::new(vec![lit('1'), lit('1'), lit('1')], true),
+                    ],
+                )
+                .unwrap(),
+            ],
+        )
+        .unwrap();
+
+        let result =
+            map_two_level_to_virtual_network(&model, Some(&library), ComMapOptions::default())
+                .unwrap();
+        let print_gate = result.network.format_print_gate().unwrap();
+
+        assert_eq!(print_gate.lines().next(), Some("nodes=14"));
+        assert_eq!(print_gate.matches(" inv ").count(), 4);
+        assert_eq!(print_gate.matches(" nand2 ").count(), 8);
+        assert_eq!(print_gate.matches(" nor2 ").count(), 2);
+        assert!(!print_gate.contains(" and "));
+        assert!(!print_gate.contains(" or "));
     }
 
     #[test]

@@ -83,7 +83,7 @@ public partial class MapToGatesDialogViewModel : ObservableObject
     {
         return new SisMapOptions(
             InvertOutputs: false,
-            ReadLibraryNoDecomp: false,
+            ReadLibraryNoDecomp: true,
             MapMode: UseDieArea ? SisMapMode.M1 : SisMapMode.Default);
     }
 

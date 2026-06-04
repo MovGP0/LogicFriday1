@@ -372,7 +372,7 @@ pub fn parse_genlib_with_options(
                     });
                 }
                 if let Some(gate) = current_gate.take() {
-                    gates.push(gate);
+                    gates.push(finalize_gate(gate, options));
                 }
                 current_gate = Some(parse_gate_record(&tokens, record_number, limits)?);
             }
@@ -401,10 +401,60 @@ pub fn parse_genlib_with_options(
     }
 
     if let Some(gate) = current_gate.take() {
-        gates.push(gate);
+        gates.push(finalize_gate(gate, options));
     }
 
     GenlibLibrary::new(gates, options)
+}
+
+fn finalize_gate(mut gate: GenlibGate, options: ReadLibraryOptions) -> GenlibGate {
+    if gate.pins.is_empty() {
+        gate.pins = infer_pins_from_expression(&gate.output.expression, options);
+    }
+
+    gate
+}
+
+fn infer_pins_from_expression(expression: &str, options: ReadLibraryOptions) -> Vec<GenlibPin> {
+    let mut identifiers = Vec::<String>::new();
+    let mut current = String::new();
+    for character in expression.chars().chain(std::iter::once(' ')) {
+        if character.is_ascii_alphanumeric() || character == '_' {
+            current.push(character);
+            continue;
+        }
+
+        if !current.is_empty() {
+            if !matches!(current.as_str(), "CONST0" | "CONST1")
+                && !identifiers.iter().any(|identifier| identifier == &current)
+            {
+                identifiers.push(current.clone());
+            }
+            current.clear();
+        }
+    }
+
+    identifiers
+        .into_iter()
+        .enumerate()
+        .map(|(position, declared_name)| {
+            let name = match options.pin_name_policy {
+                PinNamePolicy::PreserveDeclared => GenlibPinName::Declared(declared_name.clone()),
+                PinNamePolicy::GenerateByPosition => GenlibPinName::Generated(position),
+            };
+            GenlibPin {
+                name,
+                declared_name,
+                phase: PinPhase::Unknown,
+                input_load: 1.0,
+                max_load: 999.0,
+                rise_block_delay: 0.0,
+                rise_fanout_delay: 0.0,
+                fall_block_delay: 0.0,
+                fall_fanout_delay: 0.0,
+            }
+        })
+        .collect()
 }
 
 fn parse_gate_record(
@@ -649,6 +699,25 @@ mod tests {
         assert_eq!(gate.pins[1].rise_fanout_delay, 0.25);
         assert_eq!(gate.pins[2].fall_block_delay, 1.5);
         assert_eq!(gate.pins[2].fall_fanout_delay, 0.6);
+    }
+
+    #[test]
+    fn infers_pins_from_gate_expression_when_pin_records_are_omitted() {
+        let library = parse_genlib(concat!(
+            "GATE nand2 2 O=!(a*b);\n",
+            "GATE nor3 3 O=!(a+b+c);\n",
+        ))
+        .unwrap();
+
+        let nand_pins = &library.gate("nand2").unwrap().pins;
+        let nor_pins = &library.gate("nor3").unwrap().pins;
+        assert_eq!(nand_pins.len(), 2);
+        assert_eq!(nand_pins[0].declared_name, "a");
+        assert_eq!(nand_pins[1].declared_name, "b");
+        assert_eq!(nor_pins.len(), 3);
+        assert_eq!(nor_pins[0].declared_name, "a");
+        assert_eq!(nor_pins[1].declared_name, "b");
+        assert_eq!(nor_pins[2].declared_name, "c");
     }
 
     #[test]

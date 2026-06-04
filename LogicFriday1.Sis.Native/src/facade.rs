@@ -47,6 +47,15 @@ struct LibraryGate {
     expression: String,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct JsonGate {
+    id: String,
+    kind: String,
+    inputs: Vec<String>,
+    output: String,
+    level: usize,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum GateKind {
     And,
@@ -521,7 +530,27 @@ fn write_mapping_json(
     json.push('"');
     json.push_str(",\"gates\":[");
 
-    for (index, gate) in gates.iter().enumerate() {
+    let json_gates = if library_gate_count > 0 {
+        interface_result
+            .and_then(|result| result.network.mapped_gate_records().ok())
+            .map(|records| {
+                records
+                    .into_iter()
+                    .map(|record| JsonGate {
+                        id: record.id,
+                        kind: record.kind,
+                        inputs: record.inputs,
+                        output: record.output,
+                        level: record.level,
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_else(|| fallback_json_gates(gates))
+    } else {
+        fallback_json_gates(gates)
+    };
+
+    for (index, gate) in json_gates.iter().enumerate() {
         if index > 0 {
             json.push(',');
         }
@@ -529,7 +558,7 @@ fn write_mapping_json(
         json.push_str("\"id\":\"");
         push_json_string(&mut json, &gate.id);
         json.push_str("\",\"kind\":\"");
-        json.push_str(gate.kind.as_str());
+        push_json_string(&mut json, &gate.kind);
         json.push_str("\",\"inputs\":");
         write_string_array(&mut json, &gate.inputs);
         json.push_str(",\"output\":\"");
@@ -541,6 +570,19 @@ fn write_mapping_json(
 
     json.push_str("]}");
     json
+}
+
+fn fallback_json_gates(gates: &[Gate]) -> Vec<JsonGate> {
+    gates
+        .iter()
+        .map(|gate| JsonGate {
+            id: gate.id.clone(),
+            kind: gate.kind.as_str().to_string(),
+            inputs: gate.inputs.clone(),
+            output: gate.output.clone(),
+            level: gate.level,
+        })
+        .collect()
 }
 
 fn write_library_gates(json: &mut String, library: &[LibraryGate]) {
@@ -755,6 +797,33 @@ mod tests {
         assert!(json.contains("\"readLibraryNoDecomp\":true"));
         assert!(json.contains("\"mapMode\":\"m1\""));
         assert!(json.contains("\"printLevelSummary\":\""));
+    }
+
+    #[test]
+    fn serializes_selected_library_gate_names_in_mapped_payload() {
+        let blif = b".inputs a b c\n.outputs y\n.names a b c y\n11- 1\n-11 1\n.end\n";
+        let genlib = concat!(
+            "GATE inv 1 O=!a;\n",
+            "GATE nand2 2 O=!(a*b);\n",
+            "GATE nor2 2 O=!(a+b);\n",
+        )
+        .as_bytes();
+        let json = unsafe {
+            map_blif_genlib_to_json_core(
+                blif.as_ptr(),
+                blif.len(),
+                genlib.as_ptr(),
+                genlib.len(),
+                OPTION_READ_LIBRARY_NO_DECOMP,
+            )
+            .unwrap()
+        };
+
+        assert!(json.contains("\"kind\":\"nand2\""), "{json}");
+        assert!(json.contains("\"kind\":\"nor2\""), "{json}");
+        assert!(json.contains("\"kind\":\"inv\""), "{json}");
+        assert!(!json.contains("\"kind\":\"and\""), "{json}");
+        assert!(!json.contains("\"kind\":\"or\""), "{json}");
     }
 
     #[test]

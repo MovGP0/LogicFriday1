@@ -145,6 +145,15 @@ pub struct VirtualMappedNode {
     gate_links: BTreeMap<GateLinkKey, GateLink>,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct VirtualMappedGateRecord {
+    pub id: String,
+    pub kind: String,
+    pub inputs: Vec<String>,
+    pub output: String,
+    pub level: usize,
+}
+
 impl VirtualMappedNode {
     fn new(name: impl Into<String>, kind: NodeKind) -> Self {
         Self {
@@ -552,6 +561,42 @@ impl VirtualMappedNetwork {
         Ok(self.levels()?.len().saturating_sub(1))
     }
 
+    pub fn mapped_gate_records(&self) -> Result<Vec<VirtualMappedGateRecord>, VirtualNetworkError> {
+        let mapped = self.mapped_output_nodes()?;
+        let mut levels_by_node = BTreeMap::new();
+        for (level, nodes) in self.levels()?.iter().enumerate() {
+            for node in nodes {
+                levels_by_node.insert(*node, level);
+            }
+        }
+
+        let mut records = Vec::with_capacity(mapped.len());
+        for node in mapped {
+            let mapped_node = self
+                .node(node)
+                .ok_or(VirtualNetworkError::MissingNode(node))?;
+            let gate = mapped_node
+                .gate
+                .as_ref()
+                .ok_or(VirtualNetworkError::MissingNode(node))?;
+            let inputs = mapped_node
+                .save_binding
+                .iter()
+                .map(|source| self.signal_name_for_source(*source))
+                .collect::<Result<Vec<_>, _>>()?;
+
+            records.push(VirtualMappedGateRecord {
+                id: format!("g{}", node.index()),
+                kind: gate.mnemonic().to_string(),
+                inputs,
+                output: self.signal_name_for_driver(node),
+                level: levels_by_node.get(&node).copied().unwrap_or(0),
+            });
+        }
+
+        Ok(records)
+    }
+
     pub fn levels(&self) -> Result<Vec<Vec<NodeId>>, VirtualNetworkError> {
         let mut indegrees = vec![0usize; self.nodes.len()];
         let mut fanouts = vec![Vec::<NodeId>::new(); self.nodes.len()];
@@ -726,6 +771,30 @@ impl VirtualMappedNetwork {
                     .then(|| self.nodes[output.index()].name.clone())
             })
             .collect()
+    }
+
+    fn signal_name_for_driver(&self, driver: NodeId) -> String {
+        self.output_names_for_driver(driver)
+            .into_iter()
+            .next()
+            .unwrap_or_else(|| self.nodes[driver.index()].name.clone())
+    }
+
+    fn signal_name_for_source(&self, source: SourceRef) -> Result<String, VirtualNetworkError> {
+        match source {
+            SourceRef::ConstantZero => Ok("{0}".to_string()),
+            SourceRef::ConstantOne => Ok("{1}".to_string()),
+            SourceRef::Node(node) => {
+                let mapped_node = self
+                    .node(node)
+                    .ok_or(VirtualNetworkError::MissingNode(node))?;
+                if mapped_node.kind == NodeKind::Internal && mapped_node.gate.is_some() {
+                    Ok(self.signal_name_for_driver(node))
+                } else {
+                    Ok(mapped_node.name.clone())
+                }
+            }
+        }
     }
 
     fn format_source_for_print_gate(

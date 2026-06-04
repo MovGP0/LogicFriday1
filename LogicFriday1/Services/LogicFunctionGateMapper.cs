@@ -95,6 +95,7 @@ public static class LogicFunctionGateMapper
         var signalOutputs = new Dictionary<string, GateDiagramConnectionReference>(StringComparer.Ordinal);
         var signalLevels = BuildSignalLevels(source, mapped);
         var signalRows = new Dictionary<string, double>(StringComparer.Ordinal);
+        var bufferAliases = BuildBufferAliases(mapped);
         var nextItemId = 1;
 
         for (var index = 0; index < source.InputNames.Length; index++)
@@ -113,19 +114,17 @@ public static class LogicFunctionGateMapper
 
         var levelRows = new Dictionary<int, int>();
         var componentNumber = 1;
-        foreach (var mappedGate in mapped.Gates)
-        {
-            if (mappedGate.Kind.Equals("buf", StringComparison.OrdinalIgnoreCase))
+        foreach (var mappedGate in mapped.Gates
+            .Where(static gate => !gate.Kind.Equals("buf", StringComparison.OrdinalIgnoreCase))
+            .Select((gate, index) => new
             {
-                if (mappedGate.Inputs.Count > 0 &&
-                    signalOutputs.TryGetValue(mappedGate.Inputs[0], out var sourceReference))
-                {
-                    signalOutputs[mappedGate.Output] = sourceReference;
-                }
-
-                continue;
-            }
-
+                Gate = gate,
+                Index = index
+            })
+            .OrderBy(gate => signalLevels.GetValueOrDefault(gate.Gate.Output, Math.Max(1, gate.Gate.Level)))
+            .ThenBy(static gate => gate.Index)
+            .Select(static gate => gate.Gate))
+        {
             var kind = ToGatePaletteKind(mappedGate.Kind);
             var level = signalLevels.GetValueOrDefault(mappedGate.Output, Math.Max(1, mappedGate.Level));
             var row = levelRows.GetValueOrDefault(level);
@@ -150,7 +149,10 @@ public static class LogicFunctionGateMapper
 
             for (var inputIndex = 0; inputIndex < mappedGate.Inputs.Count; inputIndex++)
             {
-                if (signalOutputs.TryGetValue(mappedGate.Inputs[inputIndex], out var sourceReference))
+                if (TryGetSignalOutput(
+                    ResolveBufferAlias(mappedGate.Inputs[inputIndex], bufferAliases),
+                    signalOutputs,
+                    out var sourceReference))
                 {
                     wires.Add(new GateDiagramWire(
                         sourceReference,
@@ -166,10 +168,11 @@ public static class LogicFunctionGateMapper
         }
 
         var maxLevel = Math.Max(1, signalLevels.Values.DefaultIfEmpty(1).Max());
-        var outputX = Snap(GateX + (maxLevel + 1) * LevelSpacing);
+        var outputX = Snap(GateX + maxLevel * LevelSpacing);
         for (var index = 0; index < source.OutputNames.Length; index++)
         {
-            var outputY = signalRows.TryGetValue(source.OutputNames[index], out var driverY)
+            var outputSignal = ResolveBufferAlias(source.OutputNames[index], bufferAliases);
+            var outputY = signalRows.TryGetValue(outputSignal, out var driverY)
                 ? Snap(driverY)
                 : 40 + index * RowSpacing;
             var item = new GateDiagramItem(
@@ -180,7 +183,7 @@ public static class LogicFunctionGateMapper
                 source.OutputNames[index],
                 Id: nextItemId++);
             items.Add(item);
-            if (signalOutputs.TryGetValue(source.OutputNames[index], out var sourceReference))
+            if (TryGetSignalOutput(outputSignal, signalOutputs, out var sourceReference))
             {
                 wires.Add(new GateDiagramWire(
                     sourceReference,
@@ -241,6 +244,42 @@ public static class LogicFunctionGateMapper
         return signalLevels;
     }
 
+    private static Dictionary<string, string> BuildBufferAliases(SisMappedNetwork mapped)
+    {
+        var aliases = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var gate in mapped.Gates)
+        {
+            if (gate.Kind.Equals("buf", StringComparison.OrdinalIgnoreCase) &&
+                gate.Inputs.Count > 0)
+            {
+                aliases[gate.Output] = gate.Inputs[0];
+            }
+        }
+
+        return aliases;
+    }
+
+    private static string ResolveBufferAlias(
+        string signal,
+        IReadOnlyDictionary<string, string> bufferAliases)
+    {
+        var visited = new HashSet<string>(StringComparer.Ordinal);
+        while (bufferAliases.TryGetValue(signal, out var aliasedSignal) && visited.Add(signal))
+        {
+            signal = aliasedSignal;
+        }
+
+        return signal;
+    }
+
+    private static bool TryGetSignalOutput(
+        string signal,
+        IReadOnlyDictionary<string, GateDiagramConnectionReference> signalOutputs,
+        out GateDiagramConnectionReference sourceReference)
+    {
+        return signalOutputs.TryGetValue(signal, out sourceReference);
+    }
+
     private static int ComputeSignalLevel(
         string signal,
         IReadOnlyDictionary<string, SisMappedGate> gatesByOutput,
@@ -279,11 +318,31 @@ public static class LogicFunctionGateMapper
 
     private static GatePaletteKind ToGatePaletteKind(string kind)
     {
-        return kind.ToLowerInvariant() switch
+        var normalizedKind = kind.ToLowerInvariant();
+        if (normalizedKind.StartsWith("nand", StringComparison.Ordinal))
+        {
+            return GatePaletteKind.Nand;
+        }
+
+        if (normalizedKind.StartsWith("nor", StringComparison.Ordinal))
+        {
+            return GatePaletteKind.Nor;
+        }
+
+        if (normalizedKind is "inv" or "inverter")
+        {
+            return GatePaletteKind.Not;
+        }
+
+        return normalizedKind switch
         {
             "and" => GatePaletteKind.And,
             "not" => GatePaletteKind.Not,
             "or" => GatePaletteKind.Or,
+            "exo" or "xor" or "xor2" => GatePaletteKind.Xor,
+            "mux" or "mux2" => GatePaletteKind.Mux,
+            "zer" or "zero" or "zero0" => GatePaletteKind.ConstantZero,
+            "one" or "one0" => GatePaletteKind.ConstantOne,
             "const0" => GatePaletteKind.ConstantZero,
             "const1" => GatePaletteKind.ConstantOne,
             _ => throw new SisMappingException($"Native SIS mapper returned unsupported gate kind '{kind}'.")
