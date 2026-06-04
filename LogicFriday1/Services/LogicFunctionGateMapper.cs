@@ -8,8 +8,11 @@ namespace LogicFriday1.Services;
 public static class LogicFunctionGateMapper
 {
     private const double InputX = 20;
+
     private const double GateX = 180;
+
     private const double LevelSpacing = 150;
+
     private const double RowSpacing = 90;
 
     public static GateDiagramFunction Map(
@@ -188,10 +191,8 @@ public static class LogicFunctionGateMapper
         };
     }
 
-    private static GateDiagramConnectionReference OutputOf(GateDiagramItem item)
-    {
-        return new GateDiagramConnectionReference(item.Id, GateDiagramConnectionKind.Output, 0);
-    }
+    private static GateDiagramConnectionReference OutputOf(GateDiagramItem item) =>
+        new(item.Id, GateDiagramConnectionKind.Output, 0);
 
     private static string FormatInputPattern(int term, int inputCount)
     {
