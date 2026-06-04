@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using LogicFriday1.Models;
 using LogicFriday1.Services;
@@ -8,8 +8,12 @@ namespace LogicFriday1.ViewModels;
 public partial class MainWindowViewModel : ObservableObject
 {
     private string[] _truthTableInputNames = [];
+
     private string[] _truthTableOutputNames = [];
+
     private FunctionSummaryRow? _truthTableEditTarget;
+
+    private readonly Dictionary<LogicFunction, bool> _showAllTruthTableRowsByFunction = [];
 
     [ObservableProperty]
     private string _statusText = "Ready";
@@ -45,6 +49,7 @@ public partial class MainWindowViewModel : ObservableObject
     private bool _isGateDiagramVisible;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsTruthTableShowModeEnabled))]
     private bool _isFunctionDetailVisible;
 
     [ObservableProperty]
@@ -54,6 +59,9 @@ public partial class MainWindowViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(IsOperationMapToGatesEnabled))]
     [NotifyPropertyChangedFor(nameof(IsOperationGenerateLookupFunctionEnabled))]
     [NotifyPropertyChangedFor(nameof(IsTruthTableModifyEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsTruthTableShowModeEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsShowAllTruthTableRowsSelected))]
+    [NotifyPropertyChangedFor(nameof(IsShowTrueAndDontCareTruthTableRowsSelected))]
     private FunctionSummaryRow? _selectedFunctionSummary;
 
     [ObservableProperty]
@@ -107,6 +115,7 @@ public partial class MainWindowViewModel : ObservableObject
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsUnminimizedViewSelected))]
+    [NotifyPropertyChangedFor(nameof(IsTruthTableShowModeEnabled))]
     private bool _isMinimizedViewSelected;
 
     public ObservableCollection<FunctionSummaryRow> FunctionSummaries
@@ -124,6 +133,18 @@ public partial class MainWindowViewModel : ObservableObject
     {
         get => !IsMinimizedViewSelected;
         set => IsMinimizedViewSelected = !value;
+    }
+
+    public bool IsShowTrueAndDontCareTruthTableRowsSelected
+    {
+        get => !IsShowAllTruthTableRowsSelected;
+    }
+
+    public bool IsShowAllTruthTableRowsSelected
+    {
+        get => SelectedFunctionSummary?.LogicFunction is { } logicFunction &&
+            _showAllTruthTableRowsByFunction.TryGetValue(logicFunction, out var showAllRows) &&
+            showAllRows;
     }
 
     public bool IsFunctionViewModeEnabled
@@ -165,6 +186,13 @@ public partial class MainWindowViewModel : ObservableObject
             SelectedFunctionSummary?.LogicFunction is TruthTableLogicFunction;
     }
 
+    public bool IsTruthTableShowModeEnabled
+    {
+        get => IsFunctionDetailVisible &&
+            !IsMinimizedViewSelected &&
+            SelectedFunctionSummary?.LogicFunction is not null;
+    }
+
     public void ShowUnminimizedView()
     {
         if (!IsFunctionViewModeEnabled)
@@ -199,6 +227,30 @@ public partial class MainWindowViewModel : ObservableObject
         }
 
         StatusText = "Showing minimized function view";
+    }
+
+    public void ShowTrueAndDontCareTruthTableRows()
+    {
+        if (!IsTruthTableShowModeEnabled)
+        {
+            StatusText = "Truth table row view is not available";
+            return;
+        }
+
+        SetShowAllTruthTableRows(false);
+        StatusText = "Showing true and don't care truth table rows";
+    }
+
+    public void ShowAllTruthTableRows()
+    {
+        if (!IsTruthTableShowModeEnabled)
+        {
+            StatusText = "Truth table row view is not available";
+            return;
+        }
+
+        SetShowAllTruthTableRows(true);
+        StatusText = "Showing all truth table rows";
     }
 
     public void MinimizeSelectedFunction(MinimizeOptions options)
@@ -592,6 +644,7 @@ public partial class MainWindowViewModel : ObservableObject
         IsTruthTableVisible = false;
         IsGateDiagramVisible = false;
         IsFunctionDetailVisible = true;
+        OnPropertyChanged(nameof(IsTruthTableShowModeEnabled));
         StatusText = $"Showing {logicFunction.OutputNames.Length} output function";
     }
 
@@ -622,6 +675,7 @@ public partial class MainWindowViewModel : ObservableObject
         IsTruthTableVisible = false;
         IsGateDiagramVisible = true;
         IsFunctionDetailVisible = false;
+        OnPropertyChanged(nameof(IsTruthTableShowModeEnabled));
         StatusText = $"Showing mapped gate diagram for {logicFunction.OutputNames.Length} output function";
     }
 
@@ -782,6 +836,39 @@ public partial class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(IsOperationMapToGatesEnabled));
         OnPropertyChanged(nameof(IsOperationGenerateLookupFunctionEnabled));
         OnPropertyChanged(nameof(IsTruthTableModifyEnabled));
+        OnPropertyChanged(nameof(IsTruthTableShowModeEnabled));
+        OnPropertyChanged(nameof(IsShowAllTruthTableRowsSelected));
+        OnPropertyChanged(nameof(IsShowTrueAndDontCareTruthTableRowsSelected));
+    }
+
+    private void SetShowAllTruthTableRows(bool showAllRows)
+    {
+        if (SelectedFunctionSummary?.LogicFunction is not { } logicFunction)
+        {
+            return;
+        }
+
+        _showAllTruthTableRowsByFunction[logicFunction] = showAllRows;
+        RefreshSelectedFunctionTruthTable();
+        OnPropertyChanged(nameof(IsShowAllTruthTableRowsSelected));
+        OnPropertyChanged(nameof(IsShowTrueAndDontCareTruthTableRowsSelected));
+    }
+
+    private void RefreshSelectedFunctionTruthTable()
+    {
+        if (SelectedFunctionSummary?.LogicFunction is not { } logicFunction)
+        {
+            return;
+        }
+
+        if (IsMinimizedViewSelected && logicFunction.MinimizedFunction is not null)
+        {
+            RefreshMinimizedFunctionTruthTable(logicFunction);
+        }
+        else
+        {
+            RefreshFunctionTruthTable(logicFunction);
+        }
     }
 
     private static LogicFunction WithMinimizedFunction(
@@ -829,7 +916,8 @@ public partial class MainWindowViewModel : ObservableObject
         for (var term = 0; term < logicFunction.OutputValues.Count; term++)
         {
             var outputs = logicFunction.OutputValues[term];
-            if (outputs.All(static value => value == "0"))
+            if (!IsShowAllTruthTableRowsSelected &&
+                outputs.All(static value => value == "0"))
             {
                 continue;
             }

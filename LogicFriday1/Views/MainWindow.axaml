@@ -1,4 +1,4 @@
-<Window xmlns="https://github.com/avaloniaui"
+﻿<Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:controls="using:LogicFriday1.Controls"
         xmlns:icons="using:LogicFriday1.MaterialIcons"
@@ -171,14 +171,36 @@
                           IsEnabled="{Binding IsTruthTableModifyEnabled}"
                           Click="ModifyTruthTable_OnClick" />
                 <Separator />
-                <MenuItem Header="Show Tr_ue and Don't Care" />
-                <MenuItem Header="Show All _Rows" />
+                <MenuItem Header="Show Tr_ue and Don't Care"
+                          ToggleType="Radio"
+                          GroupName="TruthTableShowMode"
+                          IsChecked="{Binding IsShowTrueAndDontCareTruthTableRowsSelected, Mode=OneWay}"
+                          IsEnabled="{Binding IsTruthTableShowModeEnabled}"
+                          Click="ShowTrueAndDontCareTruthTableRows_OnClick" />
+                <MenuItem Header="Show All _Rows"
+                          ToggleType="Radio"
+                          GroupName="TruthTableShowMode"
+                          IsChecked="{Binding IsShowAllTruthTableRowsSelected, Mode=OneWay}"
+                          IsEnabled="{Binding IsTruthTableShowModeEnabled}"
+                          Click="ShowAllTruthTableRows_OnClick" />
                 <Separator />
-                <MenuItem Header="Select _All" />
+                <MenuItem x:Name="TruthTableSelectAllMainMenuItem"
+                          Header="Select _All"
+                          IsEnabled="False"
+                          Click="TruthTableSelectAll_OnClick" />
                 <Separator />
-                <MenuItem Header="_True" />
-                <MenuItem Header="_False" />
-                <MenuItem Header="_Don't Care" />
+                <MenuItem x:Name="TruthTableSetTrueMainMenuItem"
+                          Header="_True"
+                          IsEnabled="False"
+                          Click="TruthTableSetTrue_OnClick" />
+                <MenuItem x:Name="TruthTableSetFalseMainMenuItem"
+                          Header="_False"
+                          IsEnabled="False"
+                          Click="TruthTableSetFalse_OnClick" />
+                <MenuItem x:Name="TruthTableSetDontCareMainMenuItem"
+                          Header="_Don't Care"
+                          IsEnabled="False"
+                          Click="TruthTableSetDontCare_OnClick" />
                 <MenuItem x:Name="TruthTableInvertMainMenuItem"
                           Header="_Invert"
                           IsEnabled="False"

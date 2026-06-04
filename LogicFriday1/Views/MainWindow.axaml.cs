@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -51,14 +51,14 @@ public partial class MainWindow : Window
             _propertyChangedDataContext.PropertyChanged += DataContext_OnPropertyChanged;
         }
 
-        UpdateTruthTableInvertMainMenuState();
+        UpdateTruthTableMainMenuState();
     }
 
     private void DataContext_OnPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(MainWindowViewModel.IsTruthTableVisible))
         {
-            UpdateTruthTableInvertMainMenuState();
+            UpdateTruthTableMainMenuState();
         }
     }
 
@@ -238,7 +238,7 @@ public partial class MainWindow : Window
 
         viewModel.StartNewTruthTable(dialog.ViewModel.InputNames, dialog.ViewModel.OutputNames);
         ConfigureTruthTableColumns(TruthTableDataGrid, dialog.ViewModel.InputNames, dialog.ViewModel.OutputNames);
-        UpdateTruthTableInvertMainMenuState();
+        UpdateTruthTableMainMenuState();
     }
 
     private void ModifyTruthTable_OnClick(object? sender, RoutedEventArgs e)
@@ -251,7 +251,23 @@ public partial class MainWindow : Window
         }
 
         ConfigureTruthTableColumns(TruthTableDataGrid, logicFunction.InputNames, logicFunction.OutputNames);
-        UpdateTruthTableInvertMainMenuState();
+        UpdateTruthTableMainMenuState();
+    }
+
+    private void ShowTrueAndDontCareTruthTableRows_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is MainWindowViewModel viewModel)
+        {
+            viewModel.ShowTrueAndDontCareTruthTableRows();
+        }
+    }
+
+    private void ShowAllTruthTableRows_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is MainWindowViewModel viewModel)
+        {
+            viewModel.ShowAllTruthTableRows();
+        }
     }
 
     private void NewLogicEquation_OnClick(object? sender, RoutedEventArgs e)
@@ -305,7 +321,7 @@ public partial class MainWindow : Window
 
             viewModel.StartImportedTruthTable(import.InputNames, import.OutputNames, import.OutputValues);
             ConfigureTruthTableColumns(TruthTableDataGrid, import.InputNames, import.OutputNames);
-            UpdateTruthTableInvertMainMenuState();
+            UpdateTruthTableMainMenuState();
         }
         catch (TruthTableImportException ex)
         {
@@ -570,14 +586,21 @@ public partial class MainWindow : Window
 
     private void TruthTableDataGrid_OnSelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
-        UpdateTruthTableInvertMainMenuState();
+        UpdateTruthTableMainMenuState();
     }
 
-    private void UpdateTruthTableInvertMainMenuState()
+    private void UpdateTruthTableMainMenuState()
     {
-        TruthTableInvertMainMenuItem.IsEnabled =
-            DataContext is MainWindowViewModel { IsTruthTableVisible: true } &&
+        var isTruthTableVisible = DataContext is MainWindowViewModel { IsTruthTableVisible: true };
+        var hasSelectedRows =
+            isTruthTableVisible &&
             TruthTableDataGrid.SelectedItems.OfType<TruthTableRow>().Any();
+
+        TruthTableSelectAllMainMenuItem.IsEnabled = isTruthTableVisible;
+        TruthTableSetTrueMainMenuItem.IsEnabled = hasSelectedRows;
+        TruthTableSetFalseMainMenuItem.IsEnabled = hasSelectedRows;
+        TruthTableSetDontCareMainMenuItem.IsEnabled = hasSelectedRows;
+        TruthTableInvertMainMenuItem.IsEnabled = hasSelectedRows;
     }
 
     private void ConfigureTruthTableColumns(DataGrid dataGrid, string[] inputNames, string[] outputNames)
@@ -840,18 +863,19 @@ public partial class MainWindow : Window
 
     private void TruthTableSelectAll_OnClick(object? sender, RoutedEventArgs e)
     {
-        if (DataContext is not MainWindowViewModel viewModel)
+        if (DataContext is not MainWindowViewModel { IsTruthTableVisible: true } viewModel)
         {
             return;
         }
 
+        TruthTableDataGrid.Focus();
         TruthTableDataGrid.SelectedItems.Clear();
-        foreach (var row in viewModel.TruthTableRows)
+        foreach (var row in viewModel.TruthTableRows.Where(static row => row.Cells.Any(static cell => cell.IsOutput)))
         {
             TruthTableDataGrid.SelectedItems.Add(row);
         }
 
-        UpdateTruthTableInvertMainMenuState();
+        UpdateTruthTableMainMenuState();
     }
 
     private void TruthTableSetTrue_OnClick(object? sender, RoutedEventArgs e)
@@ -924,7 +948,7 @@ public partial class MainWindow : Window
             }
 
             TruthTableDataGrid.Columns.Clear();
-            UpdateTruthTableInvertMainMenuState();
+            UpdateTruthTableMainMenuState();
         }
     }
 
@@ -934,7 +958,7 @@ public partial class MainWindow : Window
         {
             viewModel.CancelTruthTableEditing();
             TruthTableDataGrid.Columns.Clear();
-            UpdateTruthTableInvertMainMenuState();
+            UpdateTruthTableMainMenuState();
         }
     }
 
