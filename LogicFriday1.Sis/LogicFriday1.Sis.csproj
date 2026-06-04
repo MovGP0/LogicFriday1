@@ -6,6 +6,7 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <SisNativeManifest>$(MSBuildThisFileDirectory)..\LogicFriday1.Sis.Native\Cargo.toml</SisNativeManifest>
     <SisNativeLibraryName>logicfriday1_sis</SisNativeLibraryName>
+    <BuildNativeLibraries Condition="'$(BuildNativeLibraries)' == ''">true</BuildNativeLibraries>
     <SisCargoProfile Condition="'$(Configuration)' == 'Release'">release</SisCargoProfile>
     <SisCargoProfile Condition="'$(SisCargoProfile)' == ''">debug</SisCargoProfile>
     <SisCargoProfileArg Condition="'$(Configuration)' == 'Release'">--release</SisCargoProfileArg>
@@ -56,17 +57,30 @@
     <Compile Remove="NativeMethods.g.cs" />
   </ItemGroup>
 
-  <Target Name="BuildSisNative" BeforeTargets="CoreCompile">
+  <Target Name="BuildSisNative"
+          BeforeTargets="PrepareForBuild"
+          Condition="'$(BuildNativeLibraries)' != 'false'">
     <Error Condition="'$(SisRustTarget)' == ''" Text="Unsupported RuntimeIdentifier '$(SisNativeRid)' for LogicFriday1.Sis native Rust build. Supported RIDs: win-x64, win-arm64, linux-x64, linux-arm64, osx-x64, osx-arm64." />
     <Exec Command="cargo build --manifest-path &quot;$(SisNativeManifest)&quot; --target $(SisRustTarget) $(SisCargoProfileArg)" EnvironmentVariables="CARGO_INCREMENTAL=0;LOGICFRIDAY1_SIS_BINDGEN_FORCE=$([System.DateTime]::UtcNow.Ticks)" />
     <Copy SourceFiles="$(SisNativeOutputPath)" DestinationFolder="$(OutputPath)runtimes\$(SisNativeRid)\native\" SkipUnchangedFiles="true" />
+  </Target>
+
+  <Target Name="IncludeGeneratedSisNativeMethods" BeforeTargets="CoreCompile">
+    <Error Condition="'$(BuildNativeLibraries)' == 'false' and !Exists('NativeMethods.g.cs')" Text="NativeMethods.g.cs is missing. Run BuildSisNative, or build without BuildNativeLibraries=false, before using the C#-only build." />
     <ItemGroup>
-      <Compile Include="NativeMethods.g.cs" />
+      <Compile Include="NativeMethods.g.cs" Condition="Exists('NativeMethods.g.cs')" />
     </ItemGroup>
+  </Target>
+
+  <Target Name="BuildCSharpOnly">
+    <MSBuild Projects="$(MSBuildProjectFullPath)"
+             Targets="Build"
+             Properties="Configuration=$(Configuration);TargetFramework=$(TargetFramework);RuntimeIdentifier=$(RuntimeIdentifier);BuildNativeLibraries=false" />
   </Target>
 
   <Target Name="AddSisNativeCopyItems"
           DependsOnTargets="BuildSisNative"
+          Condition="'$(BuildNativeLibraries)' != 'false'"
           BeforeTargets="GetCopyToOutputDirectoryItems;_GetCopyToOutputDirectoryItemsFromThisProject;GetCopyToPublishDirectoryItems">
     <ItemGroup>
       <ContentWithTargetPath Include="$(SisNativeOutputPath)"

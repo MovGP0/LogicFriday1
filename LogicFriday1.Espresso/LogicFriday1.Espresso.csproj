@@ -6,6 +6,7 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <EspressoNativeManifest>$(MSBuildThisFileDirectory)..\LogicFriday1.Espresso.Native\Cargo.toml</EspressoNativeManifest>
     <EspressoNativeLibraryName>logicfriday1_espresso</EspressoNativeLibraryName>
+    <BuildNativeLibraries Condition="'$(BuildNativeLibraries)' == ''">true</BuildNativeLibraries>
     <EspressoCargoProfile Condition="'$(Configuration)' == 'Release'">release</EspressoCargoProfile>
     <EspressoCargoProfile Condition="'$(EspressoCargoProfile)' == ''">debug</EspressoCargoProfile>
     <EspressoCargoProfileArg Condition="'$(Configuration)' == 'Release'">--release</EspressoCargoProfileArg>
@@ -56,17 +57,30 @@
     <Compile Remove="NativeMethods.g.cs" />
   </ItemGroup>
 
-  <Target Name="BuildEspressoNative" BeforeTargets="CoreCompile">
+  <Target Name="BuildEspressoNative"
+          BeforeTargets="PrepareForBuild"
+          Condition="'$(BuildNativeLibraries)' != 'false'">
     <Error Condition="'$(EspressoRustTarget)' == ''" Text="Unsupported RuntimeIdentifier '$(EspressoNativeRid)' for LogicFriday1.Espresso native Rust build. Supported RIDs: win-x64, win-arm64, linux-x64, linux-arm64, osx-x64, osx-arm64." />
     <Exec Command="cargo build --manifest-path &quot;$(EspressoNativeManifest)&quot; --target $(EspressoRustTarget) $(EspressoCargoProfileArg)" EnvironmentVariables="CARGO_INCREMENTAL=0;LOGICFRIDAY1_ESPRESSO_BINDGEN_FORCE=$([System.DateTime]::UtcNow.Ticks)" />
     <Copy SourceFiles="$(EspressoNativeOutputPath)" DestinationFolder="$(OutputPath)runtimes\$(EspressoNativeRid)\native\" SkipUnchangedFiles="true" />
+  </Target>
+
+  <Target Name="IncludeGeneratedEspressoNativeMethods" BeforeTargets="CoreCompile">
+    <Error Condition="'$(BuildNativeLibraries)' == 'false' and !Exists('NativeMethods.g.cs')" Text="NativeMethods.g.cs is missing. Run BuildEspressoNative, or build without BuildNativeLibraries=false, before using the C#-only build." />
     <ItemGroup>
-      <Compile Include="NativeMethods.g.cs" />
+      <Compile Include="NativeMethods.g.cs" Condition="Exists('NativeMethods.g.cs')" />
     </ItemGroup>
+  </Target>
+
+  <Target Name="BuildCSharpOnly">
+    <MSBuild Projects="$(MSBuildProjectFullPath)"
+             Targets="Build"
+             Properties="Configuration=$(Configuration);TargetFramework=$(TargetFramework);RuntimeIdentifier=$(RuntimeIdentifier);BuildNativeLibraries=false" />
   </Target>
 
   <Target Name="AddEspressoNativeCopyItems"
           DependsOnTargets="BuildEspressoNative"
+          Condition="'$(BuildNativeLibraries)' != 'false'"
           BeforeTargets="GetCopyToOutputDirectoryItems;_GetCopyToOutputDirectoryItemsFromThisProject;GetCopyToPublishDirectoryItems">
     <ItemGroup>
       <ContentWithTargetPath Include="$(EspressoNativeOutputPath)"
