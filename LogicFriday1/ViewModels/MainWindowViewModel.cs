@@ -17,6 +17,10 @@ public partial class MainWindowViewModel : ObservableObject
 
     private readonly Dictionary<LogicFunction, bool> _showAllTruthTableRowsByFunction = [];
 
+    private IReadOnlyList<FunctionSummaryRow> _selectedFunctionSummaries = [];
+
+    private bool _isSettingSelectedFunctionSummaries;
+
     [ObservableProperty]
     private string _statusText = "Ready";
 
@@ -28,6 +32,12 @@ public partial class MainWindowViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(IsMinimizedViewEnabled))]
     [NotifyPropertyChangedFor(nameof(IsOperationMinimizeEnabled))]
     [NotifyPropertyChangedFor(nameof(IsOperationMapToGatesEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsOperationCloneFunctionEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsOperationCompareFunctionsEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsOperationTwoFunctionEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsOperationOrFunctionsEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsOperationAndFunctionsEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsOperationXorFunctionsEnabled))]
     [NotifyPropertyChangedFor(nameof(IsOperationGenerateLookupFunctionEnabled))]
     [NotifyPropertyChangedFor(nameof(IsTruthTableModifyEnabled))]
     [NotifyPropertyChangedFor(nameof(IsEquationModifyEnabled))]
@@ -41,6 +51,12 @@ public partial class MainWindowViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(IsMinimizedViewEnabled))]
     [NotifyPropertyChangedFor(nameof(IsOperationMinimizeEnabled))]
     [NotifyPropertyChangedFor(nameof(IsOperationMapToGatesEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsOperationCloneFunctionEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsOperationCompareFunctionsEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsOperationTwoFunctionEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsOperationOrFunctionsEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsOperationAndFunctionsEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsOperationXorFunctionsEnabled))]
     [NotifyPropertyChangedFor(nameof(IsOperationGenerateLookupFunctionEnabled))]
     [NotifyPropertyChangedFor(nameof(IsTruthTableModifyEnabled))]
     [NotifyPropertyChangedFor(nameof(IsEquationModifyEnabled))]
@@ -54,6 +70,12 @@ public partial class MainWindowViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(IsMinimizedViewEnabled))]
     [NotifyPropertyChangedFor(nameof(IsOperationMinimizeEnabled))]
     [NotifyPropertyChangedFor(nameof(IsOperationMapToGatesEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsOperationCloneFunctionEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsOperationCompareFunctionsEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsOperationTwoFunctionEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsOperationOrFunctionsEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsOperationAndFunctionsEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsOperationXorFunctionsEnabled))]
     [NotifyPropertyChangedFor(nameof(IsOperationGenerateLookupFunctionEnabled))]
     [NotifyPropertyChangedFor(nameof(IsTruthTableModifyEnabled))]
     [NotifyPropertyChangedFor(nameof(IsEquationModifyEnabled))]
@@ -69,6 +91,12 @@ public partial class MainWindowViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(IsMinimizedViewEnabled))]
     [NotifyPropertyChangedFor(nameof(IsOperationMinimizeEnabled))]
     [NotifyPropertyChangedFor(nameof(IsOperationMapToGatesEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsOperationCloneFunctionEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsOperationCompareFunctionsEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsOperationTwoFunctionEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsOperationOrFunctionsEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsOperationAndFunctionsEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsOperationXorFunctionsEnabled))]
     [NotifyPropertyChangedFor(nameof(IsOperationGenerateLookupFunctionEnabled))]
     [NotifyPropertyChangedFor(nameof(IsTruthTableModifyEnabled))]
     [NotifyPropertyChangedFor(nameof(IsTruthTableShowModeEnabled))]
@@ -81,6 +109,12 @@ public partial class MainWindowViewModel : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsOperationMinimizeEnabled))]
     [NotifyPropertyChangedFor(nameof(IsOperationMapToGatesEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsOperationCloneFunctionEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsOperationCompareFunctionsEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsOperationTwoFunctionEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsOperationOrFunctionsEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsOperationAndFunctionsEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsOperationXorFunctionsEnabled))]
     [NotifyPropertyChangedFor(nameof(IsOperationGenerateLookupFunctionEnabled))]
     [NotifyPropertyChangedFor(nameof(IsTruthTableModifyEnabled))]
     [NotifyPropertyChangedFor(nameof(IsEquationModifyEnabled))]
@@ -193,6 +227,43 @@ public partial class MainWindowViewModel : ObservableObject
     {
         get => IsFunctionViewModeEnabled &&
             SelectedFunctionCount == 1;
+    }
+
+    public bool IsOperationCloneFunctionEnabled
+    {
+        get => IsFunctionViewModeEnabled &&
+            SelectedFunctionCount == 1;
+    }
+
+    public bool IsOperationCompareFunctionsEnabled
+    {
+        get => IsOperationTwoFunctionEnabled;
+    }
+
+    public bool IsOperationTwoFunctionEnabled
+    {
+        get => IsFunctionViewModeEnabled &&
+            SelectedFunctionCount == 2;
+    }
+
+    public bool IsOperationOrFunctionsEnabled
+    {
+        get => IsOperationTwoFunctionEnabled;
+    }
+
+    public bool IsOperationAndFunctionsEnabled
+    {
+        get => IsOperationTwoFunctionEnabled;
+    }
+
+    public bool IsOperationXorFunctionsEnabled
+    {
+        get => IsOperationTwoFunctionEnabled;
+    }
+
+    public bool IsOperationCancelEnabled
+    {
+        get => false;
     }
 
     public bool IsTruthTableModifyEnabled
@@ -376,6 +447,86 @@ public partial class MainWindowViewModel : ObservableObject
             StatusText = errorMessage;
             return false;
         }
+    }
+
+    public bool CloneSelectedFunction()
+    {
+        if (!IsOperationCloneFunctionEnabled ||
+            SelectedFunctionSummary is not { LogicFunction: { } logicFunction })
+        {
+            StatusText = "Select one function to clone";
+            return false;
+        }
+
+        var clone = CloneLogicFunction(logicFunction);
+        AddFunction(clone);
+        ShowFunction(clone);
+        StatusText = "Function cloned";
+        return true;
+    }
+
+    public bool CompareSelectedFunctions()
+    {
+        if (!IsOperationCompareFunctionsEnabled)
+        {
+            StatusText = "Select two functions to compare";
+            return false;
+        }
+
+        var selectedFunctions = _selectedFunctionSummaries
+            .Select(static summary => summary.LogicFunction)
+            .OfType<LogicFunction>()
+            .ToArray();
+        if (selectedFunctions.Length != 2)
+        {
+            StatusText = "Select two functions to compare";
+            return false;
+        }
+
+        var firstFunction = selectedFunctions[0];
+        var secondFunction = selectedFunctions[1];
+        if (!CanApplyTwoFunctionOperation(firstFunction, secondFunction))
+        {
+            StatusText = "Functions must have the same inputs and exactly one output.";
+            return false;
+        }
+
+        var functionsAreEquivalent = firstFunction.OutputValues
+            .Zip(secondFunction.OutputValues)
+            .All(static pair => pair.First[0] == pair.Second[0]);
+        StatusText = functionsAreEquivalent
+            ? "Functions are equivalent"
+            : "Functions are different";
+        return true;
+    }
+
+    public bool OrSelectedFunctions(out string? errorMessage)
+    {
+        return ApplyTwoFunctionOperation(
+            "OR",
+            CombineOrValues,
+            out errorMessage);
+    }
+
+    public bool AndSelectedFunctions(out string? errorMessage)
+    {
+        return ApplyTwoFunctionOperation(
+            "AND",
+            CombineAndValues,
+            out errorMessage);
+    }
+
+    public bool XorSelectedFunctions(out string? errorMessage)
+    {
+        return ApplyTwoFunctionOperation(
+            "XOR",
+            CombineXorValues,
+            out errorMessage);
+    }
+
+    public void CancelOperation()
+    {
+        StatusText = "No operation is active";
     }
 
     public void StartNewLogicEquation()
@@ -779,6 +930,27 @@ public partial class MainWindowViewModel : ObservableObject
         SelectedFunctionCount = selectedFunctionCount;
     }
 
+    public void SetSelectedFunctionSummaries(IReadOnlyList<FunctionSummaryRow> selectedFunctionSummaries)
+    {
+        var summaries = selectedFunctionSummaries
+            .Where(static summary => summary.LogicFunction is not null)
+            .ToArray();
+
+        _isSettingSelectedFunctionSummaries = true;
+        try
+        {
+            _selectedFunctionSummaries = summaries;
+            SelectedFunctionSummary = summaries.FirstOrDefault();
+            SelectedFunctionCount = summaries.Length;
+        }
+        finally
+        {
+            _isSettingSelectedFunctionSummaries = false;
+        }
+
+        NotifySelectionChanged();
+    }
+
     public LogicFunction? GetSelectedFunction()
     {
         return SelectedFunctionSummary?.LogicFunction;
@@ -973,6 +1145,110 @@ public partial class MainWindowViewModel : ObservableObject
         return $"({string.Join(" + ", literals)})";
     }
 
+    private bool ApplyTwoFunctionOperation(
+        string operationName,
+        Func<string, string, string> combineValues,
+        out string? errorMessage)
+    {
+        errorMessage = null;
+        if (!IsOperationTwoFunctionEnabled)
+        {
+            errorMessage = "Please select two functions to compare.";
+            StatusText = errorMessage;
+            return false;
+        }
+
+        var selectedFunctions = _selectedFunctionSummaries
+            .Select(static summary => summary.LogicFunction)
+            .OfType<LogicFunction>()
+            .ToArray();
+        if (selectedFunctions.Length != 2)
+        {
+            errorMessage = "Please select two functions to compare.";
+            StatusText = errorMessage;
+            return false;
+        }
+
+        var firstFunction = selectedFunctions[0];
+        var secondFunction = selectedFunctions[1];
+        if (!CanApplyTwoFunctionOperation(firstFunction, secondFunction))
+        {
+            errorMessage = "Functions must have the same inputs and exactly one output.";
+            StatusText = errorMessage;
+            return false;
+        }
+
+        var outputName = $"{firstFunction.OutputNames[0]}_{operationName}_{secondFunction.OutputNames[0]}";
+        var outputValues = firstFunction.OutputValues
+            .Zip(
+                secondFunction.OutputValues,
+                (firstOutputs, secondOutputs) => new[]
+                {
+                    combineValues(firstOutputs[0], secondOutputs[0])
+                })
+            .ToArray();
+        var resultFunction = new TruthTableLogicFunction(
+            firstFunction.InputNames.ToArray(),
+            [outputName],
+            outputValues,
+            GenerateSumOfProductsEquation(
+                firstFunction.InputNames,
+                [outputName],
+                outputValues,
+                $"{operationName} Functions:"));
+
+        AddFunction(resultFunction);
+        ShowFunction(resultFunction);
+        StatusText = $"{operationName} Functions created";
+        return true;
+    }
+
+    private static bool CanApplyTwoFunctionOperation(
+        LogicFunction firstFunction,
+        LogicFunction secondFunction)
+    {
+        return firstFunction.OutputNames.Length == 1 &&
+            secondFunction.OutputNames.Length == 1 &&
+            firstFunction.InputNames.SequenceEqual(secondFunction.InputNames) &&
+            firstFunction.OutputValues.Count == secondFunction.OutputValues.Count;
+    }
+
+    private static string CombineOrValues(string firstValue, string secondValue)
+    {
+        if (firstValue == "1" || secondValue == "1")
+        {
+            return "1";
+        }
+
+        return firstValue == "X" || secondValue == "X"
+            ? "X"
+            : "0";
+    }
+
+    private static string CombineAndValues(string firstValue, string secondValue)
+    {
+        if (firstValue == "0" || secondValue == "0")
+        {
+            return "0";
+        }
+
+        return firstValue == "X" || secondValue == "X"
+            ? "X"
+            : "1";
+    }
+
+    private static string CombineXorValues(string firstValue, string secondValue)
+    {
+        if (firstValue == "X" || secondValue == "X")
+        {
+            return "X";
+        }
+
+        return firstValue == secondValue
+            ? "0"
+            : "1";
+    }
+
     private void AddFunction(LogicFunction logicFunction)
     {
         if (FunctionSummaries.Count == 1 && FunctionSummaries[0].LogicFunction is null)
@@ -1045,6 +1321,80 @@ public partial class MainWindowViewModel : ObservableObject
         return summary?.LogicFunction?.MinimizedFunction is not null;
     }
 
+    private static LogicFunction CloneLogicFunction(LogicFunction logicFunction)
+    {
+        return logicFunction switch
+        {
+            TruthTableLogicFunction truthTableFunction => truthTableFunction with
+            {
+                InputNames = CloneArray(truthTableFunction.InputNames),
+                OutputNames = CloneArray(truthTableFunction.OutputNames),
+                OutputValues = CloneRows(truthTableFunction.OutputValues),
+                MinimizedFunction = CloneMinimizedFunction(truthTableFunction.MinimizedFunction)
+            },
+            LogicEquationFunction logicEquationFunction => logicEquationFunction with
+            {
+                InputNames = CloneArray(logicEquationFunction.InputNames),
+                OutputNames = CloneArray(logicEquationFunction.OutputNames),
+                OutputValues = CloneRows(logicEquationFunction.OutputValues),
+                MinimizedFunction = CloneMinimizedFunction(logicEquationFunction.MinimizedFunction)
+            },
+            GateDiagramFunction gateDiagramFunction => gateDiagramFunction with
+            {
+                InputNames = CloneArray(gateDiagramFunction.InputNames),
+                OutputNames = CloneArray(gateDiagramFunction.OutputNames),
+                OutputValues = CloneRows(gateDiagramFunction.OutputValues),
+                Items = gateDiagramFunction.Items.ToArray(),
+                Wires = gateDiagramFunction.Wires.Select(CloneWire).ToArray(),
+                MinimizedFunction = CloneMinimizedFunction(gateDiagramFunction.MinimizedFunction)
+            },
+            _ => throw new InvalidOperationException("Unsupported function type.")
+        };
+    }
+
+    private static string[] CloneArray(string[] values)
+    {
+        return values.ToArray();
+    }
+
+    private static string[][] CloneRows(IReadOnlyList<string[]> rows)
+    {
+        return rows
+            .Select(static row => row.ToArray())
+            .ToArray();
+    }
+
+    private static MinimizedLogicFunction? CloneMinimizedFunction(MinimizedLogicFunction? minimizedFunction)
+    {
+        if (minimizedFunction is null)
+        {
+            return null;
+        }
+
+        return minimizedFunction with
+        {
+            Products = minimizedFunction.Products
+                .Select(CloneMinimizedProductTerm)
+                .ToArray()
+        };
+    }
+
+    private static MinimizedProductTerm CloneMinimizedProductTerm(MinimizedProductTerm product)
+    {
+        return product with
+        {
+            OutputValues = product.OutputValues.ToArray()
+        };
+    }
+
+    private static GateDiagramWire CloneWire(GateDiagramWire wire)
+    {
+        return wire with
+        {
+            RoutePoints = wire.RoutePoints.ToArray()
+        };
+    }
+
     private static LogicFunction WithEquationText(
         LogicFunction logicFunction,
         string equationText)
@@ -1070,6 +1420,54 @@ public partial class MainWindowViewModel : ObservableObject
         };
     }
 
+    partial void OnSelectedFunctionSummaryChanged(FunctionSummaryRow? value)
+    {
+        if (_isSettingSelectedFunctionSummaries)
+        {
+            return;
+        }
+
+        _selectedFunctionSummaries = value is null
+            ? []
+            : [value];
+    }
+
+    partial void OnSelectedFunctionCountChanged(int value)
+    {
+        if (_isSettingSelectedFunctionSummaries)
+        {
+            return;
+        }
+
+        if (value == 0)
+        {
+            _selectedFunctionSummaries = [];
+        }
+        else if (value == 1 && SelectedFunctionSummary is not null)
+        {
+            _selectedFunctionSummaries = [SelectedFunctionSummary];
+        }
+        else if (_selectedFunctionSummaries.Count != value)
+        {
+            _selectedFunctionSummaries = [];
+        }
+    }
+
+    partial void OnIsEquationEditorVisibleChanged(bool value)
+    {
+        NotifyTwoFunctionOperationChanged();
+    }
+
+    partial void OnIsTruthTableVisibleChanged(bool value)
+    {
+        NotifyTwoFunctionOperationChanged();
+    }
+
+    partial void OnIsGateDiagramVisibleChanged(bool value)
+    {
+        NotifyTwoFunctionOperationChanged();
+    }
+
     private void NotifyFunctionViewModeChanged()
     {
         OnPropertyChanged(nameof(IsUnminimizedViewSelected));
@@ -1077,6 +1475,12 @@ public partial class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(IsMinimizedViewEnabled));
         OnPropertyChanged(nameof(IsOperationMinimizeEnabled));
         OnPropertyChanged(nameof(IsOperationMapToGatesEnabled));
+        OnPropertyChanged(nameof(IsOperationCloneFunctionEnabled));
+        OnPropertyChanged(nameof(IsOperationCompareFunctionsEnabled));
+        OnPropertyChanged(nameof(IsOperationTwoFunctionEnabled));
+        OnPropertyChanged(nameof(IsOperationOrFunctionsEnabled));
+        OnPropertyChanged(nameof(IsOperationAndFunctionsEnabled));
+        OnPropertyChanged(nameof(IsOperationXorFunctionsEnabled));
         OnPropertyChanged(nameof(IsOperationGenerateLookupFunctionEnabled));
         OnPropertyChanged(nameof(IsTruthTableModifyEnabled));
         OnPropertyChanged(nameof(IsEquationModifyEnabled));
@@ -1086,6 +1490,32 @@ public partial class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(IsTruthTableShowModeEnabled));
         OnPropertyChanged(nameof(IsShowAllTruthTableRowsSelected));
         OnPropertyChanged(nameof(IsShowTrueAndDontCareTruthTableRowsSelected));
+    }
+
+    private void NotifySelectionChanged()
+    {
+        OnPropertyChanged(nameof(IsFunctionViewModeEnabled));
+        OnPropertyChanged(nameof(IsMinimizedViewEnabled));
+        OnPropertyChanged(nameof(IsOperationMinimizeEnabled));
+        OnPropertyChanged(nameof(IsOperationMapToGatesEnabled));
+        OnPropertyChanged(nameof(IsOperationCloneFunctionEnabled));
+        OnPropertyChanged(nameof(IsOperationCompareFunctionsEnabled));
+        OnPropertyChanged(nameof(IsOperationGenerateLookupFunctionEnabled));
+        OnPropertyChanged(nameof(IsTruthTableModifyEnabled));
+        OnPropertyChanged(nameof(IsTruthTableShowModeEnabled));
+        OnPropertyChanged(nameof(IsEquationModifyEnabled));
+        OnPropertyChanged(nameof(IsEquationFormatEnabled));
+        OnPropertyChanged(nameof(IsShowAllTruthTableRowsSelected));
+        OnPropertyChanged(nameof(IsShowTrueAndDontCareTruthTableRowsSelected));
+        NotifyTwoFunctionOperationChanged();
+    }
+
+    private void NotifyTwoFunctionOperationChanged()
+    {
+        OnPropertyChanged(nameof(IsOperationTwoFunctionEnabled));
+        OnPropertyChanged(nameof(IsOperationOrFunctionsEnabled));
+        OnPropertyChanged(nameof(IsOperationAndFunctionsEnabled));
+        OnPropertyChanged(nameof(IsOperationXorFunctionsEnabled));
     }
 
     private void SetShowAllTruthTableRows(bool showAllRows)

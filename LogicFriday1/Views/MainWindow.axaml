@@ -156,14 +156,26 @@
                               Click="GenerateLookupFunction_OnClick" />
                 </MenuItem>
                 <Separator />
-                <MenuItem Header="Clo_ne Function" />
+                <MenuItem Header="Clo_ne Function"
+                          IsEnabled="{Binding IsOperationCloneFunctionEnabled}"
+                          Click="CloneFunction_OnClick" />
                 <Separator />
-                <MenuItem Header="Compa_re Functions" />
-                <MenuItem Header="_OR Functions" />
-                <MenuItem Header="_AND Functions" />
-                <MenuItem Header="_XOR Functions" />
+                <MenuItem Header="Compa_re Functions"
+                          IsEnabled="{Binding IsOperationCompareFunctionsEnabled}"
+                          Click="CompareFunctions_OnClick" />
+                <MenuItem Header="_OR Functions"
+                          IsEnabled="{Binding IsOperationOrFunctionsEnabled}"
+                          Click="OrFunctions_OnClick" />
+                <MenuItem Header="_AND Functions"
+                          IsEnabled="{Binding IsOperationAndFunctionsEnabled}"
+                          Click="AndFunctions_OnClick" />
+                <MenuItem Header="_XOR Functions"
+                          IsEnabled="{Binding IsOperationXorFunctionsEnabled}"
+                          Click="XorFunctions_OnClick" />
                 <Separator />
-                <MenuItem Header="_Cancel Esc" />
+                <MenuItem Header="_Cancel Esc"
+                          IsEnabled="{Binding IsOperationCancelEnabled}"
+                          Click="OperationCancel_OnClick" />
             </MenuItem>
 
             <MenuItem Header="T_ruthtable">

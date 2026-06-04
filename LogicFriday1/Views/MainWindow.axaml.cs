@@ -192,6 +192,89 @@ public partial class MainWindow : Window
         }
     }
 
+    private void CloneFunction_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is MainWindowViewModel { IsOperationCloneFunctionEnabled: true } viewModel &&
+            viewModel.CloneSelectedFunction() &&
+            viewModel.GetSelectedFunction() is { } logicFunction)
+        {
+            ConfigureTruthTableColumns(FunctionTruthTableDataGrid, logicFunction.InputNames, logicFunction.OutputNames);
+        }
+    }
+
+    private async void CompareFunctions_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is MainWindowViewModel { IsOperationCompareFunctionsEnabled: true } viewModel &&
+            viewModel.CompareSelectedFunctions())
+        {
+            await ShowMessageAsync(viewModel.StatusText, "Compare Functions");
+        }
+    }
+
+    private async void OrFunctions_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainWindowViewModel { IsOperationOrFunctionsEnabled: true } viewModel)
+        {
+            return;
+        }
+
+        if (!viewModel.OrSelectedFunctions(out var errorMessage))
+        {
+            await ShowMessageAsync(errorMessage ?? viewModel.StatusText, "OR Functions");
+            return;
+        }
+
+        ConfigureSelectedFunctionTruthTableColumns(viewModel);
+    }
+
+    private async void AndFunctions_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainWindowViewModel { IsOperationAndFunctionsEnabled: true } viewModel)
+        {
+            return;
+        }
+
+        if (!viewModel.AndSelectedFunctions(out var errorMessage))
+        {
+            await ShowMessageAsync(errorMessage ?? viewModel.StatusText, "AND Functions");
+            return;
+        }
+
+        ConfigureSelectedFunctionTruthTableColumns(viewModel);
+    }
+
+    private async void XorFunctions_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainWindowViewModel { IsOperationXorFunctionsEnabled: true } viewModel)
+        {
+            return;
+        }
+
+        if (!viewModel.XorSelectedFunctions(out var errorMessage))
+        {
+            await ShowMessageAsync(errorMessage ?? viewModel.StatusText, "XOR Functions");
+            return;
+        }
+
+        ConfigureSelectedFunctionTruthTableColumns(viewModel);
+    }
+
+    private void OperationCancel_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is MainWindowViewModel viewModel)
+        {
+            viewModel.CancelOperation();
+        }
+    }
+
+    private void ConfigureSelectedFunctionTruthTableColumns(MainWindowViewModel viewModel)
+    {
+        if (viewModel.GetSelectedFunction() is { } logicFunction)
+        {
+            ConfigureTruthTableColumns(FunctionTruthTableDataGrid, logicFunction.InputNames, logicFunction.OutputNames);
+        }
+    }
+
     private void GateZoomIn_OnClick(object? sender, RoutedEventArgs e)
     {
         if (DataContext is MainWindowViewModel { IsGateDiagramVisible: true })
@@ -631,7 +714,10 @@ public partial class MainWindow : Window
             return;
         }
 
-        viewModel.SetSelectedFunctionCount(FunctionSummaryDataGrid.SelectedItems.Count);
+        var selectedSummaries = FunctionSummaryDataGrid.SelectedItems
+            .OfType<FunctionSummaryRow>()
+            .ToArray();
+        viewModel.SetSelectedFunctionSummaries(selectedSummaries);
         if (FunctionSummaryDataGrid.SelectedItems.Count != 1 ||
             viewModel.GetSelectedFunction() is not { } logicFunction)
         {
