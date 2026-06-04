@@ -135,6 +135,58 @@ public partial class MainWindow : Window
         }
     }
 
+    private async void GenerateLookupFunction_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem { Tag: string languageTag } ||
+            !Enum.TryParse<LookupFunctionLanguage>(languageTag, out var language) ||
+            DataContext is not MainWindowViewModel { IsOperationGenerateLookupFunctionEnabled: true } viewModel ||
+            viewModel.GetSelectedFunction() is not { } selectedFunction)
+        {
+            return;
+        }
+
+        var generated = LookupFunctionGenerator.Generate(selectedFunction, language);
+        var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = $"Generate {LookupFunctionGenerator.GetDisplayName(language)} Lookup Function",
+            SuggestedFileName = generated.FileName,
+            DefaultExtension = generated.FileExtension.TrimStart('.'),
+            FileTypeChoices =
+            [
+                new FilePickerFileType(generated.FileTypeName)
+                {
+                    Patterns = [ $"*{generated.FileExtension}" ]
+                },
+                new FilePickerFileType("All Files")
+                {
+                    Patterns = [ "*" ]
+                }
+            ]
+        });
+
+        if (file is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await using var output = await file.OpenWriteAsync();
+            if (output.CanSeek)
+            {
+                output.SetLength(0);
+            }
+
+            await using var writer = new StreamWriter(output);
+            await writer.WriteAsync(generated.SourceCode);
+            viewModel.StatusText = $"{LookupFunctionGenerator.GetDisplayName(language)} lookup function generated";
+        }
+        catch (Exception ex)
+        {
+            await ShowMessageAsync($"The lookup function file could not be written.\n{ex.Message}", "Generate Lookup Function");
+        }
+    }
+
     private void GateZoomIn_OnClick(object? sender, RoutedEventArgs e)
     {
         if (DataContext is MainWindowViewModel { IsGateDiagramVisible: true })

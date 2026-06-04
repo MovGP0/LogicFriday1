@@ -125,7 +125,36 @@
                 <MenuItem Header="Map to _Gates..."
                           IsEnabled="{Binding IsOperationMapToGatesEnabled}"
                           Click="MapToGates_OnClick" />
-                <MenuItem Header="Generate C _Lookup Function..." />
+                <MenuItem Header="Generate _Lookup Function"
+                          IsEnabled="{Binding IsOperationGenerateLookupFunctionEnabled}">
+                    <MenuItem Header="(V)_HDL"
+                              Tag="Vhdl"
+                              Click="GenerateLookupFunction_OnClick" />
+                    <MenuItem Header="_Verilog"
+                              Tag="Verilog"
+                              Click="GenerateLookupFunction_OnClick" />
+                    <MenuItem Header="_C"
+                              Tag="C"
+                              Click="GenerateLookupFunction_OnClick" />
+                    <MenuItem Header="_Rust"
+                              Tag="Rust"
+                              Click="GenerateLookupFunction_OnClick" />
+                    <MenuItem Header="C_#"
+                              Tag="CSharp"
+                              Click="GenerateLookupFunction_OnClick" />
+                    <MenuItem Header="_Java"
+                              Tag="Java"
+                              Click="GenerateLookupFunction_OnClick" />
+                    <MenuItem Header="_Python"
+                              Tag="Python"
+                              Click="GenerateLookupFunction_OnClick" />
+                    <MenuItem Header="Java_Script"
+                              Tag="JavaScript"
+                              Click="GenerateLookupFunction_OnClick" />
+                    <MenuItem Header="_Go"
+                              Tag="Go"
+                              Click="GenerateLookupFunction_OnClick" />
+                </MenuItem>
                 <Separator />
                 <MenuItem Header="Clo_ne Function" />
                 <Separator />
