@@ -5,9 +5,9 @@
         x:DataType="vm:MinimizeDialogViewModel"
         Title="Minimize"
         Width="420"
-        Height="280"
+        Height="320"
         MinWidth="420"
-        MinHeight="280"
+        MinHeight="320"
         WindowStartupLocation="CenterOwner"
         CanResize="False">
 
