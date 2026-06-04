@@ -1227,7 +1227,7 @@ impl ExactBackend for NativeMinimizeBackend {
         on_set: &Cover,
         dont_care: &Cover,
     ) -> Result<Cover, MinimizeError> {
-        all_primes_native(on_set, dont_care, &self.layout)
+        primes_consensus_native(&on_set.clone().append(dont_care.clone()), &self.layout)
     }
 
     fn split_irredundant(
@@ -2132,6 +2132,55 @@ mod tests {
         assert_eq!(result.selected_prime_indices, vec![1]);
         assert_eq!(result.cover, cover(&[&[2], &[0, 1, 2]]));
         assert!(!result.sparse_cleanup_applied);
+    }
+
+    #[test]
+    fn exact_modes_minimize_full_adder_carry_to_majority_terms() {
+        let full_adder = "\
+.i 3
+.o 2
+.ilb CIn A B
+.ob C S
+.type fd
+.p 7
+001 01
+010 01
+011 10
+100 01
+101 10
+110 10
+111 11
+.e
+";
+
+        for mode in [
+            MinimizeMode::ExactJoint,
+            MinimizeMode::ExactIndependentOutput,
+        ] {
+            let minimized = crate::minimize_pla_text(full_adder, mode).unwrap();
+            let product_lines = minimized
+                .lines()
+                .map(str::trim)
+                .filter(|line| !line.is_empty() && !line.starts_with('.'))
+                .collect::<Vec<_>>();
+
+            assert!(
+                product_lines.contains(&"-11 10"),
+                "{mode:?} should include A B carry implicant:\n{minimized}"
+            );
+            assert!(
+                product_lines.contains(&"1-1 10"),
+                "{mode:?} should include CIn B carry implicant:\n{minimized}"
+            );
+            assert!(
+                product_lines.contains(&"11- 10"),
+                "{mode:?} should include CIn A carry implicant:\n{minimized}"
+            );
+            assert!(
+                !product_lines.contains(&"011 10"),
+                "{mode:?} should not leave carry as an unminimized minterm:\n{minimized}"
+            );
+        }
     }
 
     #[test]

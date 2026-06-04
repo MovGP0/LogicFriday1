@@ -807,10 +807,7 @@ public partial class MainWindowViewModel : ObservableObject
     public void FactorSelectedEquation()
     {
         UpdateSelectedFunctionEquation(
-            static viewModel => string.Join(
-                Environment.NewLine,
-                "Factored:",
-                viewModel.GenerateSelectedSumOfProductsEquation()),
+            static viewModel => viewModel.GenerateSelectedFactoredEquation(),
             "Factored equation");
     }
 
@@ -851,6 +848,14 @@ public partial class MainWindowViewModel : ObservableObject
             return "";
         }
 
+        if (logicFunction.MinimizedFunction is { } minimizedFunction)
+        {
+            return GenerateMinimizedSumOfProductsEquation(
+                logicFunction.InputNames,
+                logicFunction.OutputNames,
+                minimizedFunction.Products);
+        }
+
         return GenerateSumOfProductsEquation(
             logicFunction.InputNames,
             logicFunction.OutputNames,
@@ -865,11 +870,37 @@ public partial class MainWindowViewModel : ObservableObject
             return "";
         }
 
+        if (logicFunction.MinimizedFunction is not null)
+        {
+            return GenerateMinimizedProductOfSumsEquation(logicFunction);
+        }
+
         return GenerateProductOfSumsEquation(
             logicFunction.InputNames,
             logicFunction.OutputNames,
             logicFunction.OutputValues,
             "Product of Sums:");
+    }
+
+    private string GenerateSelectedFactoredEquation()
+    {
+        if (SelectedFunctionSummary?.LogicFunction is not { } logicFunction)
+        {
+            return "";
+        }
+
+        if (logicFunction.MinimizedFunction is { } minimizedFunction)
+        {
+            return GenerateFactoredEquation(
+                logicFunction.InputNames,
+                logicFunction.OutputNames,
+                minimizedFunction.Products);
+        }
+
+        return string.Join(
+            Environment.NewLine,
+            "Factored:",
+            GenerateSelectedSumOfProductsEquation());
     }
 
     public void StartNewTruthTable(string[] inputNames, string[] outputNames)
@@ -1535,6 +1566,173 @@ public partial class MainWindowViewModel : ObservableObject
         return string.Join(Environment.NewLine, equations);
     }
 
+    private static string GenerateMinimizedSumOfProductsEquation(
+        string[] inputNames,
+        string[] outputNames,
+        IReadOnlyList<MinimizedProductTerm> products)
+    {
+        var equations = new List<string>
+        {
+            "Minimized:"
+        };
+
+        for (var outputIndex = 0; outputIndex < outputNames.Length; outputIndex++)
+        {
+            var outputProducts = OrderMinimizedProductPatterns(products
+                    .Where(product => product.OutputValues[outputIndex] == "1")
+                    .Select(static product => product.InputPattern))
+                .ToArray();
+            var expression = outputProducts.Length == 0
+                ? "0"
+                : string.Join(
+                    " + ",
+                    outputProducts.Select(pattern => BuildMinimizedProductTerm(pattern, inputNames)));
+            var suffix = outputProducts.Any(static pattern => pattern.Contains('-'))
+                ? " ;"
+                : ";";
+            equations.Add($"{outputNames[outputIndex]} = {expression}{suffix}");
+        }
+
+        return string.Join(Environment.NewLine, equations);
+    }
+
+    private static string GenerateMinimizedProductOfSumsEquation(LogicFunction logicFunction)
+    {
+        var invertedFunction = new TruthTableLogicFunction(
+            logicFunction.InputNames,
+            logicFunction.OutputNames,
+            logicFunction.OutputValues
+                .Select(static outputs => outputs
+                    .Select(static output => output == "1" ? "0" : "1")
+                    .ToArray())
+                .ToArray(),
+            "");
+        var minimizedFalseFunction = LogicFunctionMinimizer.Minimize(
+            invertedFunction,
+            new MinimizeOptions(UseExactMode: false, MinimizeOutputsIndependently: true));
+        var equations = new List<string>
+        {
+            "Minimized Product of Sums:"
+        };
+
+        for (var outputIndex = 0; outputIndex < logicFunction.OutputNames.Length; outputIndex++)
+        {
+            var sumTerms = minimizedFalseFunction.Products
+                .Where(product => product.OutputValues[outputIndex] == "1")
+                .OrderByDescending(static product => product.InputPattern.IndexOf('-'))
+                .Select(product => BuildMinimizedSumTerm(product.InputPattern, logicFunction.InputNames))
+                .ToArray();
+            var expression = sumTerms.Length == 0
+                ? "1"
+                : string.Join("", sumTerms);
+            equations.Add($"{logicFunction.OutputNames[outputIndex]} = {expression};");
+        }
+
+        return string.Join(Environment.NewLine, equations);
+    }
+
+    private static string GenerateFactoredEquation(
+        string[] inputNames,
+        string[] outputNames,
+        IReadOnlyList<MinimizedProductTerm> products)
+    {
+        var equations = new List<string>
+        {
+            "Factored:"
+        };
+
+        for (var outputIndex = 0; outputIndex < outputNames.Length; outputIndex++)
+        {
+            var outputProducts = OrderMinimizedProductPatterns(products
+                .Where(product => product.OutputValues[outputIndex] == "1")
+                .Select(static product => product.InputPattern))
+                .ToArray();
+            var expression = outputProducts.Length == 0
+                ? "0"
+                : BuildFactoredExpression(outputProducts, inputNames);
+            equations.Add($"{outputNames[outputIndex]} = {expression};");
+        }
+
+        return string.Join(Environment.NewLine, equations);
+    }
+
+    private static string BuildFactoredExpression(string[] productPatterns, string[] inputNames)
+    {
+        var factor = ChooseFactor(productPatterns, inputNames.Length);
+        if (factor is null)
+        {
+            return string.Join(
+                " + ",
+                productPatterns.Select(pattern => BuildMinimizedProductTerm(pattern, inputNames)));
+        }
+
+        var terms = new List<string>();
+        foreach (var polarity in new[] { '1', '0' })
+        {
+            var group = productPatterns
+                .Where(pattern => pattern[factor.Value] == polarity)
+                .ToArray();
+            if (group.Length <= 1)
+            {
+                continue;
+            }
+
+            var literal = polarity == '1'
+                ? inputNames[factor.Value]
+                : $"{inputNames[factor.Value]}'";
+            var innerTerms = group
+                .Select(pattern => BuildMinimizedProductTermWithoutLiteral(pattern, inputNames, factor.Value))
+                .ToArray();
+            terms.Add($"{literal} ({string.Join(" + ", innerTerms)})");
+        }
+
+        terms.AddRange(productPatterns
+            .Where(pattern => pattern[factor.Value] == '-' ||
+                productPatterns.Count(candidate => candidate[factor.Value] == pattern[factor.Value]) <= 1)
+            .Select(pattern => BuildMinimizedProductTerm(pattern, inputNames)));
+
+        return string.Join(" + ", terms);
+    }
+
+    private static int? ChooseFactor(string[] productPatterns, int inputCount)
+    {
+        for (var inputIndex = inputCount - 1; inputIndex >= 0; inputIndex--)
+        {
+            var positiveCount = productPatterns.Count(pattern => pattern[inputIndex] == '1');
+            var negativeCount = productPatterns.Count(pattern => pattern[inputIndex] == '0');
+            if (positiveCount > 1 || negativeCount > 1)
+            {
+                return inputIndex;
+            }
+        }
+
+        return null;
+    }
+
+    private static IOrderedEnumerable<string> OrderMinimizedProductPatterns(IEnumerable<string> productPatterns)
+    {
+        return productPatterns
+            .OrderBy(static pattern => pattern.Count(static part => part != '-'))
+            .ThenBy(static pattern => pattern.IndexOf('-') < 0 ? pattern.Length : pattern.IndexOf('-'))
+            .ThenBy(static pattern => pattern.Count(static part => part == '1'))
+            .ThenByDescending(PatternBinaryValue);
+    }
+
+    private static int PatternBinaryValue(string inputPattern)
+    {
+        var value = 0;
+        foreach (var part in inputPattern)
+        {
+            value <<= 1;
+            if (part == '1')
+            {
+                value |= 1;
+            }
+        }
+
+        return value;
+    }
+
     private static string BuildProductTerm(int term, string[] inputNames)
     {
         var literals = new List<string>();
@@ -1563,6 +1761,65 @@ public partial class MainWindowViewModel : ObservableObject
         }
 
         return $"({string.Join(" + ", literals)})";
+    }
+
+    private static string BuildMinimizedProductTerm(string inputPattern, string[] inputNames)
+    {
+        var literals = new List<string>();
+        for (var inputIndex = 0; inputIndex < inputNames.Length; inputIndex++)
+        {
+            literals.Add(inputPattern[inputIndex] switch
+            {
+                '0' => $"{inputNames[inputIndex]}'",
+                '1' => inputNames[inputIndex],
+                _ => ""
+            });
+        }
+
+        literals.RemoveAll(static literal => literal.Length == 0);
+        return literals.Count == 0 ? "1" : string.Join(" ", literals);
+    }
+
+    private static string BuildMinimizedProductTermWithoutLiteral(
+        string inputPattern,
+        string[] inputNames,
+        int skippedInputIndex)
+    {
+        var literals = new List<string>();
+        for (var inputIndex = 0; inputIndex < inputNames.Length; inputIndex++)
+        {
+            if (inputIndex == skippedInputIndex)
+            {
+                continue;
+            }
+
+            literals.Add(inputPattern[inputIndex] switch
+            {
+                '0' => $"{inputNames[inputIndex]}'",
+                '1' => inputNames[inputIndex],
+                _ => ""
+            });
+        }
+
+        literals.RemoveAll(static literal => literal.Length == 0);
+        return literals.Count == 0 ? "1" : string.Join(" ", literals);
+    }
+
+    private static string BuildMinimizedSumTerm(string inputPattern, string[] inputNames)
+    {
+        var literals = new List<string>();
+        for (var inputIndex = 0; inputIndex < inputNames.Length; inputIndex++)
+        {
+            literals.Add(inputPattern[inputIndex] switch
+            {
+                '0' => inputNames[inputIndex],
+                '1' => $"{inputNames[inputIndex]}'",
+                _ => ""
+            });
+        }
+
+        literals.RemoveAll(static literal => literal.Length == 0);
+        return $"({string.Join("+", literals)})";
     }
 
     private bool ApplyTwoFunctionOperation(
