@@ -1,0 +1,42 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:models="using:LogicFriday1.Models"
+             xmlns:vm="using:LogicFriday1.ViewModels"
+             x:Class="LogicFriday1.Views.FunctionsGridView"
+             x:DataType="vm:MainWindowViewModel">
+    <DataGrid x:Name="FunctionSummaryDataGrid"
+              ItemsSource="{Binding FunctionSummaries}"
+              SelectedItem="{Binding SelectedFunctionSummary, Mode=TwoWay}"
+              SelectionChanged="FunctionSummaryDataGrid_OnSelectionChanged"
+              AutoGenerateColumns="False"
+              IsReadOnly="True"
+              CanUserResizeColumns="True"
+              CanUserReorderColumns="True"
+              CanUserSortColumns="True"
+              GridLinesVisibility="All"
+              HeadersVisibility="Column"
+              Background="{DynamicResource LogicFriday.Brush.SurfaceContainerLowest}"
+              Foreground="{DynamicResource LogicFriday.Brush.OnSurface}"
+              BorderBrush="{DynamicResource LogicFriday.Brush.OutlineVariant}"
+              Margin="0,0,0,8">
+        <DataGrid.Columns>
+            <DataGridTextColumn Header="Function"
+                                Binding="{Binding Function}"
+                                Width="*" />
+            <DataGridTextColumn Header="Inputs"
+                                Binding="{Binding Inputs}" />
+            <DataGridTextColumn Header="Outputs"
+                                Binding="{Binding Outputs}" />
+            <DataGridTextColumn Header="True"
+                                Binding="{Binding True}" />
+            <DataGridTextColumn Header="False"
+                                Binding="{Binding False}" />
+            <DataGridTextColumn Header="DC"
+                                Binding="{Binding DC}" />
+            <DataGridTextColumn Header="PI"
+                                Binding="{Binding PI}" />
+            <DataGridTextColumn Header="Gates"
+                                Binding="{Binding Gates}" />
+        </DataGrid.Columns>
+    </DataGrid>
+</UserControl>

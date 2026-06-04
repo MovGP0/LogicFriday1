@@ -1,0 +1,49 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:LogicFriday1.ViewModels"
+             x:Class="LogicFriday1.Views.TruthTableEditorView"
+             x:DataType="vm:MainWindowViewModel">
+    <DataGrid x:Name="TruthTableDataGrid"
+              IsVisible="{Binding IsTruthTableVisible}"
+              ItemsSource="{Binding TruthTableRows}"
+              AutoGenerateColumns="False"
+              IsReadOnly="True"
+              CanUserResizeColumns="True"
+              CanUserReorderColumns="False"
+              CanUserSortColumns="False"
+              SelectionMode="Extended"
+              SelectionChanged="TruthTableDataGrid_OnSelectionChanged"
+              GridLinesVisibility="All"
+              HeadersVisibility="Column"
+              Background="{DynamicResource LogicFriday.Brush.SurfaceContainerLowest}"
+              Foreground="{DynamicResource LogicFriday.Brush.OnSurface}"
+              BorderBrush="{DynamicResource LogicFriday.Brush.OutlineVariant}"
+              KeyDown="TruthTableDataGrid_OnKeyDown"
+              CellPointerPressed="TruthTableDataGrid_OnCellPointerPressed">
+        <DataGrid.ContextMenu>
+            <ContextMenu Opening="TruthTableContextMenu_OnOpening"
+                         Closing="TruthTableContextMenu_OnClosing">
+                <MenuItem Header="Select All"
+                          Click="TruthTableSelectAll_OnClick" />
+                <Separator />
+                <MenuItem x:Name="TruthTableSetTrueMenuItem"
+                          Header="True"
+                          Click="TruthTableSetTrue_OnClick" />
+                <MenuItem x:Name="TruthTableSetFalseMenuItem"
+                          Header="False"
+                          Click="TruthTableSetFalse_OnClick" />
+                <MenuItem x:Name="TruthTableSetDontCareMenuItem"
+                          Header="Don't Care"
+                          Click="TruthTableSetDontCare_OnClick" />
+                <MenuItem x:Name="TruthTableInvertMenuItem"
+                          Header="Invert"
+                          Click="TruthTableInvert_OnClick" />
+                <Separator />
+                <MenuItem Header="Submit"
+                          Click="TruthTableSubmit_OnClick" />
+                <MenuItem Header="Cancel"
+                          Click="TruthTableCancel_OnClick" />
+            </ContextMenu>
+        </DataGrid.ContextMenu>
+    </DataGrid>
+</UserControl>

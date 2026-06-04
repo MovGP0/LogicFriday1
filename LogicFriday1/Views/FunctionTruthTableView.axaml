@@ -1,0 +1,18 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:LogicFriday1.ViewModels"
+             x:Class="LogicFriday1.Views.FunctionTruthTableView"
+             x:DataType="vm:MainWindowViewModel">
+    <DataGrid x:Name="TruthTableDataGrid"
+              ItemsSource="{Binding FunctionTruthTableRows}"
+              AutoGenerateColumns="False"
+              IsReadOnly="True"
+              CanUserResizeColumns="True"
+              CanUserReorderColumns="False"
+              CanUserSortColumns="False"
+              GridLinesVisibility="All"
+              HeadersVisibility="Column"
+              Background="{DynamicResource LogicFriday.Brush.SurfaceContainerLowest}"
+              Foreground="{DynamicResource LogicFriday.Brush.OnSurface}"
+              BorderBrush="{DynamicResource LogicFriday.Brush.OutlineVariant}" />
+</UserControl>

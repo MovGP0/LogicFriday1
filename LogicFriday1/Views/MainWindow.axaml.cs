@@ -5,7 +5,6 @@ using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
 using Avalonia;
-using Avalonia.Data;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Input.Platform;
@@ -24,18 +23,12 @@ public partial class MainWindow : Window
 {
     private const string HelpContentsUrl = "https://github.com/MovGP0/LogicFriday1/wiki";
     private const string GateDiagramHelpUrl = "https://github.com/MovGP0/LogicFriday1/wiki/Entering-a-gate-diagram";
-    private const string ActiveGatePaletteButtonClass = "active";
-    private TruthTableRow? _truthTableContextRow;
-    private Button? _activeGatePaletteButton;
     private INotifyPropertyChanged? _propertyChangedDataContext;
 
     public MainWindow()
     {
         InitializeComponent();
         DataContextChanged += MainWindow_OnDataContextChanged;
-        TruthTableDataGrid.AddHandler(PointerPressedEvent, TruthTableDataGrid_OnPointerPressed, RoutingStrategies.Tunnel);
-        GateDiagramSurface.VariableNameRequested += GateDiagramSurface_OnVariableNameRequested;
-        GateDiagramSurface.PaletteSelectionCleared += GateDiagramSurface_OnPaletteSelectionCleared;
     }
 
     private void MainWindow_OnDataContextChanged(object? sender, EventArgs e)
@@ -115,7 +108,7 @@ public partial class MainWindow : Window
         viewModel.MinimizeSelectedFunction(dialog.ViewModel.ToMinimizeOptions());
         if (viewModel.GetSelectedFunction() is { } logicFunction)
         {
-            ConfigureTruthTableColumns(FunctionTruthTableDataGrid, logicFunction.InputNames, logicFunction.OutputNames);
+            FunctionTruthTableView.ConfigureColumns(logicFunction.InputNames, logicFunction.OutputNames);
         }
     }
 
@@ -218,7 +211,7 @@ public partial class MainWindow : Window
             viewModel.CloneSelectedFunction() &&
             viewModel.GetSelectedFunction() is { } logicFunction)
         {
-            ConfigureTruthTableColumns(FunctionTruthTableDataGrid, logicFunction.InputNames, logicFunction.OutputNames);
+            FunctionTruthTableView.ConfigureColumns(logicFunction.InputNames, logicFunction.OutputNames);
         }
     }
 
@@ -291,7 +284,7 @@ public partial class MainWindow : Window
     {
         if (viewModel.GetSelectedFunction() is { } logicFunction)
         {
-            ConfigureTruthTableColumns(FunctionTruthTableDataGrid, logicFunction.InputNames, logicFunction.OutputNames);
+            FunctionTruthTableView.ConfigureColumns(logicFunction.InputNames, logicFunction.OutputNames);
         }
     }
 
@@ -299,7 +292,7 @@ public partial class MainWindow : Window
     {
         if (DataContext is MainWindowViewModel { IsGateDiagramVisible: true })
         {
-            GateDiagramSurface.ZoomIn();
+            GateDiagramEditor.ZoomIn();
         }
     }
 
@@ -307,7 +300,7 @@ public partial class MainWindow : Window
     {
         if (DataContext is MainWindowViewModel { IsGateDiagramVisible: true })
         {
-            GateDiagramSurface.ZoomOut();
+            GateDiagramEditor.ZoomOut();
         }
     }
 
@@ -318,17 +311,14 @@ public partial class MainWindow : Window
             return;
         }
 
-        var contentBounds = GateDiagramSurface.ZoomAll(GateDiagramScrollViewer.Bounds.Size);
-        GateDiagramScrollViewer.Offset = new Vector(
-            Math.Max(0, contentBounds.Left * GateDiagramSurface.Zoom),
-            Math.Max(0, contentBounds.Top * GateDiagramSurface.Zoom));
+        GateDiagramEditor.ZoomAll();
     }
 
     private void GateAutoRedraw_OnClick(object? sender, RoutedEventArgs e)
     {
         if (DataContext is MainWindowViewModel { IsGateDiagramVisible: true } viewModel)
         {
-            var reroutedWireCount = GateDiagramSurface.AutoRedraw();
+            var reroutedWireCount = GateDiagramEditor.AutoRedraw();
             viewModel.StatusText = reroutedWireCount == 0
                 ? "Gate diagram redrawn"
                 : $"Gate diagram redrawn: {reroutedWireCount} wire routes reset";
@@ -350,7 +340,7 @@ public partial class MainWindow : Window
         }
 
         viewModel.StartNewTruthTable(dialog.ViewModel.InputNames, dialog.ViewModel.OutputNames);
-        ConfigureTruthTableColumns(TruthTableDataGrid, dialog.ViewModel.InputNames, dialog.ViewModel.OutputNames);
+        TruthTableEditor.ConfigureColumns(dialog.ViewModel.InputNames, dialog.ViewModel.OutputNames);
         UpdateTruthTableMainMenuState();
     }
 
@@ -363,7 +353,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        ConfigureTruthTableColumns(TruthTableDataGrid, logicFunction.InputNames, logicFunction.OutputNames);
+        TruthTableEditor.ConfigureColumns(logicFunction.InputNames, logicFunction.OutputNames);
         UpdateTruthTableMainMenuState();
     }
 
@@ -388,7 +378,7 @@ public partial class MainWindow : Window
         if (DataContext is MainWindowViewModel { IsFileNewEnabled: true } viewModel)
         {
             viewModel.StartNewLogicEquation();
-            EquationEditor.Focus();
+            LogicEquationEditor.FocusEditor();
             RefreshEquationEditorToolbarButtons();
         }
     }
@@ -398,7 +388,7 @@ public partial class MainWindow : Window
         if (DataContext is MainWindowViewModel viewModel &&
             viewModel.StartModifyLogicEquation())
         {
-            EquationEditor.Focus();
+            LogicEquationEditor.FocusEditor();
             RefreshEquationEditorToolbarButtons();
         }
     }
@@ -413,7 +403,7 @@ public partial class MainWindow : Window
         viewModel.ShowSumOfProductsEquation();
         if (viewModel.GetSelectedFunction() is { } logicFunction)
         {
-            ConfigureTruthTableColumns(FunctionTruthTableDataGrid, logicFunction.InputNames, logicFunction.OutputNames);
+            FunctionTruthTableView.ConfigureColumns(logicFunction.InputNames, logicFunction.OutputNames);
         }
     }
 
@@ -427,7 +417,7 @@ public partial class MainWindow : Window
         viewModel.ShowProductOfSumsEquation();
         if (viewModel.GetSelectedFunction() is { } logicFunction)
         {
-            ConfigureTruthTableColumns(FunctionTruthTableDataGrid, logicFunction.InputNames, logicFunction.OutputNames);
+            FunctionTruthTableView.ConfigureColumns(logicFunction.InputNames, logicFunction.OutputNames);
         }
     }
 
@@ -441,7 +431,7 @@ public partial class MainWindow : Window
         viewModel.FactorSelectedEquation();
         if (viewModel.GetSelectedFunction() is { } logicFunction)
         {
-            ConfigureTruthTableColumns(FunctionTruthTableDataGrid, logicFunction.InputNames, logicFunction.OutputNames);
+            FunctionTruthTableView.ConfigureColumns(logicFunction.InputNames, logicFunction.OutputNames);
         }
     }
 
@@ -460,8 +450,8 @@ public partial class MainWindow : Window
             return;
         }
 
-        ClearActiveGatePaletteButton();
-        GateDiagramSurface.CancelInteraction();
+        GateDiagramEditor.ClearActivePaletteButton();
+        GateDiagramEditor.CancelInteraction();
         viewModel.StartModifySelectedGateDiagram();
     }
 
@@ -648,7 +638,7 @@ public partial class MainWindow : Window
             var import = TruthTableImporter.Import(await reader.ReadToEndAsync());
 
             viewModel.StartImportedTruthTable(import.InputNames, import.OutputNames, import.OutputValues);
-            ConfigureTruthTableColumns(TruthTableDataGrid, import.InputNames, import.OutputNames);
+            TruthTableEditor.ConfigureColumns(import.InputNames, import.OutputNames);
             UpdateTruthTableMainMenuState();
         }
         catch (TruthTableImportException ex)
@@ -658,34 +648,6 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             await ShowMessageAsync($"The truth table file could not be opened.\n{ex.Message}");
-        }
-    }
-
-    private async void GatePaletteButton_OnClick(object? sender, RoutedEventArgs e)
-    {
-        if (sender is Button { Tag: GatePaletteItem item } &&
-            DataContext is MainWindowViewModel viewModel)
-        {
-            if (item.Kind == GatePaletteKind.Help)
-            {
-                await OpenUrlAsync(GateDiagramHelpUrl, "Gate diagram help could not be opened.");
-                return;
-            }
-
-            if (item.Kind == GatePaletteKind.Cancel)
-            {
-                CancelGateDiagramEditing();
-                return;
-            }
-
-            if (item.Kind == GatePaletteKind.Submit)
-            {
-                await SubmitGateDiagramEditingAsync();
-                return;
-            }
-
-            SetActiveGatePaletteButton((Button)sender);
-            viewModel.SelectGatePaletteItem(item);
         }
     }
 
@@ -716,7 +678,7 @@ public partial class MainWindow : Window
     {
         if (DataContext is MainWindowViewModel { IsGateDiagramVisible: true })
         {
-            GateDiagramSurface.DeleteSelected();
+            GateDiagramEditor.DeleteSelected();
         }
     }
 
@@ -738,8 +700,8 @@ public partial class MainWindow : Window
 
     private async Task SubmitGateDiagramEditingAsync()
     {
-        ClearActiveGatePaletteButton();
-        GateDiagramSurface.CancelInteraction();
+        GateDiagramEditor.ClearActivePaletteButton();
+        GateDiagramEditor.CancelInteraction();
 
         if (DataContext is not MainWindowViewModel viewModel)
         {
@@ -758,14 +720,14 @@ public partial class MainWindow : Window
 
         if (viewModel.GetSelectedFunction() is { } logicFunction)
         {
-            ConfigureTruthTableColumns(FunctionTruthTableDataGrid, logicFunction.InputNames, logicFunction.OutputNames);
+            FunctionTruthTableView.ConfigureColumns(logicFunction.InputNames, logicFunction.OutputNames);
         }
     }
 
     private void CancelGateDiagramEditing()
     {
-        ClearActiveGatePaletteButton();
-        GateDiagramSurface.CancelInteraction();
+        GateDiagramEditor.ClearActivePaletteButton();
+        GateDiagramEditor.CancelInteraction();
 
         if (DataContext is MainWindowViewModel viewModel)
         {
@@ -773,40 +735,22 @@ public partial class MainWindow : Window
         }
     }
 
-    private void GateDiagramSurface_OnPaletteSelectionCleared(object? sender, EventArgs e)
+    private async void GateDiagramEditor_OnSubmitRequested(object? sender, EventArgs e)
     {
-        ClearActiveGatePaletteButton();
-
-        if (DataContext is MainWindowViewModel viewModel)
-        {
-            viewModel.ClearGatePaletteSelection();
-        }
+        await SubmitGateDiagramEditingAsync();
     }
 
-    private void SetActiveGatePaletteButton(Button button)
+    private void GateDiagramEditor_OnCancelRequested(object? sender, EventArgs e)
     {
-        if (ReferenceEquals(_activeGatePaletteButton, button))
-        {
-            return;
-        }
-
-        ClearActiveGatePaletteButton();
-        button.Classes.Add(ActiveGatePaletteButtonClass);
-        _activeGatePaletteButton = button;
+        CancelGateDiagramEditing();
     }
 
-    private void ClearActiveGatePaletteButton()
+    private async void GateDiagramEditor_OnHelpRequested(object? sender, EventArgs e)
     {
-        if (_activeGatePaletteButton is null)
-        {
-            return;
-        }
-
-        _activeGatePaletteButton.Classes.Remove(ActiveGatePaletteButtonClass);
-        _activeGatePaletteButton = null;
+        await OpenUrlAsync(GateDiagramHelpUrl, "Gate diagram help could not be opened.");
     }
 
-    private async void GateDiagramSurface_OnVariableNameRequested(
+    private async void GateDiagramEditor_OnVariableNameRequested(
         object? sender,
         GateDiagramVariableNameRequestedEventArgs e)
     {
@@ -884,8 +828,8 @@ public partial class MainWindow : Window
         if (DataContext is MainWindowViewModel viewModel)
         {
             viewModel.CloseCurrentDocument();
-            TruthTableDataGrid.Columns.Clear();
-            FunctionTruthTableDataGrid.Columns.Clear();
+            TruthTableEditor.ClearColumns();
+            FunctionTruthTableView.ClearColumns();
         }
     }
 
@@ -1123,30 +1067,37 @@ public partial class MainWindow : Window
         Close();
     }
 
-    private void FunctionSummaryDataGrid_OnSelectionChanged(object? sender, SelectionChangedEventArgs e)
+    private void FunctionsGrid_OnSelectionChanged(object? sender, EventArgs e)
     {
         if (DataContext is not MainWindowViewModel viewModel)
         {
             return;
         }
 
-        var selectedSummaries = FunctionSummaryDataGrid.SelectedItems
-            .OfType<FunctionSummaryRow>()
-            .ToArray();
-        viewModel.SetSelectedFunctionSummaries(selectedSummaries);
-        if (FunctionSummaryDataGrid.SelectedItems.Count != 1 ||
+        viewModel.SetSelectedFunctionSummaries(FunctionsGrid.SelectedSummaries);
+        if (FunctionsGrid.SelectedItemCount != 1 ||
             viewModel.GetSelectedFunction() is not { } logicFunction)
         {
             return;
         }
 
-        ConfigureTruthTableColumns(FunctionTruthTableDataGrid, logicFunction.InputNames, logicFunction.OutputNames);
+        FunctionTruthTableView.ConfigureColumns(logicFunction.InputNames, logicFunction.OutputNames);
         viewModel.ShowFunction(logicFunction);
     }
 
-    private void TruthTableDataGrid_OnSelectionChanged(object? sender, SelectionChangedEventArgs e)
+    private void TruthTableEditor_OnSelectionChanged(object? sender, EventArgs e)
     {
         UpdateTruthTableMainMenuState();
+    }
+
+    private void TruthTableEditor_OnSubmitRequested(object? sender, EventArgs e)
+    {
+        SubmitTruthTableEditing();
+    }
+
+    private void TruthTableEditor_OnCancelRequested(object? sender, EventArgs e)
+    {
+        CancelTruthTableEditing();
     }
 
     private void UpdateTruthTableMainMenuState()
@@ -1154,7 +1105,7 @@ public partial class MainWindow : Window
         var isTruthTableVisible = DataContext is MainWindowViewModel { IsTruthTableVisible: true };
         var hasSelectedRows =
             isTruthTableVisible &&
-            TruthTableDataGrid.SelectedItems.OfType<TruthTableRow>().Any();
+            TruthTableEditor.HasSelectedRows;
 
         TruthTableSelectAllMainMenuItem.IsEnabled = isTruthTableVisible;
         TruthTableSetTrueMainMenuItem.IsEnabled = hasSelectedRows;
@@ -1163,154 +1114,80 @@ public partial class MainWindow : Window
         TruthTableInvertMainMenuItem.IsEnabled = hasSelectedRows;
     }
 
-    private void ConfigureTruthTableColumns(DataGrid dataGrid, string[] inputNames, string[] outputNames)
-    {
-        dataGrid.Columns.Clear();
-
-        var headers = new[] { "Term" }
-            .Concat(inputNames)
-            .Concat(["=>"])
-            .Concat(outputNames)
-            .ToArray();
-
-        var outputStartColumn = inputNames.Length + 2;
-        for (var columnIndex = 0; columnIndex < headers.Length; columnIndex++)
-        {
-            dataGrid.Columns.Add(new DataGridTextColumn
-            {
-                Header = headers[columnIndex],
-                Binding = new Binding($"Cells[{columnIndex}].Value"),
-                IsReadOnly = true,
-                Foreground = columnIndex >= outputStartColumn
-                    ? FindThemeBrush("LogicFriday.Brush.Primary")
-                    : FindThemeBrush("LogicFriday.Brush.OnSurface"),
-                Width = columnIndex == 0 ? new DataGridLength(60) : DataGridLength.Auto
-            });
-        }
-    }
-
-    private static IBrush FindThemeBrush(string resourceKey)
-    {
-        if (Application.Current?.TryFindResource(resourceKey, out var resource) == true &&
-            resource is IBrush brush)
-        {
-            return brush;
-        }
-
-        return Brushes.Black;
-    }
-
-    private async void EquationEditorContextMenu_OnOpening(object? sender, CancelEventArgs e)
-    {
-        var hasSelection = HasEquationEditorSelection();
-        EquationEditorUndoMenuItem.IsEnabled = EquationEditor.CanUndo;
-        EquationEditorRedoMenuItem.IsEnabled = EquationEditor.CanRedo;
-        EquationEditorCutMenuItem.IsEnabled = hasSelection;
-        EquationEditorCopyMenuItem.IsEnabled = hasSelection;
-        EquationEditorPasteMenuItem.IsEnabled = false;
-        EquationEditorDeleteMenuItem.IsEnabled = hasSelection;
-        EquationEditorSelectAllMenuItem.IsEnabled = !string.IsNullOrEmpty(EquationEditor.Text);
-
-        try
-        {
-            var clipboard = TopLevel.GetTopLevel(EquationEditor)?.Clipboard;
-            if (clipboard is not null)
-            {
-                EquationEditorPasteMenuItem.IsEnabled = !string.IsNullOrEmpty(await clipboard.TryGetTextAsync());
-            }
-        }
-        catch
-        {
-            EquationEditorPasteMenuItem.IsEnabled = false;
-        }
-    }
-
     private async void RefreshEquationEditorToolbarButtons()
     {
-        var isEditingEquation = EquationEditor.IsVisible;
-        var hasSelection = isEditingEquation && HasEquationEditorSelection();
+        var isEditingEquation = DataContext is MainWindowViewModel { IsEquationEditorVisible: true };
+        var hasSelection = isEditingEquation && LogicEquationEditor.HasSelection;
 
         EquationEditorCutToolbarButton.IsEnabled = hasSelection;
         EquationEditorCopyToolbarButton.IsEnabled = hasSelection;
-        EquationEditorUndoToolbarButton.IsEnabled = isEditingEquation && EquationEditor.CanUndo;
-        EquationEditorRedoToolbarButton.IsEnabled = isEditingEquation && EquationEditor.CanRedo;
+        EquationEditorUndoToolbarButton.IsEnabled = isEditingEquation && LogicEquationEditor.CanUndo;
+        EquationEditorRedoToolbarButton.IsEnabled = isEditingEquation && LogicEquationEditor.CanRedo;
         EquationEditorPasteToolbarButton.IsEnabled = false;
         EquationCutMainMenuItem.IsEnabled = hasSelection;
         EquationCopyMainMenuItem.IsEnabled = isEditingEquation && hasSelection;
-        EquationUndoMainMenuItem.IsEnabled = isEditingEquation && EquationEditor.CanUndo;
-        EquationRedoMainMenuItem.IsEnabled = isEditingEquation && EquationEditor.CanRedo;
+        EquationUndoMainMenuItem.IsEnabled = isEditingEquation && LogicEquationEditor.CanUndo;
+        EquationRedoMainMenuItem.IsEnabled = isEditingEquation && LogicEquationEditor.CanRedo;
         EquationPasteMainMenuItem.IsEnabled = false;
         EquationDeleteMainMenuItem.IsEnabled = isEditingEquation && hasSelection;
-        EquationSelectAllMainMenuItem.IsEnabled = isEditingEquation && !string.IsNullOrEmpty(EquationEditor.Text);
+        EquationSelectAllMainMenuItem.IsEnabled = isEditingEquation && LogicEquationEditor.HasText;
 
         if (!isEditingEquation)
         {
             return;
         }
 
-        try
-        {
-            var clipboard = TopLevel.GetTopLevel(EquationEditor)?.Clipboard;
-            if (clipboard is not null)
-            {
-                var canPaste = !string.IsNullOrEmpty(await clipboard.TryGetTextAsync());
-                EquationEditorPasteToolbarButton.IsEnabled = canPaste;
-                EquationPasteMainMenuItem.IsEnabled = canPaste;
-            }
-        }
-        catch
-        {
-            EquationEditorPasteToolbarButton.IsEnabled = false;
-            EquationPasteMainMenuItem.IsEnabled = false;
-        }
+        var canPaste = await LogicEquationEditor.CanPasteAsync();
+        EquationEditorPasteToolbarButton.IsEnabled = canPaste;
+        EquationPasteMainMenuItem.IsEnabled = canPaste;
     }
 
     private void EquationEditorUndo_OnClick(object? sender, RoutedEventArgs e)
     {
-        EquationEditor.Focus();
-        EquationEditor.Undo();
+        LogicEquationEditor.FocusEditor();
+        LogicEquationEditor.Undo();
         RefreshEquationEditorToolbarButtons();
     }
 
     private void EquationEditorRedo_OnClick(object? sender, RoutedEventArgs e)
     {
-        EquationEditor.Focus();
-        EquationEditor.Redo();
+        LogicEquationEditor.FocusEditor();
+        LogicEquationEditor.Redo();
         RefreshEquationEditorToolbarButtons();
     }
 
     private void EquationEditorCut_OnClick(object? sender, RoutedEventArgs e)
     {
-        EquationEditor.Focus();
-        EquationEditor.Cut();
+        LogicEquationEditor.FocusEditor();
+        LogicEquationEditor.Cut();
         RefreshEquationEditorToolbarButtons();
     }
 
     private void EquationEditorCopy_OnClick(object? sender, RoutedEventArgs e)
     {
-        EquationEditor.Focus();
-        EquationEditor.Copy();
+        LogicEquationEditor.FocusEditor();
+        LogicEquationEditor.Copy();
         RefreshEquationEditorToolbarButtons();
     }
 
     private void EquationEditorPaste_OnClick(object? sender, RoutedEventArgs e)
     {
-        EquationEditor.Focus();
-        EquationEditor.Paste();
+        LogicEquationEditor.FocusEditor();
+        LogicEquationEditor.Paste();
         RefreshEquationEditorToolbarButtons();
     }
 
     private void EquationEditorDelete_OnClick(object? sender, RoutedEventArgs e)
     {
-        EquationEditor.Focus();
-        EquationEditor.SelectedText = "";
+        LogicEquationEditor.FocusEditor();
+        LogicEquationEditor.DeleteSelection();
         RefreshEquationEditorToolbarButtons();
     }
 
     private void EquationEditorSelectAll_OnClick(object? sender, RoutedEventArgs e)
     {
-        EquationEditor.Focus();
-        EquationEditor.SelectAll();
+        LogicEquationEditor.FocusEditor();
+        LogicEquationEditor.SelectAllText();
         RefreshEquationEditorToolbarButtons();
     }
 
@@ -1326,12 +1203,17 @@ public partial class MainWindow : Window
             viewModel.SubmitLogicEquationEditing();
             if (viewModel.GetSelectedFunction() is { } logicFunction)
             {
-                ConfigureTruthTableColumns(FunctionTruthTableDataGrid, logicFunction.InputNames, logicFunction.OutputNames);
+                FunctionTruthTableView.ConfigureColumns(logicFunction.InputNames, logicFunction.OutputNames);
             }
         }
     }
 
     private void EquationEditorCancel_OnClick(object? sender, RoutedEventArgs e)
+    {
+        CancelLogicEquationEditing();
+    }
+
+    private void CancelLogicEquationEditing()
     {
         if (DataContext is MainWindowViewModel viewModel)
         {
@@ -1340,155 +1222,50 @@ public partial class MainWindow : Window
         }
     }
 
-    private bool HasEquationEditorSelection()
+    private void LogicEquationEditor_OnSubmitRequested(object? sender, EventArgs e)
     {
-        return EquationEditor.SelectionStart != EquationEditor.SelectionEnd;
-    }
-
-    private void EquationEditor_OnKeyDown(object? sender, KeyEventArgs e)
-    {
-        if (e.Key == Key.Escape)
-        {
-            if (DataContext is MainWindowViewModel viewModel)
-            {
-                viewModel.CancelLogicEquationEditing();
-                e.Handled = true;
-            }
-
-            return;
-        }
-
-        if (e.Key != Key.Enter)
-        {
-            return;
-        }
-
-        var keyModifiers = e.KeyModifiers;
-        if (keyModifiers.HasFlag(KeyModifiers.Control))
-        {
-            return;
-        }
-
-        if (keyModifiers.HasFlag(KeyModifiers.Shift) || keyModifiers.HasFlag(KeyModifiers.Alt))
-        {
-            e.Handled = true;
-            return;
-        }
-
         SubmitLogicEquationEditing();
-        e.Handled = true;
     }
 
-    private void EquationEditor_OnKeyUp(object? sender, KeyEventArgs e)
+    private void LogicEquationEditor_OnCancelRequested(object? sender, EventArgs e)
+    {
+        CancelLogicEquationEditing();
+    }
+
+    private void LogicEquationEditor_OnStateChanged(object? sender, EventArgs e)
     {
         RefreshEquationEditorToolbarButtons();
-    }
-
-    private void EquationEditor_OnPointerReleased(object? sender, PointerReleasedEventArgs e)
-    {
-        RefreshEquationEditorToolbarButtons();
-    }
-
-    private void EquationEditor_OnTextChanged(object? sender, TextChangedEventArgs e)
-    {
-        RefreshEquationEditorToolbarButtons();
-    }
-
-    private void EquationEditor_OnGotFocus(object? sender, RoutedEventArgs e)
-    {
-        RefreshEquationEditorToolbarButtons();
-    }
-
-    private void TruthTableDataGrid_OnCellPointerPressed(object? sender, DataGridCellPointerPressedEventArgs e)
-    {
-        if (e.PointerPressedEventArgs.GetCurrentPoint(TruthTableDataGrid).Properties.IsRightButtonPressed)
-        {
-            _truthTableContextRow = e.Row.DataContext as TruthTableRow;
-        }
-
-        if (e.PointerPressedEventArgs.ClickCount < 2 ||
-            e.Row.DataContext is not TruthTableRow row)
-        {
-            return;
-        }
-
-        var columnIndex = TruthTableDataGrid.Columns.IndexOf(e.Column);
-        if (columnIndex < 0 || columnIndex >= row.Cells.Count)
-        {
-            return;
-        }
-
-        row.Cells[columnIndex].CycleOutputValue();
-    }
-
-    private void TruthTableDataGrid_OnPointerPressed(object? sender, PointerPressedEventArgs e)
-    {
-        if (e.GetCurrentPoint(TruthTableDataGrid).Properties.IsRightButtonPressed)
-        {
-            _truthTableContextRow = null;
-        }
-    }
-
-    private void TruthTableContextMenu_OnOpening(object? sender, CancelEventArgs e)
-    {
-        var hasDataRow = _truthTableContextRow is not null;
-        TruthTableSetTrueMenuItem.IsEnabled = hasDataRow;
-        TruthTableSetFalseMenuItem.IsEnabled = hasDataRow;
-        TruthTableSetDontCareMenuItem.IsEnabled = hasDataRow;
-        TruthTableInvertMenuItem.IsEnabled = hasDataRow;
-    }
-
-    private void TruthTableContextMenu_OnClosing(object? sender, CancelEventArgs e)
-    {
-        _truthTableContextRow = null;
     }
 
     private void TruthTableSelectAll_OnClick(object? sender, RoutedEventArgs e)
     {
-        if (DataContext is not MainWindowViewModel { IsTruthTableVisible: true } viewModel)
+        if (DataContext is not MainWindowViewModel { IsTruthTableVisible: true })
         {
             return;
         }
 
-        TruthTableDataGrid.Focus();
-        TruthTableDataGrid.SelectedItems.Clear();
-        foreach (var row in viewModel.TruthTableRows.Where(static row => row.Cells.Any(static cell => cell.IsOutput)))
-        {
-            TruthTableDataGrid.SelectedItems.Add(row);
-        }
-
+        TruthTableEditor.SelectAllEditableRows();
         UpdateTruthTableMainMenuState();
     }
 
     private void TruthTableSetTrue_OnClick(object? sender, RoutedEventArgs e)
     {
-        SetContextRowOutputValues("1");
+        TruthTableEditor.SetContextRowsOutputValues("1");
     }
 
     private void TruthTableSetFalse_OnClick(object? sender, RoutedEventArgs e)
     {
-        SetContextRowOutputValues("0");
+        TruthTableEditor.SetContextRowsOutputValues("0");
     }
 
     private void TruthTableSetDontCare_OnClick(object? sender, RoutedEventArgs e)
     {
-        SetContextRowOutputValues("X");
+        TruthTableEditor.SetContextRowsOutputValues("X");
     }
 
     private void TruthTableInvert_OnClick(object? sender, RoutedEventArgs e)
     {
-        foreach (var row in GetTruthTableContextRows())
-        {
-            foreach (var cell in row.Cells.Where(static cell => cell.IsOutput))
-            {
-                cell.Value = cell.Value switch
-                {
-                    "0" => "1",
-                    "1" => "0",
-                    _ => cell.Value
-                };
-            }
-        }
+        TruthTableEditor.InvertContextRows();
     }
 
     private void TruthTableSubmit_OnClick(object? sender, RoutedEventArgs e)
@@ -1501,24 +1278,6 @@ public partial class MainWindow : Window
         CancelTruthTableEditing();
     }
 
-    private void TruthTableDataGrid_OnKeyDown(object? sender, KeyEventArgs e)
-    {
-        if (e.Key == Key.Enter)
-        {
-            SubmitTruthTableEditing();
-            e.Handled = true;
-            return;
-        }
-
-        if (e.Key != Key.Escape)
-        {
-            return;
-        }
-
-        CancelTruthTableEditing();
-        e.Handled = true;
-    }
-
     private void SubmitTruthTableEditing()
     {
         if (DataContext is MainWindowViewModel viewModel)
@@ -1526,10 +1285,10 @@ public partial class MainWindow : Window
             viewModel.SubmitTruthTableEditing();
             if (viewModel.GetSelectedFunction() is { } logicFunction)
             {
-                ConfigureTruthTableColumns(FunctionTruthTableDataGrid, logicFunction.InputNames, logicFunction.OutputNames);
+                FunctionTruthTableView.ConfigureColumns(logicFunction.InputNames, logicFunction.OutputNames);
             }
 
-            TruthTableDataGrid.Columns.Clear();
+            TruthTableEditor.ClearColumns();
             UpdateTruthTableMainMenuState();
         }
     }
@@ -1539,36 +1298,9 @@ public partial class MainWindow : Window
         if (DataContext is MainWindowViewModel viewModel)
         {
             viewModel.CancelTruthTableEditing();
-            TruthTableDataGrid.Columns.Clear();
+            TruthTableEditor.ClearColumns();
             UpdateTruthTableMainMenuState();
         }
-    }
-
-    private void SetContextRowOutputValues(string value)
-    {
-        foreach (var row in GetTruthTableContextRows())
-        {
-            foreach (var cell in row.Cells.Where(static cell => cell.IsOutput))
-            {
-                cell.Value = value;
-            }
-        }
-    }
-
-    private IReadOnlyList<TruthTableRow> GetTruthTableContextRows()
-    {
-        var selectedRows = TruthTableDataGrid.SelectedItems
-            .OfType<TruthTableRow>()
-            .ToArray();
-
-        if (selectedRows.Length > 0)
-        {
-            return selectedRows;
-        }
-
-        return _truthTableContextRow is null
-            ? []
-            : [_truthTableContextRow];
     }
 
     private async Task ShowMessageAsync(string message)

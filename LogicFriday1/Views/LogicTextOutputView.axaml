@@ -1,0 +1,14 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:LogicFriday1.ViewModels"
+             x:Class="LogicFriday1.Views.LogicTextOutputView"
+             x:DataType="vm:MainWindowViewModel">
+    <TextBox Text="{Binding LogicEquationText}"
+             IsReadOnly="True"
+             AcceptsReturn="True"
+             FontFamily="Courier New"
+             TextWrapping="NoWrap"
+             Background="{DynamicResource LogicFriday.Brush.SurfaceContainerLowest}"
+             Foreground="{DynamicResource LogicFriday.Brush.OnSurface}"
+             BorderBrush="{DynamicResource LogicFriday.Brush.OutlineVariant}" />
+</UserControl>

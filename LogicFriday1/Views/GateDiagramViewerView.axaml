@@ -1,0 +1,14 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:LogicFriday1.Controls"
+             xmlns:vm="using:LogicFriday1.ViewModels"
+             x:Class="LogicFriday1.Views.GateDiagramViewerView"
+             x:DataType="vm:MainWindowViewModel">
+    <ScrollViewer IsVisible="{Binding IsMappedGateDiagramDetailVisible}"
+                  VerticalScrollBarVisibility="Auto"
+                  HorizontalScrollBarVisibility="Auto">
+        <controls:GateDiagramSurface SelectedPaletteItem="{Binding SelectedGatePaletteItem}"
+                                     Items="{Binding GateDiagramItems}"
+                                     Wires="{Binding GateDiagramWires}" />
+    </ScrollViewer>
+</UserControl>
