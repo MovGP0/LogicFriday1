@@ -195,10 +195,30 @@ public static class LogicFunctionGateMapper
             [.. source.InputNames],
             [.. source.OutputNames],
             source.OutputValues.Select(static row => row.ToArray()).ToArray(),
-            "Mapped to gates:" + Environment.NewLine + source.EquationText,
+            BuildMappedEquationText(source),
             items,
             wires,
             source.MinimizedFunction);
+    }
+
+    private static string BuildMappedEquationText(LogicFunction source)
+    {
+        var sections = new List<string>();
+        AddSection(sections, source.EquationText);
+        if (source.MinimizedFunction is { } minimizedFunction)
+        {
+            AddSection(sections, minimizedFunction.EquationText);
+        }
+
+        return string.Join(Environment.NewLine + Environment.NewLine, sections);
+    }
+
+    private static void AddSection(ICollection<string> sections, string text)
+    {
+        if (!string.IsNullOrWhiteSpace(text))
+        {
+            sections.Add(text.TrimEnd());
+        }
     }
 
     private static Dictionary<string, int> BuildSignalLevels(LogicFunction source, SisMappedNetwork mapped)

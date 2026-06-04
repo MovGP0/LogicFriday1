@@ -166,6 +166,26 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public void MapSelectedFunctionToGates_MinimizedFullAdder_AppendsMinimizedOutputText()
+    {
+        var viewModel = CreateMinimizedFullAdderTruthTableFunction();
+
+        var wasMapped = viewModel.MapSelectedFunctionToGates(new MapToGatesDialogViewModel(), out var errorMessage);
+        var text = NormalizeLineEndings(viewModel.LogicEquationText);
+
+        viewModel.ShouldSatisfyAllConditions(
+            _ => wasMapped.ShouldBeTrue(),
+            _ => errorMessage.ShouldBeNull(),
+            _ => text.ShouldContain(NormalizeLineEndings(ExpectedFullAdderEnteredEquationText).Trim()),
+            _ => text.ShouldContain("Minimized:"),
+            _ => text.ShouldContain("C = "),
+            _ => text.ShouldContain("S = "),
+            _ => text.ShouldNotContain("Mapped to gates:"),
+            _ => text.IndexOf("Entered by truthtable:", StringComparison.Ordinal)
+                .ShouldBeLessThan(text.IndexOf("Minimized:", StringComparison.Ordinal)));
+    }
+
+    [Fact]
     public void EquationCommandEnablement_IsDisabledWithoutSelection()
     {
         var viewModel = new MainWindowViewModel();
