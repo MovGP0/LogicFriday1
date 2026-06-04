@@ -100,6 +100,39 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public void FactorSelectedEquation_MinimizedFullAdder_GeneratesExpectedFactoredText()
+    {
+        var viewModel = CreateMinimizedFullAdderTruthTableFunction();
+
+        viewModel.FactorSelectedEquation();
+
+        NormalizeLineEndings(viewModel.LogicEquationText)
+            .ShouldBe(NormalizeLineEndings(ExpectedFullAdderFactoredEquationText));
+    }
+
+    [Fact]
+    public void ShowSumOfProductsEquation_MinimizedFullAdder_GeneratesExpectedSumOfProductsText()
+    {
+        var viewModel = CreateMinimizedFullAdderTruthTableFunction();
+
+        viewModel.ShowSumOfProductsEquation();
+
+        NormalizeLineEndings(viewModel.LogicEquationText)
+            .ShouldBe(NormalizeLineEndings(ExpectedFullAdderMinimizedSumOfProductsEquationText));
+    }
+
+    [Fact]
+    public void ShowProductOfSumsEquation_MinimizedFullAdder_GeneratesExpectedProductOfSumsText()
+    {
+        var viewModel = CreateMinimizedFullAdderTruthTableFunction();
+
+        viewModel.ShowProductOfSumsEquation();
+
+        NormalizeLineEndings(viewModel.LogicEquationText)
+            .ShouldBe(NormalizeLineEndings(ExpectedFullAdderMinimizedProductOfSumsEquationText));
+    }
+
+    [Fact]
     public void EquationCommandEnablement_IsDisabledWithoutSelection()
     {
         var viewModel = new MainWindowViewModel();
@@ -596,6 +629,15 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public void SubmitTruthTableEditing_FullAdderTruthTable_GeneratesExpectedEquationText()
+    {
+        var viewModel = CreateFullAdderTruthTableFunction();
+
+        NormalizeLineEndings(viewModel.GetSelectedFunction()!.EquationText)
+            .ShouldBe(NormalizeLineEndings(ExpectedFullAdderEnteredEquationText));
+    }
+
+    [Fact]
     public void TruthTableShowMode_DefaultsToTrueAndDontCareRows()
     {
         var viewModel = CreateTruthTableShowModeViewModel();
@@ -1048,6 +1090,66 @@ public sealed class MainWindowViewModelTests
         viewModel.SubmitTruthTableEditing();
 
         return viewModel;
+    }
+
+    private const string ExpectedFullAdderEnteredEquationText = """
+        Entered by truthtable:
+        C = CIn' A B + CIn A' B + CIn A B' + CIn A B;
+        S = CIn' A' B + CIn' A B' + CIn A' B' + CIn A B;
+        """;
+
+    private const string ExpectedFullAdderFactoredEquationText = """
+        Factored:
+        C = B (A + CIn) + CIn A;
+        S = B (CIn' A' + CIn A) + B' (CIn A' + CIn' A);
+        """;
+
+    private const string ExpectedFullAdderMinimizedSumOfProductsEquationText = """
+        Minimized:
+        C = A B + CIn B + CIn A ;
+        S = CIn A' B' + CIn' A B' + CIn' A' B + CIn A B;
+        """;
+
+    private const string ExpectedFullAdderMinimizedProductOfSumsEquationText = """
+        Minimized Product of Sums:
+        C = (CIn+A)(CIn+B)(A+B);
+        S = (CIn+A+B)(CIn+A'+B')(CIn'+A+B')(CIn'+A'+B);
+        """;
+
+    private static MainWindowViewModel CreateFullAdderTruthTableFunction()
+    {
+        var viewModel = new MainWindowViewModel();
+        viewModel.StartImportedTruthTable(
+            ["CIn", "A", "B"],
+            ["C", "S"],
+            [
+                ["0", "0"],
+                ["0", "1"],
+                ["0", "1"],
+                ["1", "0"],
+                ["0", "1"],
+                ["1", "0"],
+                ["1", "0"],
+                ["1", "1"]
+            ]);
+        viewModel.SubmitTruthTableEditing();
+
+        return viewModel;
+    }
+
+    private static MainWindowViewModel CreateMinimizedFullAdderTruthTableFunction()
+    {
+        var viewModel = CreateFullAdderTruthTableFunction();
+        viewModel.MinimizeSelectedFunction(new MinimizeOptions(
+            UseExactMode: false,
+            MinimizeOutputsIndependently: false));
+
+        return viewModel;
+    }
+
+    private static string NormalizeLineEndings(string value)
+    {
+        return value.ReplaceLineEndings("\n");
     }
 
     private static GateDiagramFunction CreateGateDiagramFunction()
