@@ -22,41 +22,71 @@ public sealed class GateDiagramSurface : Control
         AvaloniaProperty.Register<GateDiagramSurface, double>(nameof(Zoom), 1d);
 
     private const double ConnectionHitRadius = 6;
+
     private const double WireGeometryTolerance = 0.001;
+
     private const double MinimumZoom = 0.25;
+
     private const double MaximumZoom = 4;
+
     private const double ZoomStep = 1.2;
+
     private const double LogicalCanvasWidth = 2400;
+
     private const double LogicalCanvasHeight = 1600;
+
     private const double RoutingGridStep = 20;
+
     private const double RoutingPadding = 120;
+
     private const double RoutingEscapeDistance = 20;
+
     private const double RoutingObstacleInflation = 10;
+
     private const double RoutingBendPenalty = 25;
+
     private const double RoutingReusePenalty = 1800;
+
     private const double RoutingCrossingPenalty = 90;
+
     private const int WireHuePrimeStep = 137;
 
     private GateDiagramConnectionPoint? _pendingWireStart;
+
     private Point? _pendingWirePreviewEnd;
+
     private Point? _invalidWirePoint;
+
     private readonly HashSet<int> _selectedItemIds = [];
+
     private readonly HashSet<int> _selectedWireIndices = [];
+
     private int? _selectedWireSegmentIndex;
+
     private bool _isDraggingSelection;
+
     private bool _isDraggingSelectionRectangle;
+
     private Point _lastSelectionDragPoint;
+
     private Point _selectionRectangleStart;
+
     private Point _selectionRectangleEnd;
+
     private DispatcherTimer? _invalidWireTimer;
+
     private int _nextItemId = 1;
 
     private enum Direction
     {
         None,
+
         Left,
+
         Right,
+
         Up,
+
         Down
     }
 
@@ -89,8 +119,11 @@ public sealed class GateDiagramSurface : Control
     private sealed class RoutingGrid
     {
         private readonly double[] _xCoordinates;
+
         private readonly double[] _yCoordinates;
+
         private readonly Dictionary<double, int> _xIndexes;
+
         private readonly Dictionary<double, int> _yIndexes;
 
         public RoutingGrid(double[] xCoordinates, double[] yCoordinates)
@@ -187,10 +220,7 @@ public sealed class GateDiagramSurface : Control
         InvalidateVisual();
     }
 
-    public void DeleteSelected()
-    {
-        DeleteSelection();
-    }
+    public void DeleteSelected() => DeleteSelection();
 
     public int AutoRedraw()
     {
@@ -261,15 +291,9 @@ public sealed class GateDiagramSurface : Control
         return reroutedWireCount;
     }
 
-    public void ZoomIn()
-    {
-        Zoom *= ZoomStep;
-    }
+    public void ZoomIn() => Zoom *= ZoomStep;
 
-    public void ZoomOut()
-    {
-        Zoom /= ZoomStep;
-    }
+    public void ZoomOut() => Zoom /= ZoomStep;
 
     public Rect ZoomAll(Size viewportSize)
     {
@@ -655,25 +679,13 @@ public sealed class GateDiagramSurface : Control
         return end.X > start.X ? Direction.Right : Direction.Left;
     }
 
-    private static double GetManhattanDistance(GateDiagramConnectionPoint start, GateDiagramConnectionPoint end)
-    {
-        return Math.Abs(start.X - end.X) + Math.Abs(start.Y - end.Y);
-    }
+    private static double GetManhattanDistance(GateDiagramConnectionPoint start, GateDiagramConnectionPoint end) => Math.Abs(start.X - end.X) + Math.Abs(start.Y - end.Y);
 
-    private static double GetManhattanDistance(RoutingNode start, RoutingNode end)
-    {
-        return Math.Abs(start.X - end.X) + Math.Abs(start.Y - end.Y);
-    }
+    private static double GetManhattanDistance(RoutingNode start, RoutingNode end) => Math.Abs(start.X - end.X) + Math.Abs(start.Y - end.Y);
 
-    private static double SnapDown(double value)
-    {
-        return Math.Floor(value / RoutingGridStep) * RoutingGridStep;
-    }
+    private static double SnapDown(double value) => Math.Floor(value / RoutingGridStep) * RoutingGridStep;
 
-    private static double SnapUp(double value)
-    {
-        return Math.Ceiling(value / RoutingGridStep) * RoutingGridStep;
-    }
+    private static double SnapUp(double value) => Math.Ceiling(value / RoutingGridStep) * RoutingGridStep;
 
     private static bool AreSameRoute(IReadOnlyList<Point> left, IReadOnlyList<Point> right)
     {
@@ -972,10 +984,7 @@ public sealed class GateDiagramSurface : Control
             ToByte(blue + match));
     }
 
-    private static byte ToByte(double component)
-    {
-        return (byte)Math.Round(Math.Clamp(component, 0, 1) * 255);
-    }
+    private static byte ToByte(double component) => (byte)Math.Round(Math.Clamp(component, 0, 1) * 255);
 
     private static void DrawSelectedWireSegment(
         DrawingContext context,
@@ -1210,15 +1219,9 @@ public sealed class GateDiagramSurface : Control
         _isDraggingSelectionRectangle = false;
     }
 
-    private Point GetLogicalPosition(PointerEventArgs e)
-    {
-        return ToLogical(e.GetPosition(this));
-    }
+    private Point GetLogicalPosition(PointerEventArgs e) => ToLogical(e.GetPosition(this));
 
-    private Point ToLogical(Point point)
-    {
-        return new Point(point.X / Zoom, point.Y / Zoom);
-    }
+    private Point ToLogical(Point point) => new(point.X / Zoom, point.Y / Zoom);
 
     private static double ClampZoom(double zoom)
     {
@@ -1315,10 +1318,7 @@ public sealed class GateDiagramSurface : Control
         return Math.Round(value / spacing) * spacing;
     }
 
-    private static Point Snap(Point point)
-    {
-        return new Point(Snap(point.X), Snap(point.Y));
-    }
+    private static Point Snap(Point point) => new(Snap(point.X), Snap(point.Y));
 
     private bool TryHitItem(Point position, out GateDiagramItem item)
     {
@@ -1420,10 +1420,7 @@ public sealed class GateDiagramSurface : Control
         return double.PositiveInfinity;
     }
 
-    private Rect GetSelectionRectangle()
-    {
-        return new Rect(_selectionRectangleStart, _selectionRectangleEnd).Normalize();
-    }
+    private Rect GetSelectionRectangle() => new Rect(_selectionRectangleStart, _selectionRectangleEnd).Normalize();
 
     private Rect GetContentBounds()
     {
@@ -1859,10 +1856,8 @@ public sealed class GateDiagramSurface : Control
 
     private static bool IsSameConnection(
         GateDiagramConnectionPoint left,
-        GateDiagramConnectionPoint right)
-    {
-        return IsSameConnection(left.Reference, right.Reference);
-    }
+        GateDiagramConnectionPoint right) =>
+        IsSameConnection(left.Reference, right.Reference);
 
     private static bool IsSameConnection(
         GateDiagramConnectionReference left,
@@ -2030,24 +2025,5 @@ public sealed class GateDiagramSurface : Control
         }
 
         return fallback;
-    }
-
-}
-
-public sealed class GateDiagramVariableNameRequestedEventArgs(
-    GatePaletteItem item,
-    double x,
-    double y,
-    Action<string> addItem) : EventArgs
-{
-    public GatePaletteItem Item { get; } = item;
-
-    public double X { get; } = x;
-
-    public double Y { get; } = y;
-
-    public void AddItem(string variableName)
-    {
-        addItem(variableName);
     }
 }
