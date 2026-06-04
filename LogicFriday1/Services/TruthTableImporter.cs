@@ -5,9 +5,13 @@ namespace LogicFriday1.Services;
 public static class TruthTableImporter
 {
     private const int MinimumInputCount = 2;
+
     private const int MaximumInputCount = 16;
+
     private const int MinimumOutputCount = 1;
+
     private const int MaximumOutputCount = 16;
+
     private const int MaximumVariableNameLength = 8;
 
     public static TruthTableImportResult Import(string text)
@@ -272,10 +276,8 @@ public static class TruthTableImporter
             .ToArray();
     }
 
-    private static bool IsTruthValue(char value)
-    {
-        return value is '0' or '1' or 'X' or 'x';
-    }
+    private static bool IsTruthValue(char value) =>
+        value is '0' or '1' or 'X' or 'x';
 
     private sealed record TruthTableHeader(string[] InputNames, string[] OutputNames, bool HasTermColumn);
 

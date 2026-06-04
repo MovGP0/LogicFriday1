@@ -13,6 +13,8 @@ public partial class MainWindowViewModel : ObservableObject
 
     private FunctionSummaryRow? _truthTableEditTarget;
 
+    private FunctionSummaryRow? _logicEquationEditTarget;
+
     private readonly Dictionary<LogicFunction, bool> _showAllTruthTableRowsByFunction = [];
 
     [ObservableProperty]
@@ -28,6 +30,10 @@ public partial class MainWindowViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(IsOperationMapToGatesEnabled))]
     [NotifyPropertyChangedFor(nameof(IsOperationGenerateLookupFunctionEnabled))]
     [NotifyPropertyChangedFor(nameof(IsTruthTableModifyEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsEquationModifyEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsEquationFormatEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsEquationSubmitEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsEquationCancelEnabled))]
     private bool _isEquationEditorVisible;
 
     [ObservableProperty]
@@ -37,6 +43,8 @@ public partial class MainWindowViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(IsOperationMapToGatesEnabled))]
     [NotifyPropertyChangedFor(nameof(IsOperationGenerateLookupFunctionEnabled))]
     [NotifyPropertyChangedFor(nameof(IsTruthTableModifyEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsEquationModifyEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsEquationFormatEnabled))]
     private bool _isTruthTableVisible;
 
     [ObservableProperty]
@@ -46,6 +54,8 @@ public partial class MainWindowViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(IsOperationMapToGatesEnabled))]
     [NotifyPropertyChangedFor(nameof(IsOperationGenerateLookupFunctionEnabled))]
     [NotifyPropertyChangedFor(nameof(IsTruthTableModifyEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsEquationModifyEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsEquationFormatEnabled))]
     private bool _isGateDiagramVisible;
 
     [ObservableProperty]
@@ -60,6 +70,8 @@ public partial class MainWindowViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(IsOperationGenerateLookupFunctionEnabled))]
     [NotifyPropertyChangedFor(nameof(IsTruthTableModifyEnabled))]
     [NotifyPropertyChangedFor(nameof(IsTruthTableShowModeEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsEquationModifyEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsEquationFormatEnabled))]
     [NotifyPropertyChangedFor(nameof(IsShowAllTruthTableRowsSelected))]
     [NotifyPropertyChangedFor(nameof(IsShowTrueAndDontCareTruthTableRowsSelected))]
     private FunctionSummaryRow? _selectedFunctionSummary;
@@ -69,6 +81,8 @@ public partial class MainWindowViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(IsOperationMapToGatesEnabled))]
     [NotifyPropertyChangedFor(nameof(IsOperationGenerateLookupFunctionEnabled))]
     [NotifyPropertyChangedFor(nameof(IsTruthTableModifyEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsEquationModifyEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsEquationFormatEnabled))]
     private int _selectedFunctionCount;
 
     [ObservableProperty]
@@ -184,6 +198,28 @@ public partial class MainWindowViewModel : ObservableObject
         get => IsFunctionViewModeEnabled &&
             SelectedFunctionCount == 1 &&
             SelectedFunctionSummary?.LogicFunction is TruthTableLogicFunction;
+    }
+
+    public bool IsEquationModifyEnabled
+    {
+        get => IsFunctionViewModeEnabled &&
+            SelectedFunctionCount == 1 &&
+            SelectedFunctionSummary?.LogicFunction is not null;
+    }
+
+    public bool IsEquationFormatEnabled
+    {
+        get => IsEquationModifyEnabled;
+    }
+
+    public bool IsEquationSubmitEnabled
+    {
+        get => IsEquationEditorVisible;
+    }
+
+    public bool IsEquationCancelEnabled
+    {
+        get => IsEquationEditorVisible;
     }
 
     public bool IsTruthTableShowModeEnabled
@@ -334,11 +370,113 @@ public partial class MainWindowViewModel : ObservableObject
     {
         LogicEquationText = "";
         _truthTableEditTarget = null;
+        _logicEquationEditTarget = null;
         IsEquationEditorVisible = true;
         IsTruthTableVisible = false;
         IsGateDiagramVisible = false;
         IsFunctionDetailVisible = false;
         StatusText = "Entering new logic equation";
+    }
+
+    public bool StartModifyLogicEquation()
+    {
+        if (!IsEquationModifyEnabled ||
+            SelectedFunctionSummary is not { LogicFunction: { } logicFunction } summary)
+        {
+            StatusText = "No function is selected";
+            return false;
+        }
+
+        LogicEquationText = logicFunction.EquationText;
+        _truthTableEditTarget = null;
+        _logicEquationEditTarget = summary;
+        IsEquationEditorVisible = true;
+        IsTruthTableVisible = false;
+        IsGateDiagramVisible = false;
+        IsFunctionDetailVisible = false;
+        StatusText = "Modifying logic equation";
+        return true;
+    }
+
+    public void ShowSumOfProductsEquation()
+    {
+        UpdateSelectedFunctionEquation(
+            static viewModel => viewModel.GenerateSelectedSumOfProductsEquation(),
+            "Setting sum of products equation");
+    }
+
+    public void ShowProductOfSumsEquation()
+    {
+        UpdateSelectedFunctionEquation(
+            static viewModel => viewModel.GenerateSelectedProductOfSumsEquation(),
+            "Setting product of sums equation");
+    }
+
+    public void FactorSelectedEquation()
+    {
+        UpdateSelectedFunctionEquation(
+            static viewModel => string.Join(
+                Environment.NewLine,
+                "Factored:",
+                viewModel.GenerateSelectedSumOfProductsEquation()),
+            "Factored equation");
+    }
+
+    private void UpdateSelectedFunctionEquation(
+        Func<MainWindowViewModel, string> equationFactory,
+        string statusText)
+    {
+        if (!IsEquationFormatEnabled ||
+            SelectedFunctionSummary is not { LogicFunction: { } logicFunction } summary)
+        {
+            StatusText = "No function is selected";
+            return;
+        }
+
+        var updatedFunction = WithEquationText(logicFunction, equationFactory(this));
+        var updatedSummary = CreateFunctionSummary(updatedFunction);
+        var summaryIndex = FunctionSummaries.IndexOf(summary);
+        if (summaryIndex >= 0)
+        {
+            FunctionSummaries[summaryIndex] = updatedSummary;
+        }
+        else
+        {
+            FunctionSummaries.Add(updatedSummary);
+        }
+
+        SelectedFunctionSummary = updatedSummary;
+        SelectedFunctionCount = 1;
+        ShowFunction(updatedFunction);
+        StatusText = statusText;
+    }
+
+    private string GenerateSelectedSumOfProductsEquation()
+    {
+        if (SelectedFunctionSummary?.LogicFunction is not { } logicFunction)
+        {
+            return "";
+        }
+
+        return GenerateSumOfProductsEquation(
+            logicFunction.InputNames,
+            logicFunction.OutputNames,
+            logicFunction.OutputValues,
+            "Sum of Products:");
+    }
+
+    private string GenerateSelectedProductOfSumsEquation()
+    {
+        if (SelectedFunctionSummary?.LogicFunction is not { } logicFunction)
+        {
+            return "";
+        }
+
+        return GenerateProductOfSumsEquation(
+            logicFunction.InputNames,
+            logicFunction.OutputNames,
+            logicFunction.OutputValues,
+            "Product of Sums:");
     }
 
     public void StartNewTruthTable(string[] inputNames, string[] outputNames)
@@ -383,6 +521,7 @@ public partial class MainWindowViewModel : ObservableObject
     {
         TruthTableRows.Clear();
         _truthTableEditTarget = editTarget;
+        _logicEquationEditTarget = null;
         _truthTableInputNames = [.. inputNames];
         _truthTableOutputNames = [.. outputNames];
 
@@ -423,6 +562,7 @@ public partial class MainWindowViewModel : ObservableObject
         GateDiagramItems.Clear();
         GateDiagramWires.Clear();
         _truthTableEditTarget = null;
+        _logicEquationEditTarget = null;
         IsEquationEditorVisible = false;
         IsTruthTableVisible = false;
         IsGateDiagramVisible = true;
@@ -448,9 +588,19 @@ public partial class MainWindowViewModel : ObservableObject
                 parsedEquation.OutputValues,
                 parsedEquation.EquationText);
 
-            AddFunction(logicFunction);
+            var editTarget = _logicEquationEditTarget;
+            if (editTarget is not null)
+            {
+                ReplaceFunction(editTarget, logicFunction);
+            }
+            else
+            {
+                AddFunction(logicFunction);
+            }
+
+            _logicEquationEditTarget = null;
             ShowFunction(logicFunction);
-            StatusText = "Logic equation submitted";
+            StatusText = editTarget is null ? "Logic equation submitted" : "Logic equation modified";
         }
         catch (LogicEquationParseException ex)
         {
@@ -460,8 +610,16 @@ public partial class MainWindowViewModel : ObservableObject
 
     public void CancelLogicEquationEditing()
     {
+        var selectedFunction = SelectedFunctionSummary?.LogicFunction;
         LogicEquationText = "";
+        _logicEquationEditTarget = null;
         IsEquationEditorVisible = false;
+
+        if (selectedFunction is not null)
+        {
+            ShowFunction(selectedFunction);
+        }
+
         StatusText = "Ready";
     }
 
@@ -576,6 +734,7 @@ public partial class MainWindowViewModel : ObservableObject
         _truthTableInputNames = [];
         _truthTableOutputNames = [];
         _truthTableEditTarget = null;
+        _logicEquationEditTarget = null;
         SelectedGatePaletteItem = null;
         SelectedFunctionSummary = null;
         SelectedFunctionCount = 0;
@@ -714,11 +873,7 @@ public partial class MainWindowViewModel : ObservableObject
         for (var outputIndex = 0; outputIndex < outputNames.Length; outputIndex++)
         {
             var trueTerms = outputValues
-                .Select((outputs, term) => new
-                {
-                    outputs,
-                    term
-                })
+                .Select((outputs, term) => (outputs, term))
                 .Where(row => row.outputs[outputIndex] == "1")
                 .ToArray();
 
@@ -740,6 +895,42 @@ public partial class MainWindowViewModel : ObservableObject
         return string.Join(Environment.NewLine, equations);
     }
 
+    private static string GenerateProductOfSumsEquation(
+        string[] inputNames,
+        string[] outputNames,
+        IReadOnlyList<string[]> outputValues,
+        string label)
+    {
+        var equations = new List<string>
+        {
+            label
+        };
+
+        for (var outputIndex = 0; outputIndex < outputNames.Length; outputIndex++)
+        {
+            var falseTerms = outputValues
+                .Select((outputs, term) => (outputs, term))
+                .Where(row => row.outputs[outputIndex] == "0")
+                .ToArray();
+
+            if (falseTerms.Length == outputValues.Count)
+            {
+                equations.Add($"{outputNames[outputIndex]} = 0;");
+            }
+            else if (falseTerms.Length == 0)
+            {
+                equations.Add($"{outputNames[outputIndex]} = 1;");
+            }
+            else
+            {
+                var terms = falseTerms.Select(row => BuildSumTerm(row.term, inputNames));
+                equations.Add($"{outputNames[outputIndex]} = {string.Join(" ", terms)};");
+            }
+        }
+
+        return string.Join(Environment.NewLine, equations);
+    }
+
     private static string BuildProductTerm(int term, string[] inputNames)
     {
         var literals = new List<string>();
@@ -753,6 +944,21 @@ public partial class MainWindowViewModel : ObservableObject
         }
 
         return string.Join(" ", literals);
+    }
+
+    private static string BuildSumTerm(int term, string[] inputNames)
+    {
+        var literals = new List<string>();
+        for (var inputIndex = 0; inputIndex < inputNames.Length; inputIndex++)
+        {
+            var bitOffset = inputNames.Length - inputIndex - 1;
+            var inputValue = (term >> bitOffset) & 1;
+            literals.Add(inputValue == 0
+                ? inputNames[inputIndex]
+                : $"{inputNames[inputIndex]}'");
+        }
+
+        return $"({string.Join(" + ", literals)})";
     }
 
     private void AddFunction(LogicFunction logicFunction)
@@ -827,6 +1033,31 @@ public partial class MainWindowViewModel : ObservableObject
         return summary?.LogicFunction?.MinimizedFunction is not null;
     }
 
+    private static LogicFunction WithEquationText(
+        LogicFunction logicFunction,
+        string equationText)
+    {
+        return logicFunction switch
+        {
+            TruthTableLogicFunction truthTableFunction => truthTableFunction with
+            {
+                EquationText = equationText,
+                MinimizedFunction = null
+            },
+            LogicEquationFunction logicEquationFunction => logicEquationFunction with
+            {
+                EquationText = equationText,
+                MinimizedFunction = null
+            },
+            GateDiagramFunction gateDiagramFunction => gateDiagramFunction with
+            {
+                EquationText = equationText,
+                MinimizedFunction = null
+            },
+            _ => throw new InvalidOperationException("Unsupported function type.")
+        };
+    }
+
     private void NotifyFunctionViewModeChanged()
     {
         OnPropertyChanged(nameof(IsUnminimizedViewSelected));
@@ -836,6 +1067,10 @@ public partial class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(IsOperationMapToGatesEnabled));
         OnPropertyChanged(nameof(IsOperationGenerateLookupFunctionEnabled));
         OnPropertyChanged(nameof(IsTruthTableModifyEnabled));
+        OnPropertyChanged(nameof(IsEquationModifyEnabled));
+        OnPropertyChanged(nameof(IsEquationFormatEnabled));
+        OnPropertyChanged(nameof(IsEquationSubmitEnabled));
+        OnPropertyChanged(nameof(IsEquationCancelEnabled));
         OnPropertyChanged(nameof(IsTruthTableShowModeEnabled));
         OnPropertyChanged(nameof(IsShowAllTruthTableRowsSelected));
         OnPropertyChanged(nameof(IsShowTrueAndDontCareTruthTableRowsSelected));

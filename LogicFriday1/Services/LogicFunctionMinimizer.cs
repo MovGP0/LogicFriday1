@@ -6,15 +6,8 @@ namespace LogicFriday1.Services;
 
 public static class LogicFunctionMinimizer
 {
-    public static MinimizedLogicFunction Minimize(LogicFunction logicFunction)
-    {
-        return Minimize(logicFunction, MinimizeOptions.Default);
-    }
-
-    public static MinimizedLogicFunction Minimize(LogicFunction logicFunction, MinimizeOptions options)
-    {
-        return MinimizeWithNativeEspresso(logicFunction, options);
-    }
+    public static MinimizedLogicFunction Minimize(LogicFunction logicFunction, MinimizeOptions options) =>
+        MinimizeWithNativeEspresso(logicFunction, options);
 
     private static MinimizedLogicFunction MinimizeWithNativeEspresso(
         LogicFunction logicFunction,
@@ -30,7 +23,7 @@ public static class LogicFunctionMinimizer
             logicFunction.OutputNames,
             products);
 
-        return new MinimizedLogicFunction(products, equationText, minimizedPlaText);
+        return new(products, equationText, minimizedPlaText);
     }
 
     private static EspressoMinimizeMode ToEspressoMode(MinimizeOptions options, int outputCount)
@@ -184,13 +177,4 @@ public static class LogicFunctionMinimizer
 
         return new string(chars);
     }
-}
-
-public sealed record MinimizeOptions(
-    bool UseExactMode,
-    bool MinimizeOutputsIndependently)
-{
-    public static MinimizeOptions Default { get; } = new(
-        UseExactMode: false,
-        MinimizeOutputsIndependently: true);
 }

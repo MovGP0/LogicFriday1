@@ -383,6 +383,7 @@ public static class LookupFunctionGenerator
     private enum IdentifierStyle
     {
         CaseSensitive,
+
         CaseInsensitive
     }
 }

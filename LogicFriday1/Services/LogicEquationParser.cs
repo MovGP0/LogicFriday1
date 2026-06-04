@@ -3,7 +3,9 @@ namespace LogicFriday1.Services;
 public static class LogicEquationParser
 {
     private const int MaximumInputCount = 16;
+
     private const int MaximumOutputCount = 16;
+
     private const int MaximumVariableNameLength = 8;
 
     public static LogicEquationParseResult Parse(string text)

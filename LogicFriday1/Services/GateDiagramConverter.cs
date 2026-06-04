@@ -263,7 +263,8 @@ public static class GateDiagramConverter
                     inputIndexById,
                     itemById,
                     driverByInput,
-                    []).ToString();
+                    [])
+                    .ToString();
             }
 
             rows[term] = row;

@@ -60,6 +60,11 @@ public partial class MainWindow : Window
         {
             UpdateTruthTableMainMenuState();
         }
+
+        if (e.PropertyName == nameof(MainWindowViewModel.IsEquationEditorVisible))
+        {
+            RefreshEquationEditorToolbarButtons();
+        }
     }
 
     private async void HelpContents_OnClick(object? sender, RoutedEventArgs e)
@@ -276,6 +281,59 @@ public partial class MainWindow : Window
         {
             viewModel.StartNewLogicEquation();
             EquationEditor.Focus();
+            RefreshEquationEditorToolbarButtons();
+        }
+    }
+
+    private void ModifyLogicEquation_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is MainWindowViewModel viewModel &&
+            viewModel.StartModifyLogicEquation())
+        {
+            EquationEditor.Focus();
+            RefreshEquationEditorToolbarButtons();
+        }
+    }
+
+    private void EquationSumOfProducts_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainWindowViewModel viewModel)
+        {
+            return;
+        }
+
+        viewModel.ShowSumOfProductsEquation();
+        if (viewModel.GetSelectedFunction() is { } logicFunction)
+        {
+            ConfigureTruthTableColumns(FunctionTruthTableDataGrid, logicFunction.InputNames, logicFunction.OutputNames);
+        }
+    }
+
+    private void EquationProductOfSums_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainWindowViewModel viewModel)
+        {
+            return;
+        }
+
+        viewModel.ShowProductOfSumsEquation();
+        if (viewModel.GetSelectedFunction() is { } logicFunction)
+        {
+            ConfigureTruthTableColumns(FunctionTruthTableDataGrid, logicFunction.InputNames, logicFunction.OutputNames);
+        }
+    }
+
+    private void EquationFactor_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainWindowViewModel viewModel)
+        {
+            return;
+        }
+
+        viewModel.FactorSelectedEquation();
+        if (viewModel.GetSelectedFunction() is { } logicFunction)
+        {
+            ConfigureTruthTableColumns(FunctionTruthTableDataGrid, logicFunction.InputNames, logicFunction.OutputNames);
         }
     }
 
@@ -675,6 +733,13 @@ public partial class MainWindow : Window
         EquationEditorUndoToolbarButton.IsEnabled = isEditingEquation && EquationEditor.CanUndo;
         EquationEditorRedoToolbarButton.IsEnabled = isEditingEquation && EquationEditor.CanRedo;
         EquationEditorPasteToolbarButton.IsEnabled = false;
+        EquationCutMainMenuItem.IsEnabled = hasSelection;
+        EquationCopyMainMenuItem.IsEnabled = isEditingEquation && hasSelection;
+        EquationUndoMainMenuItem.IsEnabled = isEditingEquation && EquationEditor.CanUndo;
+        EquationRedoMainMenuItem.IsEnabled = isEditingEquation && EquationEditor.CanRedo;
+        EquationPasteMainMenuItem.IsEnabled = false;
+        EquationDeleteMainMenuItem.IsEnabled = isEditingEquation && hasSelection;
+        EquationSelectAllMainMenuItem.IsEnabled = isEditingEquation && !string.IsNullOrEmpty(EquationEditor.Text);
 
         if (!isEditingEquation)
         {
@@ -686,12 +751,15 @@ public partial class MainWindow : Window
             var clipboard = TopLevel.GetTopLevel(EquationEditor)?.Clipboard;
             if (clipboard is not null)
             {
-                EquationEditorPasteToolbarButton.IsEnabled = !string.IsNullOrEmpty(await clipboard.TryGetTextAsync());
+                var canPaste = !string.IsNullOrEmpty(await clipboard.TryGetTextAsync());
+                EquationEditorPasteToolbarButton.IsEnabled = canPaste;
+                EquationPasteMainMenuItem.IsEnabled = canPaste;
             }
         }
         catch
         {
             EquationEditorPasteToolbarButton.IsEnabled = false;
+            EquationPasteMainMenuItem.IsEnabled = false;
         }
     }
 
@@ -766,6 +834,7 @@ public partial class MainWindow : Window
         if (DataContext is MainWindowViewModel viewModel)
         {
             viewModel.CancelLogicEquationEditing();
+            RefreshEquationEditorToolbarButtons();
         }
     }
 
@@ -776,6 +845,17 @@ public partial class MainWindow : Window
 
     private void EquationEditor_OnKeyDown(object? sender, KeyEventArgs e)
     {
+        if (e.Key == Key.Escape)
+        {
+            if (DataContext is MainWindowViewModel viewModel)
+            {
+                viewModel.CancelLogicEquationEditing();
+                e.Handled = true;
+            }
+
+            return;
+        }
+
         if (e.Key != Key.Enter)
         {
             return;

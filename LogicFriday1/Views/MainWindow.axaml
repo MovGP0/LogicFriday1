@@ -214,24 +214,56 @@
             </MenuItem>
 
             <MenuItem Header="_Equation">
-                <MenuItem Header="_Modify Equation" />
+                <MenuItem Header="_Modify Equation"
+                          IsEnabled="{Binding IsEquationModifyEnabled}"
+                          Click="ModifyLogicEquation_OnClick" />
                 <Separator />
-                <MenuItem Header="Sum of Produc_ts" />
-                <MenuItem Header="Pro_duct of Sums" />
-                <MenuItem Header="_Factor" />
+                <MenuItem Header="Sum of Produc_ts"
+                          IsEnabled="{Binding IsEquationFormatEnabled}"
+                          Click="EquationSumOfProducts_OnClick" />
+                <MenuItem Header="Pro_duct of Sums"
+                          IsEnabled="{Binding IsEquationFormatEnabled}"
+                          Click="EquationProductOfSums_OnClick" />
+                <MenuItem Header="_Factor"
+                          IsEnabled="{Binding IsEquationFormatEnabled}"
+                          Click="EquationFactor_OnClick" />
                 <Separator />
-                <MenuItem Header="_Undo (Ctrl+Z)" />
-                <MenuItem Header="_Redo (Ctrl+Y)" />
+                <MenuItem x:Name="EquationUndoMainMenuItem"
+                          Header="_Undo (Ctrl+Z)"
+                          IsEnabled="False"
+                          Click="EquationEditorUndo_OnClick" />
+                <MenuItem x:Name="EquationRedoMainMenuItem"
+                          Header="_Redo (Ctrl+Y)"
+                          IsEnabled="False"
+                          Click="EquationEditorRedo_OnClick" />
                 <Separator />
-                <MenuItem Header="Cu_t (Ctrl+X)" />
-                <MenuItem Header="_Copy (Ctrl+C)" />
-                <MenuItem Header="_Paste (Ctrl+V)" />
-                <MenuItem Header="_Delete (Del)" />
-                <MenuItem Header="Select _All (Ctrl+A)" />
+                <MenuItem x:Name="EquationCutMainMenuItem"
+                          Header="Cu_t (Ctrl+X)"
+                          IsEnabled="False"
+                          Click="EquationEditorCut_OnClick" />
+                <MenuItem x:Name="EquationCopyMainMenuItem"
+                          Header="_Copy (Ctrl+C)"
+                          IsEnabled="False"
+                          Click="EquationEditorCopy_OnClick" />
+                <MenuItem x:Name="EquationPasteMainMenuItem"
+                          Header="_Paste (Ctrl+V)"
+                          IsEnabled="False"
+                          Click="EquationEditorPaste_OnClick" />
+                <MenuItem x:Name="EquationDeleteMainMenuItem"
+                          Header="_Delete (Del)"
+                          IsEnabled="False"
+                          Click="EquationEditorDelete_OnClick" />
+                <MenuItem x:Name="EquationSelectAllMainMenuItem"
+                          Header="Select _All (Ctrl+A)"
+                          IsEnabled="False"
+                          Click="EquationEditorSelectAll_OnClick" />
                 <Separator />
                 <MenuItem Header="_Submit (Enter)"
+                          IsEnabled="{Binding IsEquationSubmitEnabled}"
                           Click="EquationEditorSubmit_OnClick" />
-                <MenuItem Header="_Cancel (Esc)" />
+                <MenuItem Header="_Cancel (Esc)"
+                          IsEnabled="{Binding IsEquationCancelEnabled}"
+                          Click="EquationEditorCancel_OnClick" />
             </MenuItem>
 
             <MenuItem Header="_Gates">
