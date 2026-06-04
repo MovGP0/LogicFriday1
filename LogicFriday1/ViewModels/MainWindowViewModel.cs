@@ -334,6 +334,13 @@ public partial class MainWindowViewModel : ObservableObject
             SelectedFunctionCount == 1;
     }
 
+    public bool IsMappedGateDiagramDetailVisible
+    {
+        get => IsFunctionDetailVisible &&
+            SelectedFunctionSummary?.LogicFunction is GateDiagramFunction gateDiagramFunction &&
+            GateDiagramSvgExportService.CanExport(gateDiagramFunction);
+    }
+
     public bool IsOperationGenerateLookupFunctionEnabled
     {
         get => IsFunctionViewModeEnabled &&
@@ -559,6 +566,31 @@ public partial class MainWindowViewModel : ObservableObject
         }
     }
 
+    public bool EnsureSelectedFunctionMinimized(MinimizeOptions options, out string? errorMessage)
+    {
+        errorMessage = null;
+        if (SelectedFunctionSummary is not { LogicFunction: { } logicFunction })
+        {
+            errorMessage = "No function is selected";
+            StatusText = errorMessage;
+            return false;
+        }
+
+        if (logicFunction.MinimizedFunction is not null)
+        {
+            return true;
+        }
+
+        MinimizeSelectedFunction(options);
+        if (SelectedFunctionSummary?.LogicFunction?.MinimizedFunction is not null)
+        {
+            return true;
+        }
+
+        errorMessage = StatusText;
+        return false;
+    }
+
     public bool MapSelectedFunctionToGates(
         MapToGatesDialogViewModel options,
         out string? errorMessage)
@@ -594,7 +626,7 @@ public partial class MainWindowViewModel : ObservableObject
             MarkReplacedFunctionDirty(logicFunction, mappedFunction);
             SelectedFunctionSummary = mappedSummary;
             SelectedFunctionCount = 1;
-            ShowGateDiagramFunction(mappedFunction);
+            ShowMappedGateDiagramFunctionDetail(mappedFunction);
             StatusText = $"Mapped to gates: {mappedSummary.Gates} gates";
             return true;
         }
@@ -1438,7 +1470,41 @@ public partial class MainWindowViewModel : ObservableObject
         IsGateDiagramVisible = false;
         IsFunctionDetailVisible = true;
         OnPropertyChanged(nameof(IsTruthTableShowModeEnabled));
+        OnPropertyChanged(nameof(IsMappedGateDiagramDetailVisible));
         StatusText = $"Showing {logicFunction.OutputNames.Length} output function";
+    }
+
+    private void ShowMappedGateDiagramFunctionDetail(GateDiagramFunction logicFunction)
+    {
+        if (logicFunction.MinimizedFunction is null)
+        {
+            IsMinimizedViewSelected = false;
+            NotifyFunctionViewModeChanged();
+        }
+
+        LogicEquationText = logicFunction.EquationText;
+        RefreshFunctionTruthTable(logicFunction);
+        SetGateDiagramEditorActive(false);
+        GateDiagramItems.Clear();
+        foreach (var item in logicFunction.Items)
+        {
+            GateDiagramItems.Add(item);
+        }
+
+        GateDiagramWires.Clear();
+        foreach (var wire in logicFunction.Wires)
+        {
+            GateDiagramWires.Add(wire);
+        }
+
+        SelectedGatePaletteItem = null;
+        IsEquationEditorVisible = false;
+        IsTruthTableVisible = false;
+        IsGateDiagramVisible = false;
+        IsFunctionDetailVisible = true;
+        OnPropertyChanged(nameof(IsTruthTableShowModeEnabled));
+        OnPropertyChanged(nameof(IsMappedGateDiagramDetailVisible));
+        StatusText = $"Showing mapped gate diagram for {logicFunction.OutputNames.Length} output function";
     }
 
     private void ShowGateDiagramFunction(GateDiagramFunction logicFunction)
@@ -1470,6 +1536,7 @@ public partial class MainWindowViewModel : ObservableObject
         IsGateDiagramVisible = true;
         IsFunctionDetailVisible = false;
         OnPropertyChanged(nameof(IsTruthTableShowModeEnabled));
+        OnPropertyChanged(nameof(IsMappedGateDiagramDetailVisible));
         StatusText = $"Showing mapped gate diagram for {logicFunction.OutputNames.Length} output function";
     }
 
@@ -2230,6 +2297,7 @@ public partial class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(IsTruthTableShowModeEnabled));
         OnPropertyChanged(nameof(IsShowAllTruthTableRowsSelected));
         OnPropertyChanged(nameof(IsShowTrueAndDontCareTruthTableRowsSelected));
+        OnPropertyChanged(nameof(IsMappedGateDiagramDetailVisible));
     }
 
     private void NotifySelectionChanged()
@@ -2249,6 +2317,7 @@ public partial class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(IsEquationFormatEnabled));
         OnPropertyChanged(nameof(IsShowAllTruthTableRowsSelected));
         OnPropertyChanged(nameof(IsShowTrueAndDontCareTruthTableRowsSelected));
+        OnPropertyChanged(nameof(IsMappedGateDiagramDetailVisible));
         NotifyTwoFunctionOperationChanged();
     }
 
@@ -2280,6 +2349,7 @@ public partial class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(IsGatesCopyToClipboardEnabled));
         OnPropertyChanged(nameof(IsGatesIcPackageInfoEnabled));
         OnPropertyChanged(nameof(IsGatesTraceLogicEnabled));
+        OnPropertyChanged(nameof(IsMappedGateDiagramDetailVisible));
         NotifyGateTraceStateChanged();
     }
 

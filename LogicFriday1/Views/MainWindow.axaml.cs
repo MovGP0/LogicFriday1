@@ -126,6 +126,26 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (viewModel.GetSelectedFunction() is { MinimizedFunction: null } selectedFunction)
+        {
+            var minimizeDialog = new MinimizeDialog
+            {
+                OutputCount = selectedFunction.OutputNames.Length
+            };
+            var minimizeResult = await minimizeDialog.ShowDialog<bool?>(this);
+            if (minimizeResult != true)
+            {
+                return;
+            }
+
+            if (!viewModel.EnsureSelectedFunctionMinimized(minimizeDialog.ViewModel.ToMinimizeOptions(), out var minimizeErrorMessage) &&
+                !string.IsNullOrWhiteSpace(minimizeErrorMessage))
+            {
+                await ShowMessageAsync(minimizeErrorMessage, "Map to Gates");
+                return;
+            }
+        }
+
         var dialog = new MapToGatesDialog();
         var result = await dialog.ShowDialog<bool?>(this);
         if (result != true)

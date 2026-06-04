@@ -11,9 +11,9 @@ public static class LogicFunctionGateMapper
 
     private const double GateX = 180;
 
-    private const double LevelSpacing = 150;
+    private const double LevelSpacing = 160;
 
-    private const double RowSpacing = 90;
+    private const double RowSpacing = 80;
 
     public static GateDiagramFunction Map(
         LogicFunction logicFunction,
@@ -57,14 +57,28 @@ public static class LogicFunctionGateMapper
             }
 
             builder.Append(' ').AppendLine(logicFunction.OutputNames[outputIndex]);
-            for (var term = 0; term < logicFunction.OutputValues.Count; term++)
+            if (logicFunction.MinimizedFunction is { } minimizedFunction)
             {
-                if (logicFunction.OutputValues[term][outputIndex] == "1")
+                foreach (var product in minimizedFunction.Products.Where(product => product.OutputValues[outputIndex] == "1"))
                 {
                     builder
-                        .Append(FormatInputPattern(term, logicFunction.InputNames.Length))
+                        .Append(product.InputPattern)
                         .AppendLine(" 1");
                 }
+
+                continue;
+            }
+
+            for (var term = 0; term < logicFunction.OutputValues.Count; term++)
+            {
+                if (logicFunction.OutputValues[term][outputIndex] != "1")
+                {
+                    continue;
+                }
+
+                builder
+                    .Append(FormatInputPattern(term, logicFunction.InputNames.Length))
+                    .AppendLine(" 1");
             }
         }
 
@@ -72,13 +86,15 @@ public static class LogicFunctionGateMapper
         return builder.ToString();
     }
 
-    private static GateDiagramFunction BuildGateDiagramFunction(
+    public static GateDiagramFunction BuildGateDiagramFunction(
         LogicFunction source,
         SisMappedNetwork mapped)
     {
         var items = new List<GateDiagramItem>();
         var wires = new List<GateDiagramWire>();
         var signalOutputs = new Dictionary<string, GateDiagramConnectionReference>(StringComparer.Ordinal);
+        var signalLevels = BuildSignalLevels(source, mapped);
+        var signalRows = new Dictionary<string, double>(StringComparer.Ordinal);
         var nextItemId = 1;
 
         for (var index = 0; index < source.InputNames.Length; index++)
@@ -92,6 +108,7 @@ public static class LogicFunctionGateMapper
                 Id: nextItemId++);
             items.Add(item);
             signalOutputs[item.Label] = OutputOf(item);
+            signalRows[item.Label] = item.Y;
         }
 
         var levelRows = new Dictionary<int, int>();
@@ -110,8 +127,9 @@ public static class LogicFunctionGateMapper
             }
 
             var kind = ToGatePaletteKind(mappedGate.Kind);
-            var row = levelRows.GetValueOrDefault(mappedGate.Level);
-            levelRows[mappedGate.Level] = row + 1;
+            var level = signalLevels.GetValueOrDefault(mappedGate.Output, Math.Max(1, mappedGate.Level));
+            var row = levelRows.GetValueOrDefault(level);
+            levelRows[level] = row + 1;
             var inputCount = kind switch
             {
                 GatePaletteKind.Not => 1,
@@ -121,7 +139,7 @@ public static class LogicFunctionGateMapper
             var item = new GateDiagramItem(
                 kind,
                 inputCount,
-                GateX + Math.Max(0, mappedGate.Level - 1) * LevelSpacing,
+                Snap(GateX + Math.Max(0, level - 1) * LevelSpacing),
                 40 + row * RowSpacing,
                 "",
                 kind is GatePaletteKind.ConstantZero or GatePaletteKind.ConstantOne
@@ -144,16 +162,21 @@ public static class LogicFunctionGateMapper
             }
 
             signalOutputs[mappedGate.Output] = OutputOf(item);
+            signalRows[mappedGate.Output] = item.Y;
         }
 
-        var outputX = GateX + (Math.Max(1, mapped.Gates.Select(static gate => gate.Level).DefaultIfEmpty(1).Max()) + 1) * LevelSpacing;
+        var maxLevel = Math.Max(1, signalLevels.Values.DefaultIfEmpty(1).Max());
+        var outputX = Snap(GateX + (maxLevel + 1) * LevelSpacing);
         for (var index = 0; index < source.OutputNames.Length; index++)
         {
+            var outputY = signalRows.TryGetValue(source.OutputNames[index], out var driverY)
+                ? Snap(driverY)
+                : 40 + index * RowSpacing;
             var item = new GateDiagramItem(
                 GatePaletteKind.Output,
                 1,
                 outputX,
-                40 + index * RowSpacing,
+                outputY,
                 source.OutputNames[index],
                 Id: nextItemId++);
             items.Add(item);
@@ -178,6 +201,61 @@ public static class LogicFunctionGateMapper
             source.MinimizedFunction);
     }
 
+    private static Dictionary<string, int> BuildSignalLevels(LogicFunction source, SisMappedNetwork mapped)
+    {
+        var signalLevels = source.InputNames.ToDictionary(
+            static input => input,
+            static _ => 0,
+            StringComparer.Ordinal);
+
+        var gatesByOutput = mapped.Gates
+            .GroupBy(static gate => gate.Output, StringComparer.Ordinal)
+            .ToDictionary(static group => group.Key, static group => group.First(), StringComparer.Ordinal);
+        var visiting = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var gate in mapped.Gates)
+        {
+            ComputeSignalLevel(gate.Output, gatesByOutput, signalLevels, visiting);
+        }
+
+        return signalLevels;
+    }
+
+    private static int ComputeSignalLevel(
+        string signal,
+        IReadOnlyDictionary<string, SisMappedGate> gatesByOutput,
+        Dictionary<string, int> signalLevels,
+        HashSet<string> visiting)
+    {
+        if (signalLevels.TryGetValue(signal, out var level))
+        {
+            return level;
+        }
+
+        if (!gatesByOutput.TryGetValue(signal, out var gate) || !visiting.Add(signal))
+        {
+            return 0;
+        }
+
+        if (gate.Kind.Equals("buf", StringComparison.OrdinalIgnoreCase) && gate.Inputs.Count > 0)
+        {
+            level = ComputeSignalLevel(gate.Inputs[0], gatesByOutput, signalLevels, visiting);
+        }
+        else
+        {
+            level = Math.Max(
+                1,
+                gate.Inputs
+                    .Select(input => ComputeSignalLevel(input, gatesByOutput, signalLevels, visiting))
+                    .DefaultIfEmpty(0)
+                    .Max()
+                    + 1);
+        }
+
+        visiting.Remove(signal);
+        signalLevels[signal] = level;
+        return level;
+    }
+
     private static GatePaletteKind ToGatePaletteKind(string kind)
     {
         return kind.ToLowerInvariant() switch
@@ -193,6 +271,8 @@ public static class LogicFunctionGateMapper
 
     private static GateDiagramConnectionReference OutputOf(GateDiagramItem item) =>
         new(item.Id, GateDiagramConnectionKind.Output, 0);
+
+    private static double Snap(double value) => Math.Round(value / 20d) * 20d;
 
     private static string FormatInputPattern(int term, int inputCount)
     {

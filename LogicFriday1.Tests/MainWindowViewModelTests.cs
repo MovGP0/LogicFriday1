@@ -133,6 +133,39 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public void EnsureSelectedFunctionMinimized_WithoutMinimizedFunction_AddsMinimizedData()
+    {
+        var viewModel = CreateFullAdderTruthTableFunction();
+
+        var wasMinimized = viewModel.EnsureSelectedFunctionMinimized(
+            new MinimizeOptions(UseExactMode: false, MinimizeOutputsIndependently: false),
+            out var errorMessage);
+
+        viewModel.ShouldSatisfyAllConditions(
+            _ => wasMinimized.ShouldBeTrue(),
+            _ => errorMessage.ShouldBeNull(),
+            static vm => vm.GetSelectedFunction()!.MinimizedFunction.ShouldNotBeNull());
+    }
+
+    [Fact]
+    public void MapSelectedFunctionToGates_MinimizedFullAdder_RemainsInFunctionDetail()
+    {
+        var viewModel = CreateMinimizedFullAdderTruthTableFunction();
+
+        var wasMapped = viewModel.MapSelectedFunctionToGates(new MapToGatesDialogViewModel(), out var errorMessage);
+
+        viewModel.ShouldSatisfyAllConditions(
+            _ => wasMapped.ShouldBeTrue(),
+            _ => errorMessage.ShouldBeNull(),
+            static vm => vm.GetSelectedFunction().ShouldBeOfType<GateDiagramFunction>(),
+            static vm => vm.IsFunctionDetailVisible.ShouldBeTrue(),
+            static vm => vm.IsGateDiagramVisible.ShouldBeFalse(),
+            static vm => vm.IsMappedGateDiagramDetailVisible.ShouldBeTrue(),
+            static vm => vm.GateDiagramItems.ShouldNotBeEmpty(),
+            static vm => vm.GateDiagramWires.ShouldNotBeEmpty());
+    }
+
+    [Fact]
     public void EquationCommandEnablement_IsDisabledWithoutSelection()
     {
         var viewModel = new MainWindowViewModel();

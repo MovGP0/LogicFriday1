@@ -579,15 +579,27 @@
                               Background="{DynamicResource LogicFriday.Brush.SurfaceContainerLowest}"
                               Foreground="{DynamicResource LogicFriday.Brush.OnSurface}"
                               BorderBrush="{DynamicResource LogicFriday.Brush.OutlineVariant}" />
-                    <TextBox Grid.Column="1"
-                             Text="{Binding LogicEquationText}"
-                             IsReadOnly="True"
-                             AcceptsReturn="True"
-                             FontFamily="Courier New"
-                             TextWrapping="NoWrap"
-                             Background="{DynamicResource LogicFriday.Brush.SurfaceContainerLowest}"
-                             Foreground="{DynamicResource LogicFriday.Brush.OnSurface}"
-                             BorderBrush="{DynamicResource LogicFriday.Brush.OutlineVariant}" />
+                    <Grid Grid.Column="1"
+                          RowDefinitions="*,*"
+                          RowSpacing="8">
+                        <TextBox Grid.Row="0"
+                                 Text="{Binding LogicEquationText}"
+                                 IsReadOnly="True"
+                                 AcceptsReturn="True"
+                                 FontFamily="Courier New"
+                                 TextWrapping="NoWrap"
+                                 Background="{DynamicResource LogicFriday.Brush.SurfaceContainerLowest}"
+                                 Foreground="{DynamicResource LogicFriday.Brush.OnSurface}"
+                                 BorderBrush="{DynamicResource LogicFriday.Brush.OutlineVariant}" />
+                        <ScrollViewer Grid.Row="1"
+                                      IsVisible="{Binding IsMappedGateDiagramDetailVisible}"
+                                      VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Auto">
+                            <controls:GateDiagramSurface SelectedPaletteItem="{Binding SelectedGatePaletteItem}"
+                                                         Items="{Binding GateDiagramItems}"
+                                                         Wires="{Binding GateDiagramWires}" />
+                        </ScrollViewer>
+                    </Grid>
                 </Grid>
                 <DataGrid x:Name="TruthTableDataGrid"
                           Grid.Row="2"
