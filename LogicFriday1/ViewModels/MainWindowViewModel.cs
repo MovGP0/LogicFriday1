@@ -1440,6 +1440,12 @@ public partial class MainWindowViewModel : ObservableObject
 
     public void ShowFunction(LogicFunction logicFunction)
     {
+        if (logicFunction is GateDiagramFunction { IsMappedGateDiagram: true } mappedGateDiagramFunction)
+        {
+            ShowMappedGateDiagramFunctionDetail(mappedGateDiagramFunction);
+            return;
+        }
+
         if (logicFunction is GateDiagramFunction gateDiagramFunction)
         {
             ShowGateDiagramFunction(gateDiagramFunction);

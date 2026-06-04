@@ -68,7 +68,8 @@ public sealed class LogicFunctionFileServiceTests : IDisposable
                     new GateDiagramConnectionReference(1, GateDiagramConnectionKind.Output, 0),
                     new GateDiagramConnectionReference(2, GateDiagramConnectionKind.Input, 0),
                     [new GateDiagramWirePoint(30, 40)])
-            ]);
+            ],
+            IsMappedGateDiagram: true);
 
         service.Save(filePath, function);
         var loadedFunction = service.Load(filePath);
@@ -77,6 +78,7 @@ public sealed class LogicFunctionFileServiceTests : IDisposable
             static loaded => loaded.ShouldBeOfType<GateDiagramFunction>(),
             static loaded => ((GateDiagramFunction)loaded).Items[0].Label.ShouldBe("A"),
             static loaded => ((GateDiagramFunction)loaded).Wires[0].RoutePoints[0].X.ShouldBe(30),
+            static loaded => ((GateDiagramFunction)loaded).IsMappedGateDiagram.ShouldBeTrue(),
             static loaded => loaded.OutputValues.Select(static row => row[0]).ShouldBe(["0", "1"]));
     }
 

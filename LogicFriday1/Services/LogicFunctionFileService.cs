@@ -88,7 +88,8 @@ public sealed class LogicFunctionFileService : ILogicFunctionFileService
             logicFunction.EquationText,
             ToDto(logicFunction.MinimizedFunction),
             gateDiagramFunction?.Items.ToArray(),
-            gateDiagramFunction?.Wires.ToArray());
+            gateDiagramFunction?.Wires.ToArray(),
+            gateDiagramFunction?.IsMappedGateDiagram ?? false);
     }
 
     private static MinimizedLogicFunctionDto? ToDto(MinimizedLogicFunction? minimizedFunction)
@@ -134,7 +135,8 @@ public sealed class LogicFunctionFileService : ILogicFunctionFileService
                 function.EquationText,
                 function.Items ?? [],
                 function.Wires ?? [],
-                minimizedFunction),
+                minimizedFunction,
+                function.IsMappedGateDiagram),
             _ => throw new LogicFunctionFileException("Unsupported logic function type.")
         };
     }
@@ -198,7 +200,8 @@ public sealed class LogicFunctionFileService : ILogicFunctionFileService
         string EquationText,
         MinimizedLogicFunctionDto? MinimizedFunction,
         GateDiagramItem[]? Items,
-        GateDiagramWire[]? Wires);
+        GateDiagramWire[]? Wires,
+        bool IsMappedGateDiagram);
 
     private sealed record MinimizedLogicFunctionDto(
         MinimizedProductTermDto[] Products,

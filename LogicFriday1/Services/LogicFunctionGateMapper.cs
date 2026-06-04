@@ -198,7 +198,8 @@ public static class LogicFunctionGateMapper
             BuildMappedEquationText(source),
             items,
             wires,
-            source.MinimizedFunction);
+            source.MinimizedFunction,
+            IsMappedGateDiagram: true);
     }
 
     private static string BuildMappedEquationText(LogicFunction source)

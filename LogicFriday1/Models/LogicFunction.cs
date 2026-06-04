@@ -30,7 +30,8 @@ public sealed record GateDiagramFunction(
     string EquationText,
     IReadOnlyList<GateDiagramItem> Items,
     IReadOnlyList<GateDiagramWire> Wires,
-    MinimizedLogicFunction? MinimizedFunction = null)
+    MinimizedLogicFunction? MinimizedFunction = null,
+    bool IsMappedGateDiagram = false)
     : LogicFunction(InputNames, OutputNames, OutputValues, EquationText, MinimizedFunction);
 
 public sealed record MinimizedLogicFunction(

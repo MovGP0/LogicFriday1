@@ -186,6 +186,26 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public void ShowFunction_MappedGateDiagramAfterSelectingAnotherFunction_RemainsInFunctionDetail()
+    {
+        var viewModel = CreateMinimizedFullAdderTruthTableFunction();
+        viewModel.MapSelectedFunctionToGates(new MapToGatesDialogViewModel(), out _);
+        var mappedSummary = viewModel.SelectedFunctionSummary!;
+        AddTruthTableFunction(viewModel, ["A"], "F", ["0", "1"]);
+
+        viewModel.SelectedFunctionSummary = mappedSummary;
+        viewModel.ShowFunction(mappedSummary.LogicFunction!);
+
+        viewModel.ShouldSatisfyAllConditions(
+            static vm => vm.GetSelectedFunction().ShouldBeOfType<GateDiagramFunction>(),
+            static vm => vm.IsFunctionDetailVisible.ShouldBeTrue(),
+            static vm => vm.IsGateDiagramVisible.ShouldBeFalse(),
+            static vm => vm.IsMappedGateDiagramDetailVisible.ShouldBeTrue(),
+            static vm => vm.GateDiagramItems.ShouldNotBeEmpty(),
+            static vm => vm.GateDiagramWires.ShouldNotBeEmpty());
+    }
+
+    [Fact]
     public void EquationCommandEnablement_IsDisabledWithoutSelection()
     {
         var viewModel = new MainWindowViewModel();
