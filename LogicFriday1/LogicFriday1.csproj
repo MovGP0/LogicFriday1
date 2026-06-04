@@ -13,6 +13,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Update="Views\*.axaml.cs">
+      <DependentUpon>%(Filename)</DependentUpon>
+    </Compile>
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\MaterialDesign3.MaterialColorUtilities\MaterialColorUtilities.csproj" />
     <ProjectReference Include="..\LogicFriday1.MaterialIcons\LogicFriday1.MaterialIcons.csproj" />
     <ProjectReference Include="..\LogicFriday1.Espresso\LogicFriday1.Espresso.csproj" />
