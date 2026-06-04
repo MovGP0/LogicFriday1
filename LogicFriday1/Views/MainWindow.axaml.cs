@@ -433,6 +433,86 @@ public partial class MainWindow : Window
         }
     }
 
+    private void ModifyGateDiagram_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainWindowViewModel { IsGatesModifyGateDiagramEnabled: true } viewModel)
+        {
+            return;
+        }
+
+        ClearActiveGatePaletteButton();
+        GateDiagramSurface.CancelInteraction();
+        viewModel.StartModifySelectedGateDiagram();
+    }
+
+    private async void GateCopyToClipboard_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainWindowViewModel { IsGatesCopyToClipboardEnabled: true } viewModel)
+        {
+            return;
+        }
+
+        var svg = viewModel.CreateGateDiagramClipboardSvg();
+        if (svg is null)
+        {
+            return;
+        }
+
+        var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
+        if (clipboard is null)
+        {
+            viewModel.StatusText = "Clipboard is not available";
+            await ShowMessageAsync("Clipboard is not available.", "Copy Gate Diagram");
+            return;
+        }
+
+        try
+        {
+            await clipboard.SetTextAsync(svg);
+        }
+        catch (Exception ex)
+        {
+            viewModel.StatusText = $"Copy failed: {ex.Message}";
+            await ShowMessageAsync($"The gate diagram could not be copied.\n{ex.Message}", "Copy Gate Diagram");
+        }
+    }
+
+    private async void GateIcPackageInfo_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainWindowViewModel { IsGatesIcPackageInfoEnabled: true } viewModel)
+        {
+            return;
+        }
+
+        var packageInfo = viewModel.GetSelectedGatePackageInfo();
+        if (packageInfo is null)
+        {
+            await ShowMessageAsync(viewModel.StatusText, "IC Package Info");
+            return;
+        }
+
+        await ShowTextDialogAsync(packageInfo, "IC Package Info");
+    }
+
+    private async void GateTraceLogic_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainWindowViewModel viewModel)
+        {
+            return;
+        }
+
+        if (!viewModel.ToggleGateTraceLogic())
+        {
+            await ShowMessageAsync(viewModel.StatusText, "Trace Gate Logic");
+            return;
+        }
+
+        if (viewModel.IsGatesTraceLogicChecked && viewModel.GateTraceOutputText.Length > 0)
+        {
+            viewModel.StatusText = $"Gate logic trace enabled: {viewModel.GateTraceOutputText}";
+        }
+    }
+
     private async void ToolbarNew_OnClick(object? sender, RoutedEventArgs e)
     {
         if (DataContext is not MainWindowViewModel { IsFileNewEnabled: true })
@@ -1507,6 +1587,50 @@ public partial class MainWindow : Window
                 {
                     Text = message,
                     TextWrapping = TextWrapping.Wrap
+                },
+                okButton
+            }
+        };
+
+        Grid.SetRow(okButton, 1);
+        await dialog.ShowDialog(this);
+    }
+
+    private async Task ShowTextDialogAsync(string text, string title)
+    {
+        var dialog = new Window
+        {
+            Title = title,
+            Width = 420,
+            Height = 320,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            CanResize = true
+        };
+
+        var okButton = new Button
+        {
+            Content = "OK",
+            MinWidth = 80,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            IsDefault = true
+        };
+
+        okButton.Click += (_, _) => dialog.Close();
+
+        dialog.Content = new Grid
+        {
+            RowDefinitions = new RowDefinitions("*,Auto"),
+            Margin = new Avalonia.Thickness(16),
+            RowSpacing = 8,
+            Children =
+            {
+                new TextBox
+                {
+                    Text = text,
+                    IsReadOnly = true,
+                    AcceptsReturn = true,
+                    TextWrapping = TextWrapping.NoWrap,
+                    FontFamily = FontFamily.Parse("Consolas")
                 },
                 okButton
             }

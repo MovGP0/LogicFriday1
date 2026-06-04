@@ -765,6 +765,202 @@ public sealed class MainWindowViewModelTests
             static vm => vm.StatusText.ShouldBe("Gate diagram exported"));
     }
 
+    [Fact]
+    public void GatesMenuEnablement_IsEnabledForSingleSelectedGateDiagramWithItems()
+    {
+        var viewModel = CreateSelectedGateDiagramViewModel(CreateGateDiagramFunction());
+
+        viewModel.ShouldSatisfyAllConditions(
+            static vm => vm.IsGatesModifyGateDiagramEnabled.ShouldBeTrue(),
+            static vm => vm.IsGatesCopyToClipboardEnabled.ShouldBeTrue(),
+            static vm => vm.IsGatesIcPackageInfoEnabled.ShouldBeTrue(),
+            static vm => vm.IsGatesTraceLogicEnabled.ShouldBeTrue());
+    }
+
+    [Fact]
+    public void GatesMenuEnablement_RemainsEnabledWhenSelectedGateDiagramIsDisplayed()
+    {
+        var viewModel = CreateSelectedGateDiagramViewModel(CreateGateDiagramFunction());
+
+        viewModel.ShowFunction(viewModel.GetSelectedFunction()!);
+
+        viewModel.ShouldSatisfyAllConditions(
+            static vm => vm.IsGateDiagramVisible.ShouldBeTrue(),
+            static vm => vm.IsGatesModifyGateDiagramEnabled.ShouldBeTrue(),
+            static vm => vm.IsGatesCopyToClipboardEnabled.ShouldBeTrue(),
+            static vm => vm.IsGatesIcPackageInfoEnabled.ShouldBeTrue(),
+            static vm => vm.IsGatesTraceLogicEnabled.ShouldBeTrue());
+    }
+
+    [Fact]
+    public void GatesMenuEnablement_IsDisabledForMultipleSelectedFunctions()
+    {
+        var viewModel = CreateSelectedGateDiagramViewModel(CreateGateDiagramFunction());
+
+        viewModel.SelectedFunctionCount = 2;
+
+        viewModel.ShouldSatisfyAllConditions(
+            static vm => vm.IsGatesModifyGateDiagramEnabled.ShouldBeFalse(),
+            static vm => vm.IsGatesCopyToClipboardEnabled.ShouldBeFalse(),
+            static vm => vm.IsGatesIcPackageInfoEnabled.ShouldBeFalse(),
+            static vm => vm.IsGatesTraceLogicEnabled.ShouldBeFalse());
+    }
+
+    [Fact]
+    public void GatesCopyToClipboardEnablement_IsEnabledForActiveEditorContent()
+    {
+        var viewModel = new MainWindowViewModel();
+
+        viewModel.StartNewGateDiagram();
+        viewModel.GateDiagramItems.Add(new GateDiagramItem(GatePaletteKind.Input, 0, 0, 0, "A", Id: 1));
+
+        viewModel.IsGatesCopyToClipboardEnabled.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void StartModifySelectedGateDiagram_LoadsSelectedDiagramForEditing()
+    {
+        var viewModel = CreateSelectedGateDiagramViewModel(CreateGateDiagramFunction());
+
+        var wasStarted = viewModel.StartModifySelectedGateDiagram();
+
+        viewModel.ShouldSatisfyAllConditions(
+            _ => wasStarted.ShouldBeTrue(),
+            static vm => vm.IsGateDiagramVisible.ShouldBeTrue(),
+            static vm => vm.GateDiagramItems.Select(static item => item.Label).ShouldBe(["A", "F"]),
+            static vm => vm.GateDiagramWires.Count.ShouldBe(1),
+            static vm => vm.StatusText.ShouldBe("Modifying gate diagram"));
+    }
+
+    [Fact]
+    public void SubmitGateDiagramEditing_ReplacesModifiedGateDiagram()
+    {
+        var viewModel = CreateSelectedGateDiagramViewModel(CreateAndGateDiagramFunction());
+
+        viewModel.StartModifySelectedGateDiagram();
+        viewModel.GateDiagramItems[0] = viewModel.GateDiagramItems[0] with
+        {
+            X = 24
+        };
+        var wasSubmitted = viewModel.SubmitGateDiagramEditing(out var errorMessage);
+
+        viewModel.ShouldSatisfyAllConditions(
+            _ => wasSubmitted.ShouldBeTrue(),
+            _ => errorMessage.ShouldBeNull(),
+            static vm => vm.FunctionSummaries.Count.ShouldBe(1),
+            static vm => ((GateDiagramFunction)vm.GetSelectedFunction()!).Items[0].X.ShouldBe(24),
+            static vm => vm.StatusText.ShouldBe("Gate diagram modified"));
+    }
+
+    [Fact]
+    public void CreateGateDiagramClipboardSvg_ReturnsSvgForSelectedGateDiagram()
+    {
+        var viewModel = CreateSelectedGateDiagramViewModel(CreateGateDiagramFunction());
+
+        var svg = viewModel.CreateGateDiagramClipboardSvg();
+
+        viewModel.ShouldSatisfyAllConditions(
+            _ => svg.ShouldNotBeNull(),
+            _ => svg!.ShouldContain("<svg xmlns=\"http://www.w3.org/2000/svg\""),
+            static vm => vm.StatusText.ShouldBe("Gate diagram copied to clipboard"));
+    }
+
+    [Fact]
+    public void CreateGateDiagramClipboardSvg_ReturnsSvgForActiveEditorContent()
+    {
+        var viewModel = new MainWindowViewModel();
+
+        viewModel.StartNewGateDiagram();
+        viewModel.GateDiagramItems.Add(new GateDiagramItem(GatePaletteKind.Input, 0, 0, 0, "A", Id: 1));
+        var svg = viewModel.CreateGateDiagramClipboardSvg();
+
+        viewModel.ShouldSatisfyAllConditions(
+            _ => svg.ShouldNotBeNull(),
+            _ => svg!.ShouldContain(">A<"),
+            static vm => vm.StatusText.ShouldBe("Gate diagram copied to clipboard"));
+    }
+
+    [Fact]
+    public void GetSelectedGatePackageInfo_ReturnsPackageSummaryForSelectedGateDiagram()
+    {
+        var viewModel = CreateSelectedGateDiagramViewModel(CreateAndGateDiagramFunction());
+
+        var packageInfo = viewModel.GetSelectedGatePackageInfo();
+
+        viewModel.ShouldSatisfyAllConditions(
+            _ => packageInfo.ShouldNotBeNull(),
+            _ => packageInfo!.ShouldContain("Quad 2-Input AND\t1"),
+            static vm => vm.StatusText.ShouldBe("IC package information generated"));
+    }
+
+    [Fact]
+    public void ToggleGateTraceLogic_EnablesTraceForSelectedGateDiagram()
+    {
+        var viewModel = CreateSelectedGateDiagramViewModel(CreateAndGateDiagramFunction());
+
+        var wasEnabled = viewModel.ToggleGateTraceLogic();
+
+        viewModel.ShouldSatisfyAllConditions(
+            _ => wasEnabled.ShouldBeTrue(),
+            static vm => vm.IsGatesTraceLogicChecked.ShouldBeTrue(),
+            static vm => vm.GateTraceInputs.Select(static input => input.DisplayText).ShouldBe(["A = 0", "B = 0"]),
+            static vm => vm.GateTraceOutputText.ShouldBe("F = 0"),
+            static vm => vm.StatusText.ShouldBe("Gate logic trace enabled"));
+    }
+
+    [Fact]
+    public void SetGateTraceInputValue_RecomputesTraceOutput()
+    {
+        var viewModel = CreateSelectedGateDiagramViewModel(CreateAndGateDiagramFunction());
+
+        viewModel.ToggleGateTraceLogic();
+        viewModel.SetGateTraceInputValue("A", 1);
+        var wasSet = viewModel.SetGateTraceInputValue("B", 1);
+
+        viewModel.ShouldSatisfyAllConditions(
+            _ => wasSet.ShouldBeTrue(),
+            static vm => vm.GateTraceOutputText.ShouldBe("F = 1"),
+            static vm => vm.StatusText.ShouldBe("Gate logic trace recomputed"));
+    }
+
+    [Fact]
+    public void GatesPackageInfoAndTraceEnablement_IsDisabledWithoutSelectedGateDiagram()
+    {
+        var viewModel = CreateXorTruthTableFunction();
+
+        viewModel.ShouldSatisfyAllConditions(
+            static vm => vm.IsGatesIcPackageInfoEnabled.ShouldBeFalse(),
+            static vm => vm.IsGatesTraceLogicEnabled.ShouldBeFalse(),
+            static vm => vm.IsGatesTraceLogicChecked.ShouldBeFalse());
+    }
+
+    [Fact]
+    public void GatesPackageInfoAndTraceEnablement_IsEnabledForSelectedGateDiagram()
+    {
+        var viewModel = CreateSelectedGateDiagramViewModel(CreateAndGateDiagramFunction());
+
+        viewModel.ShouldSatisfyAllConditions(
+            static vm => vm.IsGatesIcPackageInfoEnabled.ShouldBeTrue(),
+            static vm => vm.IsGatesTraceLogicEnabled.ShouldBeTrue(),
+            static vm => vm.IsGatesTraceLogicChecked.ShouldBeFalse());
+    }
+
+    [Fact]
+    public void ToggleGateTraceLogic_DisablesActiveTrace()
+    {
+        var viewModel = CreateSelectedGateDiagramViewModel(CreateGateDiagramFunction());
+
+        viewModel.ToggleGateTraceLogic();
+        var result = viewModel.ToggleGateTraceLogic();
+
+        viewModel.ShouldSatisfyAllConditions(
+            _ => result.ShouldBeTrue(),
+            static vm => vm.IsGatesTraceLogicChecked.ShouldBeFalse(),
+            static vm => vm.GateTraceInputs.ShouldBeEmpty(),
+            static vm => vm.GateTraceOutputText.ShouldBe(""),
+            static vm => vm.StatusText.ShouldBe("Gate logic trace disabled"));
+    }
+
     private static string[] GetTerms(MainWindowViewModel viewModel)
     {
         return viewModel.FunctionTruthTableRows
@@ -873,6 +1069,57 @@ public sealed class MainWindowViewModelTests
                     new GateDiagramConnectionReference(1, GateDiagramConnectionKind.Output, 0),
                     new GateDiagramConnectionReference(2, GateDiagramConnectionKind.Input, 0))
             ]);
+    }
+
+    private static GateDiagramFunction CreateAndGateDiagramFunction()
+    {
+        return new GateDiagramFunction(
+            ["A", "B"],
+            ["F"],
+            [
+                ["0"],
+                ["0"],
+                ["0"],
+                ["1"]
+            ],
+            "F = A & B;",
+            [
+                new GateDiagramItem(GatePaletteKind.Input, 0, 0, 0, "A", Id: 1),
+                new GateDiagramItem(GatePaletteKind.Input, 0, 0, 80, "B", Id: 2),
+                new GateDiagramItem(GatePaletteKind.And, 2, 120, 40, "", Id: 3),
+                new GateDiagramItem(GatePaletteKind.Output, 1, 240, 40, "F", Id: 4)
+            ],
+            [
+                new GateDiagramWire(
+                    new GateDiagramConnectionReference(1, GateDiagramConnectionKind.Output, 0),
+                    new GateDiagramConnectionReference(3, GateDiagramConnectionKind.Input, 0)),
+                new GateDiagramWire(
+                    new GateDiagramConnectionReference(2, GateDiagramConnectionKind.Output, 0),
+                    new GateDiagramConnectionReference(3, GateDiagramConnectionKind.Input, 1)),
+                new GateDiagramWire(
+                    new GateDiagramConnectionReference(3, GateDiagramConnectionKind.Output, 0),
+                    new GateDiagramConnectionReference(4, GateDiagramConnectionKind.Input, 0))
+            ]);
+    }
+
+    private static MainWindowViewModel CreateSelectedGateDiagramViewModel(GateDiagramFunction gateDiagramFunction)
+    {
+        var viewModel = new MainWindowViewModel();
+        var summary = new FunctionSummaryRow(
+            Function: "F",
+            Inputs: gateDiagramFunction.InputNames.Length.ToString(),
+            Outputs: gateDiagramFunction.OutputNames.Length.ToString(),
+            Gates: gateDiagramFunction.Items
+                .Count(static item => item.Kind is not GatePaletteKind.Input and not GatePaletteKind.Output)
+                .ToString(),
+            LogicFunction: gateDiagramFunction);
+
+        viewModel.FunctionSummaries.Clear();
+        viewModel.FunctionSummaries.Add(summary);
+        viewModel.SelectedFunctionSummary = summary;
+        viewModel.SelectedFunctionCount = 1;
+
+        return viewModel;
     }
 }
 

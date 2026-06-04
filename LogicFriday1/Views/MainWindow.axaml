@@ -294,11 +294,21 @@
             </MenuItem>
 
             <MenuItem Header="_Gates">
-                <MenuItem Header="_Modify Gate Diagram" />
+                <MenuItem Header="_Modify Gate Diagram"
+                          IsEnabled="{Binding IsGatesModifyGateDiagramEnabled}"
+                          Click="ModifyGateDiagram_OnClick" />
                 <Separator />
-                <MenuItem Header="_Copy to Clipboard" />
-                <MenuItem Header="IC _Package Info..." />
-                <MenuItem Header="_Trace Gate Logic" />
+                <MenuItem Header="_Copy to Clipboard"
+                          IsEnabled="{Binding IsGatesCopyToClipboardEnabled}"
+                          Click="GateCopyToClipboard_OnClick" />
+                <MenuItem Header="IC _Package Info..."
+                          IsEnabled="{Binding IsGatesIcPackageInfoEnabled}"
+                          Click="GateIcPackageInfo_OnClick" />
+                <MenuItem Header="_Trace Gate Logic"
+                          ToggleType="CheckBox"
+                          IsChecked="{Binding IsGatesTraceLogicChecked, Mode=OneWay}"
+                          IsEnabled="{Binding IsGatesTraceLogicEnabled}"
+                          Click="GateTraceLogic_OnClick" />
                 <Separator />
                 <MenuItem Header="_Auto Redraw Diagram"
                           IsEnabled="{Binding IsGateDiagramVisible}"

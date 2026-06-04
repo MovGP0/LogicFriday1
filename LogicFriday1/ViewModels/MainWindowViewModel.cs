@@ -17,13 +17,19 @@ public partial class MainWindowViewModel : ObservableObject
 
     private FunctionSummaryRow? _logicEquationEditTarget;
 
+    private FunctionSummaryRow? _gateDiagramEditTarget;
+
     private readonly Dictionary<LogicFunction, bool> _showAllTruthTableRowsByFunction = [];
 
     private readonly Dictionary<LogicFunction, LogicFunctionDocumentState> _documentStates = new(ReferenceEqualityComparer.Instance);
 
+    private readonly Dictionary<GateDiagramFunction, GateTraceSession> _gateTraceSessions = new(ReferenceEqualityComparer.Instance);
+
     private IReadOnlyList<FunctionSummaryRow> _selectedFunctionSummaries = [];
 
     private bool _isSettingSelectedFunctionSummaries;
+
+    private bool _isGateDiagramEditorActive;
 
     public MainWindowViewModel()
         : this(new LogicFunctionFileService())
@@ -33,6 +39,8 @@ public partial class MainWindowViewModel : ObservableObject
     public MainWindowViewModel(ILogicFunctionFileService logicFunctionFileService)
     {
         _logicFunctionFileService = logicFunctionFileService;
+        GateDiagramItems.CollectionChanged += (_, _) => NotifyGatesCommandChanged();
+        GateDiagramWires.CollectionChanged += (_, _) => NotifyGatesCommandChanged();
     }
 
     [ObservableProperty]
@@ -204,6 +212,8 @@ public partial class MainWindowViewModel : ObservableObject
 
     public ObservableCollection<GateDiagramWire> GateDiagramWires { get; } = [];
 
+    public ObservableCollection<GateTraceInputRow> GateTraceInputs { get; } = [];
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsUnminimizedViewSelected))]
     [NotifyPropertyChangedFor(nameof(IsTruthTableShowModeEnabled))]
@@ -243,7 +253,7 @@ public partial class MainWindowViewModel : ObservableObject
         get => SelectedFunctionSummary?.LogicFunction is not null &&
             !IsEquationEditorVisible &&
             !IsTruthTableVisible &&
-            !IsGateDiagramVisible;
+            !_isGateDiagramEditorActive;
     }
 
     public bool IsFileNewEnabled
@@ -365,6 +375,50 @@ public partial class MainWindowViewModel : ObservableObject
     public bool IsOperationCancelEnabled
     {
         get => false;
+    }
+
+    public bool IsGatesModifyGateDiagramEnabled
+    {
+        get => IsFunctionViewModeEnabled &&
+            SelectedFunctionCount == 1 &&
+            GateDiagramSvgExportService.CanExport(SelectedFunctionSummary?.LogicFunction);
+    }
+
+    public bool IsGatesCopyToClipboardEnabled
+    {
+        get => IsGatesModifyGateDiagramEnabled ||
+            _isGateDiagramEditorActive && GateDiagramItems.Count > 0;
+    }
+
+    public bool IsGatesIcPackageInfoEnabled
+    {
+        get => HasSelectedMappedGateDiagram;
+    }
+
+    public bool IsGatesTraceLogicEnabled
+    {
+        get => HasSelectedMappedGateDiagram;
+    }
+
+    public bool IsGatesTraceLogicChecked
+    {
+        get => SelectedFunctionSummary?.LogicFunction is GateDiagramFunction gateDiagramFunction &&
+            _gateTraceSessions.ContainsKey(gateDiagramFunction);
+    }
+
+    public GateDiagramTraceResult? CurrentGateTraceResult
+    {
+        get => SelectedFunctionSummary?.LogicFunction is GateDiagramFunction gateDiagramFunction &&
+            _gateTraceSessions.TryGetValue(gateDiagramFunction, out var session)
+                ? session.Result
+                : null;
+    }
+
+    public string GateTraceOutputText
+    {
+        get => CurrentGateTraceResult is { } result
+            ? string.Join(", ", result.OutputValues.Select(static output => $"{output.Key} = {output.Value}"))
+            : "";
     }
 
     public bool IsTruthTableModifyEnabled
@@ -902,12 +956,51 @@ public partial class MainWindowViewModel : ObservableObject
         GateDiagramWires.Clear();
         _truthTableEditTarget = null;
         _logicEquationEditTarget = null;
+        _gateDiagramEditTarget = null;
+        SetGateDiagramEditorActive(true);
         IsEquationEditorVisible = false;
         IsTruthTableVisible = false;
         IsGateDiagramVisible = true;
         IsFunctionDetailVisible = false;
         SelectedGatePaletteItem = null;
         StatusText = "Editing gate diagram";
+    }
+
+    public bool StartModifySelectedGateDiagram()
+    {
+        if (!IsGatesModifyGateDiagramEnabled ||
+            SelectedFunctionSummary is not { LogicFunction: GateDiagramFunction gateDiagramFunction } summary)
+        {
+            StatusText = "Select one gate diagram to modify";
+            return false;
+        }
+
+        GateDiagramItems.Clear();
+        GateDiagramWires.Clear();
+        foreach (var item in gateDiagramFunction.Items)
+        {
+            GateDiagramItems.Add(item);
+        }
+
+        foreach (var wire in gateDiagramFunction.Wires)
+        {
+            GateDiagramWires.Add(wire with
+            {
+                RoutePoints = wire.RoutePoints.ToArray()
+            });
+        }
+
+        _truthTableEditTarget = null;
+        _logicEquationEditTarget = null;
+        _gateDiagramEditTarget = summary;
+        SetGateDiagramEditorActive(true);
+        IsEquationEditorVisible = false;
+        IsTruthTableVisible = false;
+        IsGateDiagramVisible = true;
+        IsFunctionDetailVisible = false;
+        SelectedGatePaletteItem = null;
+        StatusText = "Modifying gate diagram";
+        return true;
     }
 
     public void SubmitLogicEquationEditing()
@@ -990,10 +1083,19 @@ public partial class MainWindowViewModel : ObservableObject
 
     public void CancelGateDiagramEditing()
     {
+        var selectedFunction = SelectedFunctionSummary?.LogicFunction;
         GateDiagramItems.Clear();
         GateDiagramWires.Clear();
+        _gateDiagramEditTarget = null;
         SelectedGatePaletteItem = null;
+        SetGateDiagramEditorActive(false);
         IsGateDiagramVisible = false;
+
+        if (selectedFunction is not null)
+        {
+            ShowFunction(selectedFunction);
+        }
+
         StatusText = "Ready";
     }
 
@@ -1018,11 +1120,21 @@ public partial class MainWindowViewModel : ObservableObject
                 GateDiagramItems.ToArray(),
                 GateDiagramWires.ToArray());
 
-            AddFunction(logicFunction);
-            ShowFunction(logicFunction);
+            var editTarget = _gateDiagramEditTarget;
+            if (editTarget is not null)
+            {
+                ReplaceFunction(editTarget, logicFunction);
+            }
+            else
+            {
+                AddFunction(logicFunction);
+            }
+
+            _gateDiagramEditTarget = null;
             SelectedGatePaletteItem = null;
-            IsGateDiagramVisible = false;
-            StatusText = "Gate diagram submitted";
+            SetGateDiagramEditorActive(false);
+            ShowFunction(logicFunction);
+            StatusText = editTarget is null ? "Gate diagram submitted" : "Gate diagram modified";
             return true;
         }
         catch (GateDiagramConversionException ex)
@@ -1071,11 +1183,15 @@ public partial class MainWindowViewModel : ObservableObject
         GateDiagramItems.Clear();
         GateDiagramWires.Clear();
         _documentStates.Clear();
+        _gateTraceSessions.Clear();
+        GateTraceInputs.Clear();
         _truthTableInputNames = [];
         _truthTableOutputNames = [];
         _truthTableEditTarget = null;
         _logicEquationEditTarget = null;
+        _gateDiagramEditTarget = null;
         SelectedGatePaletteItem = null;
+        SetGateDiagramEditorActive(false);
         SelectedFunctionSummary = null;
         SelectedFunctionCount = 0;
         FunctionSummaries.Clear();
@@ -1101,6 +1217,87 @@ public partial class MainWindowViewModel : ObservableObject
     {
         SelectedGatePaletteItem = null;
         StatusText = "Ready";
+    }
+
+    public string? GetSelectedGatePackageInfo()
+    {
+        if (!IsGatesIcPackageInfoEnabled ||
+            SelectedFunctionSummary?.LogicFunction is not GateDiagramFunction gateDiagramFunction)
+        {
+            StatusText = "Select one mapped gate diagram";
+            return null;
+        }
+
+        StatusText = "IC package information generated";
+        return GateDiagramPackageInfoService.BuildPackageInfo(gateDiagramFunction);
+    }
+
+    public bool ToggleGateTraceLogic()
+    {
+        if (!IsGatesTraceLogicEnabled ||
+            SelectedFunctionSummary?.LogicFunction is not GateDiagramFunction gateDiagramFunction)
+        {
+            StatusText = "Select one mapped gate diagram";
+            return false;
+        }
+
+        if (_gateTraceSessions.ContainsKey(gateDiagramFunction))
+        {
+            _gateTraceSessions.Remove(gateDiagramFunction);
+            GateTraceInputs.Clear();
+            NotifyGateTraceStateChanged();
+            StatusText = "Gate logic trace disabled";
+            return true;
+        }
+
+        var inputValues = gateDiagramFunction.InputNames
+            .Distinct(StringComparer.Ordinal)
+            .ToDictionary(static inputName => inputName, static _ => 0, StringComparer.Ordinal);
+        var result = GateDiagramTraceService.Evaluate(gateDiagramFunction, inputValues);
+        _gateTraceSessions[gateDiagramFunction] = new GateTraceSession(inputValues, result);
+        RefreshGateTraceInputs(gateDiagramFunction);
+        NotifyGateTraceStateChanged();
+        StatusText = "Gate logic trace enabled";
+        return true;
+    }
+
+    public bool SetGateTraceInputValue(string inputName, int value)
+    {
+        if (SelectedFunctionSummary?.LogicFunction is not GateDiagramFunction gateDiagramFunction ||
+            !_gateTraceSessions.TryGetValue(gateDiagramFunction, out var session))
+        {
+            StatusText = "Gate logic trace is not active";
+            return false;
+        }
+
+        if (!session.InputValues.ContainsKey(inputName))
+        {
+            StatusText = $"Unknown trace input: {inputName}";
+            return false;
+        }
+
+        session.InputValues[inputName] = value == 0 ? 0 : 1;
+        _gateTraceSessions[gateDiagramFunction] = session with
+        {
+            Result = GateDiagramTraceService.Evaluate(gateDiagramFunction, session.InputValues)
+        };
+        RefreshGateTraceInputs(gateDiagramFunction);
+        NotifyGateTraceStateChanged();
+        StatusText = "Gate logic trace recomputed";
+        return true;
+    }
+
+    public bool ToggleGateTraceInput(string inputName)
+    {
+        if (SelectedFunctionSummary?.LogicFunction is not GateDiagramFunction gateDiagramFunction ||
+            !_gateTraceSessions.TryGetValue(gateDiagramFunction, out var session) ||
+            !session.InputValues.TryGetValue(inputName, out var value))
+        {
+            StatusText = "Gate logic trace is not active";
+            return false;
+        }
+
+        return SetGateTraceInputValue(inputName, value == 0 ? 1 : 0);
     }
 
     public void SetSelectedFunctionCount(int selectedFunctionCount)
@@ -1164,6 +1361,20 @@ public partial class MainWindowViewModel : ObservableObject
         return svg;
     }
 
+    public string? CreateGateDiagramClipboardSvg()
+    {
+        var gateDiagramFunction = GetGateDiagramForClipboard();
+        if (gateDiagramFunction is null)
+        {
+            StatusText = "Select one gate diagram to copy";
+            return null;
+        }
+
+        var svg = GateDiagramSvgExportService.Export(gateDiagramFunction);
+        StatusText = "Gate diagram copied to clipboard";
+        return svg;
+    }
+
     public void ShowFunction(LogicFunction logicFunction)
     {
         if (logicFunction is GateDiagramFunction gateDiagramFunction)
@@ -1209,6 +1420,7 @@ public partial class MainWindowViewModel : ObservableObject
 
         LogicEquationText = logicFunction.EquationText;
         RefreshFunctionTruthTable(logicFunction);
+        SetGateDiagramEditorActive(false);
         GateDiagramItems.Clear();
         foreach (var item in logicFunction.Items)
         {
@@ -1679,7 +1891,7 @@ public partial class MainWindowViewModel : ObservableObject
     {
         get => !IsEquationEditorVisible &&
             !IsTruthTableVisible &&
-            !IsGateDiagramVisible;
+            !_isGateDiagramEditorActive;
     }
 
     partial void OnSelectedFunctionSummaryChanged(FunctionSummaryRow? value)
@@ -1733,6 +1945,7 @@ public partial class MainWindowViewModel : ObservableObject
     partial void OnIsGateDiagramVisibleChanged(bool value)
     {
         NotifyFileCommandChanged();
+        NotifyGatesCommandChanged();
         NotifyTwoFunctionOperationChanged();
     }
 
@@ -1744,6 +1957,7 @@ public partial class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(IsMinimizedViewEnabled));
         OnPropertyChanged(nameof(IsOperationMinimizeEnabled));
         OnPropertyChanged(nameof(IsOperationMapToGatesEnabled));
+        NotifyGatesCommandChanged();
         OnPropertyChanged(nameof(IsOperationCloneFunctionEnabled));
         OnPropertyChanged(nameof(IsOperationCompareFunctionsEnabled));
         OnPropertyChanged(nameof(IsOperationTwoFunctionEnabled));
@@ -1768,6 +1982,7 @@ public partial class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(IsMinimizedViewEnabled));
         OnPropertyChanged(nameof(IsOperationMinimizeEnabled));
         OnPropertyChanged(nameof(IsOperationMapToGatesEnabled));
+        NotifyGatesCommandChanged();
         OnPropertyChanged(nameof(IsOperationCloneFunctionEnabled));
         OnPropertyChanged(nameof(IsOperationCompareFunctionsEnabled));
         OnPropertyChanged(nameof(IsOperationGenerateLookupFunctionEnabled));
@@ -1800,6 +2015,74 @@ public partial class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(IsFilePrintEnabled));
         OnPropertyChanged(nameof(SelectedFunctionFilePath));
         OnPropertyChanged(nameof(IsSelectedFunctionDirty));
+    }
+
+    private void NotifyGatesCommandChanged()
+    {
+        OnPropertyChanged(nameof(IsGatesModifyGateDiagramEnabled));
+        OnPropertyChanged(nameof(IsGatesCopyToClipboardEnabled));
+        OnPropertyChanged(nameof(IsGatesIcPackageInfoEnabled));
+        OnPropertyChanged(nameof(IsGatesTraceLogicEnabled));
+        NotifyGateTraceStateChanged();
+    }
+
+    private void NotifyGateTraceStateChanged()
+    {
+        OnPropertyChanged(nameof(IsGatesTraceLogicChecked));
+        OnPropertyChanged(nameof(CurrentGateTraceResult));
+        OnPropertyChanged(nameof(GateTraceOutputText));
+    }
+
+    private GateDiagramFunction? GetGateDiagramForClipboard()
+    {
+        if (IsGateDiagramVisible && GateDiagramItems.Count > 0)
+        {
+            return new GateDiagramFunction(
+                [],
+                [],
+                [],
+                "",
+                GateDiagramItems.ToArray(),
+                GateDiagramWires.ToArray());
+        }
+
+        return IsGatesModifyGateDiagramEnabled &&
+            SelectedFunctionSummary?.LogicFunction is GateDiagramFunction gateDiagramFunction
+                ? gateDiagramFunction
+                : null;
+    }
+
+    private bool HasSelectedMappedGateDiagram
+    {
+        get => IsFunctionViewModeEnabled &&
+            SelectedFunctionCount == 1 &&
+            GateDiagramSvgExportService.CanExport(SelectedFunctionSummary?.LogicFunction);
+    }
+
+    private void SetGateDiagramEditorActive(bool value)
+    {
+        if (_isGateDiagramEditorActive == value)
+        {
+            return;
+        }
+
+        _isGateDiagramEditorActive = value;
+        NotifyFunctionViewModeChanged();
+        NotifyGatesCommandChanged();
+    }
+
+    private void RefreshGateTraceInputs(GateDiagramFunction gateDiagramFunction)
+    {
+        GateTraceInputs.Clear();
+        if (!_gateTraceSessions.TryGetValue(gateDiagramFunction, out var session))
+        {
+            return;
+        }
+
+        foreach (var inputName in gateDiagramFunction.InputNames)
+        {
+            GateTraceInputs.Add(new GateTraceInputRow(inputName, session.InputValues[inputName]));
+        }
     }
 
     private void SetShowAllTruthTableRows(bool showAllRows)
@@ -1974,4 +2257,8 @@ public partial class MainWindowViewModel : ObservableObject
     private sealed record LogicFunctionDocumentState(
         string? FilePath,
         bool IsDirty);
+
+    private sealed record GateTraceSession(
+        Dictionary<string, int> InputValues,
+        GateDiagramTraceResult Result);
 }
