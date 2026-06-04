@@ -27,7 +27,6 @@ public static class TruthTableImporter
         var header = ParseHeader(lines[0].Text, lines[0].LineNumber);
         var rowCount = 1 << header.InputNames.Length;
         var outputValues = CreateOutputValues(rowCount, header.OutputNames.Length);
-        var assigned = new bool[rowCount];
 
         for (var lineIndex = 1; lineIndex < lines.Length; lineIndex++)
         {
@@ -42,8 +41,7 @@ public static class TruthTableImporter
                 lines[lineIndex].LineNumber,
                 header.InputNames.Length,
                 header.OutputNames.Length,
-                outputValues,
-                assigned);
+                outputValues);
         }
 
         return new TruthTableImportResult(header.InputNames, header.OutputNames, outputValues);
@@ -154,8 +152,7 @@ public static class TruthTableImporter
         int lineNumber,
         int inputCount,
         int outputCount,
-        string[][] outputValues,
-        bool[] assigned)
+        string[][] outputValues)
     {
         var (inputPattern, outputPattern) = ParseRowPatterns(parts, lineNumber);
         if (inputPattern.Length != inputCount || outputPattern.Length != outputCount)
@@ -169,26 +166,28 @@ public static class TruthTableImporter
 
         foreach (var term in ExpandInputPattern(inputPattern))
         {
-            if (assigned[term])
-            {
-                for (var outputIndex = 0; outputIndex < outputCount; outputIndex++)
-                {
-                    if (outputValues[term][outputIndex] != outputPattern[outputIndex].ToString())
-                    {
-                        throw new TruthTableImportException(
-                            $"Line {lineNumber} conflicts with an output value assigned earlier.");
-                    }
-                }
-
-                continue;
-            }
-
-            assigned[term] = true;
             for (var outputIndex = 0; outputIndex < outputCount; outputIndex++)
             {
-                outputValues[term][outputIndex] = outputPattern[outputIndex].ToString();
+                outputValues[term][outputIndex] = MergeOutputValue(
+                    outputValues[term][outputIndex],
+                    outputPattern[outputIndex]);
             }
         }
+    }
+
+    private static string MergeOutputValue(string currentValue, char importedValue)
+    {
+        if (currentValue == "1" || importedValue == '1')
+        {
+            return "1";
+        }
+
+        if (currentValue == "X" || importedValue == 'X')
+        {
+            return "X";
+        }
+
+        return "0";
     }
 
     private static (string InputPattern, string OutputPattern) ParseRowPatterns(string[] parts, int lineNumber)
