@@ -207,9 +207,10 @@
                           Click="TruthTableInvert_OnClick" />
                 <Separator />
                 <MenuItem Header="_Submit (Enter)"
+                          IsEnabled="{Binding IsTruthTableSubmitEnabled}"
                           Click="TruthTableSubmit_OnClick" />
                 <MenuItem Header="_Cancel (Esc)"
-                          IsEnabled="{Binding IsTruthTableVisible}"
+                          IsEnabled="{Binding IsTruthTableCancelEnabled}"
                           Click="TruthTableCancel_OnClick" />
             </MenuItem>
 

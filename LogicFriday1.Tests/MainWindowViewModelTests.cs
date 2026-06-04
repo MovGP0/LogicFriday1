@@ -151,6 +151,54 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public void TruthTableSubmitCommandEnablement_IsDisabledOutsideTruthTableEntryMode()
+    {
+        var viewModel = new MainWindowViewModel();
+
+        viewModel.ShouldSatisfyAllConditions(
+            static vm => vm.IsTruthTableSubmitEnabled.ShouldBeFalse(),
+            static vm => vm.IsTruthTableCancelEnabled.ShouldBeFalse());
+    }
+
+    [Fact]
+    public void TruthTableSubmitCommandEnablement_IsEnabledDuringTruthTableEntryMode()
+    {
+        var viewModel = new MainWindowViewModel();
+
+        viewModel.StartNewTruthTable(["A"], ["F"]);
+
+        viewModel.ShouldSatisfyAllConditions(
+            static vm => vm.IsTruthTableSubmitEnabled.ShouldBeTrue(),
+            static vm => vm.IsTruthTableCancelEnabled.ShouldBeTrue());
+    }
+
+    [Fact]
+    public void TruthTableSubmitCommandEnablement_IsDisabledAfterTruthTableSubmit()
+    {
+        var viewModel = new MainWindowViewModel();
+
+        viewModel.StartNewTruthTable(["A"], ["F"]);
+        viewModel.SubmitTruthTableEditing();
+
+        viewModel.ShouldSatisfyAllConditions(
+            static vm => vm.IsTruthTableSubmitEnabled.ShouldBeFalse(),
+            static vm => vm.IsTruthTableCancelEnabled.ShouldBeFalse());
+    }
+
+    [Fact]
+    public void TruthTableSubmitCommandEnablement_IsDisabledAfterTruthTableCancel()
+    {
+        var viewModel = new MainWindowViewModel();
+
+        viewModel.StartNewTruthTable(["A"], ["F"]);
+        viewModel.CancelTruthTableEditing();
+
+        viewModel.ShouldSatisfyAllConditions(
+            static vm => vm.IsTruthTableSubmitEnabled.ShouldBeFalse(),
+            static vm => vm.IsTruthTableCancelEnabled.ShouldBeFalse());
+    }
+
+    [Fact]
     public void TruthTableShowMode_DefaultsToTrueAndDontCareRows()
     {
         var viewModel = CreateTruthTableShowModeViewModel();

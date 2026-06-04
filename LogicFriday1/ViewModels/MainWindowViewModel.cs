@@ -45,6 +45,8 @@ public partial class MainWindowViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(IsTruthTableModifyEnabled))]
     [NotifyPropertyChangedFor(nameof(IsEquationModifyEnabled))]
     [NotifyPropertyChangedFor(nameof(IsEquationFormatEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsTruthTableSubmitEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsTruthTableCancelEnabled))]
     private bool _isTruthTableVisible;
 
     [ObservableProperty]
@@ -220,6 +222,16 @@ public partial class MainWindowViewModel : ObservableObject
     public bool IsEquationCancelEnabled
     {
         get => IsEquationEditorVisible;
+    }
+
+    public bool IsTruthTableSubmitEnabled
+    {
+        get => IsTruthTableVisible;
+    }
+
+    public bool IsTruthTableCancelEnabled
+    {
+        get => IsTruthTableVisible;
     }
 
     public bool IsTruthTableShowModeEnabled
