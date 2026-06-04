@@ -1,4 +1,18 @@
 <Solution>
+  <Folder Name="/SolutionItems/">
+    <File Path=".editorconfig" />
+    <File Path=".gitattributes" />
+    <File Path=".gitignore" />
+    <File Path=".gitmodules" />
+    <File Path="AGENTS.md" />
+    <File Path="CLAUDE.md" />
+    <File Path="Directory.Build.props" />
+    <File Path="Directory.Packages.props" />
+    <File Path="IssueTracking.md" />
+    <File Path="LICENSE" />
+    <File Path="NuGet.config" />
+    <File Path="README.md" />
+  </Folder>
   <Project Path="LogicFriday1.Espresso/LogicFriday1.Espresso.csproj" />
   <Project Path="LogicFriday1.Tests/LogicFriday1.Tests.csproj" />
   <Project Path="LogicFriday1.MaterialIcons/LogicFriday1.MaterialIcons.csproj" />
