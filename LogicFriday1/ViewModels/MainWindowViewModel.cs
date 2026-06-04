@@ -7,6 +7,8 @@ namespace LogicFriday1.ViewModels;
 
 public partial class MainWindowViewModel : ObservableObject
 {
+    private readonly ILogicFunctionFileService _logicFunctionFileService;
+
     private string[] _truthTableInputNames = [];
 
     private string[] _truthTableOutputNames = [];
@@ -17,9 +19,21 @@ public partial class MainWindowViewModel : ObservableObject
 
     private readonly Dictionary<LogicFunction, bool> _showAllTruthTableRowsByFunction = [];
 
+    private readonly Dictionary<LogicFunction, LogicFunctionDocumentState> _documentStates = new(ReferenceEqualityComparer.Instance);
+
     private IReadOnlyList<FunctionSummaryRow> _selectedFunctionSummaries = [];
 
     private bool _isSettingSelectedFunctionSummaries;
+
+    public MainWindowViewModel()
+        : this(new LogicFunctionFileService())
+    {
+    }
+
+    public MainWindowViewModel(ILogicFunctionFileService logicFunctionFileService)
+    {
+        _logicFunctionFileService = logicFunctionFileService;
+    }
 
     [ObservableProperty]
     private string _statusText = "Ready";
@@ -29,6 +43,9 @@ public partial class MainWindowViewModel : ObservableObject
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsFunctionViewModeEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsFileExportEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsFileExportTruthTableEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsFileExportGateDiagramEnabled))]
     [NotifyPropertyChangedFor(nameof(IsMinimizedViewEnabled))]
     [NotifyPropertyChangedFor(nameof(IsOperationMinimizeEnabled))]
     [NotifyPropertyChangedFor(nameof(IsOperationMapToGatesEnabled))]
@@ -42,12 +59,17 @@ public partial class MainWindowViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(IsTruthTableModifyEnabled))]
     [NotifyPropertyChangedFor(nameof(IsEquationModifyEnabled))]
     [NotifyPropertyChangedFor(nameof(IsEquationFormatEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsFileSaveEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsFileSaveAsEnabled))]
     [NotifyPropertyChangedFor(nameof(IsEquationSubmitEnabled))]
     [NotifyPropertyChangedFor(nameof(IsEquationCancelEnabled))]
     private bool _isEquationEditorVisible;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsFunctionViewModeEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsFileExportEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsFileExportTruthTableEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsFileExportGateDiagramEnabled))]
     [NotifyPropertyChangedFor(nameof(IsMinimizedViewEnabled))]
     [NotifyPropertyChangedFor(nameof(IsOperationMinimizeEnabled))]
     [NotifyPropertyChangedFor(nameof(IsOperationMapToGatesEnabled))]
@@ -61,12 +83,17 @@ public partial class MainWindowViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(IsTruthTableModifyEnabled))]
     [NotifyPropertyChangedFor(nameof(IsEquationModifyEnabled))]
     [NotifyPropertyChangedFor(nameof(IsEquationFormatEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsFileSaveEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsFileSaveAsEnabled))]
     [NotifyPropertyChangedFor(nameof(IsTruthTableSubmitEnabled))]
     [NotifyPropertyChangedFor(nameof(IsTruthTableCancelEnabled))]
     private bool _isTruthTableVisible;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsFunctionViewModeEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsFileExportEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsFileExportTruthTableEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsFileExportGateDiagramEnabled))]
     [NotifyPropertyChangedFor(nameof(IsMinimizedViewEnabled))]
     [NotifyPropertyChangedFor(nameof(IsOperationMinimizeEnabled))]
     [NotifyPropertyChangedFor(nameof(IsOperationMapToGatesEnabled))]
@@ -80,6 +107,8 @@ public partial class MainWindowViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(IsTruthTableModifyEnabled))]
     [NotifyPropertyChangedFor(nameof(IsEquationModifyEnabled))]
     [NotifyPropertyChangedFor(nameof(IsEquationFormatEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsFileSaveEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsFileSaveAsEnabled))]
     private bool _isGateDiagramVisible;
 
     [ObservableProperty]
@@ -88,6 +117,9 @@ public partial class MainWindowViewModel : ObservableObject
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsFunctionViewModeEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsFileExportEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsFileExportTruthTableEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsFileExportGateDiagramEnabled))]
     [NotifyPropertyChangedFor(nameof(IsMinimizedViewEnabled))]
     [NotifyPropertyChangedFor(nameof(IsOperationMinimizeEnabled))]
     [NotifyPropertyChangedFor(nameof(IsOperationMapToGatesEnabled))]
@@ -104,9 +136,16 @@ public partial class MainWindowViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(IsEquationFormatEnabled))]
     [NotifyPropertyChangedFor(nameof(IsShowAllTruthTableRowsSelected))]
     [NotifyPropertyChangedFor(nameof(IsShowTrueAndDontCareTruthTableRowsSelected))]
+    [NotifyPropertyChangedFor(nameof(IsFileSaveEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsFileSaveAsEnabled))]
+    [NotifyPropertyChangedFor(nameof(SelectedFunctionFilePath))]
+    [NotifyPropertyChangedFor(nameof(IsSelectedFunctionDirty))]
     private FunctionSummaryRow? _selectedFunctionSummary;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsFileExportEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsFileExportTruthTableEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsFileExportGateDiagramEnabled))]
     [NotifyPropertyChangedFor(nameof(IsOperationMinimizeEnabled))]
     [NotifyPropertyChangedFor(nameof(IsOperationMapToGatesEnabled))]
     [NotifyPropertyChangedFor(nameof(IsOperationCloneFunctionEnabled))]
@@ -119,6 +158,8 @@ public partial class MainWindowViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(IsTruthTableModifyEnabled))]
     [NotifyPropertyChangedFor(nameof(IsEquationModifyEnabled))]
     [NotifyPropertyChangedFor(nameof(IsEquationFormatEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsFileSaveEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsFileSaveAsEnabled))]
     private int _selectedFunctionCount;
 
     [ObservableProperty]
@@ -203,6 +244,66 @@ public partial class MainWindowViewModel : ObservableObject
             !IsEquationEditorVisible &&
             !IsTruthTableVisible &&
             !IsGateDiagramVisible;
+    }
+
+    public bool IsFileNewEnabled
+    {
+        get => IsFileCommandModeEnabled;
+    }
+
+    public bool IsFileOpenEnabled
+    {
+        get => IsFileCommandModeEnabled;
+    }
+
+    public bool IsFileSaveEnabled
+    {
+        get => IsFunctionViewModeEnabled &&
+            SelectedFunctionCount >= 1;
+    }
+
+    public bool IsFileSaveAsEnabled
+    {
+        get => IsFunctionViewModeEnabled &&
+            SelectedFunctionCount == 1;
+    }
+
+    public string? SelectedFunctionFilePath
+    {
+        get => SelectedFunctionSummary?.LogicFunction is { } logicFunction &&
+            _documentStates.TryGetValue(logicFunction, out var state)
+                ? state.FilePath
+                : null;
+    }
+
+    public bool IsSelectedFunctionDirty
+    {
+        get => SelectedFunctionSummary?.LogicFunction is { } logicFunction &&
+            _documentStates.TryGetValue(logicFunction, out var state) &&
+            state.IsDirty;
+    }
+
+    public bool IsFileExportEnabled
+    {
+        get => IsFunctionViewModeEnabled &&
+            SelectedFunctionCount == 1;
+    }
+
+    public bool IsFileExportTruthTableEnabled
+    {
+        get => IsFileExportEnabled;
+    }
+
+    public bool IsFileExportGateDiagramEnabled
+    {
+        get => IsFileExportEnabled &&
+            GateDiagramSvgExportService.CanExport(SelectedFunctionSummary?.LogicFunction);
+    }
+
+    public bool IsFilePrintEnabled
+    {
+        get => IsFunctionViewModeEnabled &&
+            SelectedFunctionCount == 1;
     }
 
     public bool IsMinimizedViewEnabled
@@ -392,6 +493,7 @@ public partial class MainWindowViewModel : ObservableObject
                 FunctionSummaries[summaryIndex] = updatedSummary;
             }
 
+            MarkReplacedFunctionDirty(logicFunction, updatedFunction);
             SelectedFunctionSummary = updatedSummary;
             NotifyFunctionViewModeChanged();
             ShowFunction(updatedFunction);
@@ -435,6 +537,7 @@ public partial class MainWindowViewModel : ObservableObject
                 FunctionSummaries.Add(mappedSummary);
             }
 
+            MarkReplacedFunctionDirty(logicFunction, mappedFunction);
             SelectedFunctionSummary = mappedSummary;
             SelectedFunctionCount = 1;
             ShowGateDiagramFunction(mappedFunction);
@@ -529,6 +632,78 @@ public partial class MainWindowViewModel : ObservableObject
         StatusText = "No operation is active";
     }
 
+    public bool OpenFunction(string filePath)
+    {
+        if (!IsFileOpenEnabled)
+        {
+            StatusText = "Open is not available";
+            return false;
+        }
+
+        try
+        {
+            var logicFunction = _logicFunctionFileService.Load(filePath);
+            AddFunction(logicFunction, filePath, isDirty: false);
+            ShowFunction(logicFunction);
+            NotifyFileCommandChanged();
+            StatusText = "Function opened";
+            return true;
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"Open failed: {ex.Message}";
+            return false;
+        }
+    }
+
+    public bool SaveSelectedFunction()
+    {
+        if (!IsFileSaveEnabled)
+        {
+            StatusText = "No function is selected";
+            return false;
+        }
+
+        if (SelectedFunctionCount != 1 ||
+            SelectedFunctionSummary is not { LogicFunction: { } logicFunction })
+        {
+            StatusText = "Multiple functions selected.";
+            return false;
+        }
+
+        if (SelectedFunctionFilePath is not { Length: > 0 } filePath)
+        {
+            StatusText = "Save As required";
+            return false;
+        }
+
+        return SaveFunction(logicFunction, filePath);
+    }
+
+    public bool SaveSelectedFunctionAs(string filePath)
+    {
+        if (!IsFileSaveAsEnabled ||
+            SelectedFunctionSummary is not { LogicFunction: { } logicFunction })
+        {
+            StatusText = "No function is selected";
+            return false;
+        }
+
+        return SaveFunction(logicFunction, filePath);
+    }
+
+    public bool PrintSelectedFunction()
+    {
+        if (!IsFilePrintEnabled)
+        {
+            StatusText = "Select one function to print";
+            return false;
+        }
+
+        StatusText = "Print is not yet supported in this port";
+        return true;
+    }
+
     public void StartNewLogicEquation()
     {
         LogicEquationText = "";
@@ -608,6 +783,7 @@ public partial class MainWindowViewModel : ObservableObject
             FunctionSummaries.Add(updatedSummary);
         }
 
+        MarkReplacedFunctionDirty(logicFunction, updatedFunction);
         SelectedFunctionSummary = updatedSummary;
         SelectedFunctionCount = 1;
         ShowFunction(updatedFunction);
@@ -894,6 +1070,7 @@ public partial class MainWindowViewModel : ObservableObject
         FunctionTruthTableRows.Clear();
         GateDiagramItems.Clear();
         GateDiagramWires.Clear();
+        _documentStates.Clear();
         _truthTableInputNames = [];
         _truthTableOutputNames = [];
         _truthTableEditTarget = null;
@@ -910,6 +1087,7 @@ public partial class MainWindowViewModel : ObservableObject
         IsTruthTableVisible = false;
         IsGateDiagramVisible = false;
         IsFunctionDetailVisible = false;
+        NotifyFileCommandChanged();
         StatusText = "Ready";
     }
 
@@ -954,6 +1132,36 @@ public partial class MainWindowViewModel : ObservableObject
     public LogicFunction? GetSelectedFunction()
     {
         return SelectedFunctionSummary?.LogicFunction;
+    }
+
+    public string? ExportSelectedTruthTableCsv()
+    {
+        if (!IsFileExportTruthTableEnabled ||
+            SelectedFunctionSummary?.LogicFunction is not { } logicFunction)
+        {
+            StatusText = "Select one function to export";
+            return null;
+        }
+
+        var csv = TruthTableCsvExportService.Export(
+            logicFunction,
+            IsMinimizedViewSelected && logicFunction.MinimizedFunction is not null);
+        StatusText = "Truth table exported";
+        return csv;
+    }
+
+    public string? ExportSelectedGateDiagramSvg()
+    {
+        if (!IsFileExportGateDiagramEnabled ||
+            SelectedFunctionSummary?.LogicFunction is not GateDiagramFunction gateDiagramFunction)
+        {
+            StatusText = "Select one gate diagram to export";
+            return null;
+        }
+
+        var svg = GateDiagramSvgExportService.Export(gateDiagramFunction);
+        StatusText = "Gate diagram exported";
+        return svg;
     }
 
     public void ShowFunction(LogicFunction logicFunction)
@@ -1249,7 +1457,26 @@ public partial class MainWindowViewModel : ObservableObject
             : "1";
     }
 
-    private void AddFunction(LogicFunction logicFunction)
+    private bool SaveFunction(LogicFunction logicFunction, string filePath)
+    {
+        try
+        {
+            _logicFunctionFileService.Save(filePath, logicFunction);
+            SetDocumentState(logicFunction, filePath, isDirty: false);
+            StatusText = "Function saved";
+            return true;
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"Save failed: {ex.Message}";
+            return false;
+        }
+    }
+
+    private void AddFunction(
+        LogicFunction logicFunction,
+        string? filePath = null,
+        bool isDirty = true)
     {
         if (FunctionSummaries.Count == 1 && FunctionSummaries[0].LogicFunction is null)
         {
@@ -1258,6 +1485,7 @@ public partial class MainWindowViewModel : ObservableObject
 
         var summary = CreateFunctionSummary(logicFunction);
         FunctionSummaries.Add(summary);
+        SetDocumentState(logicFunction, filePath, isDirty);
         SelectedFunctionSummary = summary;
         SelectedFunctionCount = 1;
     }
@@ -1273,8 +1501,35 @@ public partial class MainWindowViewModel : ObservableObject
         }
 
         FunctionSummaries[summaryIndex] = summary;
+        if (editTarget.LogicFunction is { } replacedFunction)
+        {
+            MarkReplacedFunctionDirty(replacedFunction, logicFunction);
+        }
+        else
+        {
+            SetDocumentState(logicFunction, filePath: null, isDirty: true);
+        }
+
         SelectedFunctionSummary = summary;
         SelectedFunctionCount = 1;
+    }
+
+    private void MarkReplacedFunctionDirty(LogicFunction replacedFunction, LogicFunction replacementFunction)
+    {
+        var filePath = _documentStates.TryGetValue(replacedFunction, out var state)
+            ? state.FilePath
+            : null;
+        _documentStates.Remove(replacedFunction);
+        SetDocumentState(replacementFunction, filePath, isDirty: true);
+    }
+
+    private void SetDocumentState(
+        LogicFunction logicFunction,
+        string? filePath,
+        bool isDirty)
+    {
+        _documentStates[logicFunction] = new LogicFunctionDocumentState(filePath, isDirty);
+        NotifyFileCommandChanged();
     }
 
     private static FunctionSummaryRow CreateFunctionSummary(LogicFunction logicFunction)
@@ -1420,6 +1675,13 @@ public partial class MainWindowViewModel : ObservableObject
         };
     }
 
+    private bool IsFileCommandModeEnabled
+    {
+        get => !IsEquationEditorVisible &&
+            !IsTruthTableVisible &&
+            !IsGateDiagramVisible;
+    }
+
     partial void OnSelectedFunctionSummaryChanged(FunctionSummaryRow? value)
     {
         if (_isSettingSelectedFunctionSummaries)
@@ -1430,6 +1692,7 @@ public partial class MainWindowViewModel : ObservableObject
         _selectedFunctionSummaries = value is null
             ? []
             : [value];
+        NotifyFileCommandChanged();
     }
 
     partial void OnSelectedFunctionCountChanged(int value)
@@ -1451,20 +1714,25 @@ public partial class MainWindowViewModel : ObservableObject
         {
             _selectedFunctionSummaries = [];
         }
+
+        NotifyFileCommandChanged();
     }
 
     partial void OnIsEquationEditorVisibleChanged(bool value)
     {
+        NotifyFileCommandChanged();
         NotifyTwoFunctionOperationChanged();
     }
 
     partial void OnIsTruthTableVisibleChanged(bool value)
     {
+        NotifyFileCommandChanged();
         NotifyTwoFunctionOperationChanged();
     }
 
     partial void OnIsGateDiagramVisibleChanged(bool value)
     {
+        NotifyFileCommandChanged();
         NotifyTwoFunctionOperationChanged();
     }
 
@@ -1472,6 +1740,7 @@ public partial class MainWindowViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(IsUnminimizedViewSelected));
         OnPropertyChanged(nameof(IsFunctionViewModeEnabled));
+        NotifyFileCommandChanged();
         OnPropertyChanged(nameof(IsMinimizedViewEnabled));
         OnPropertyChanged(nameof(IsOperationMinimizeEnabled));
         OnPropertyChanged(nameof(IsOperationMapToGatesEnabled));
@@ -1495,6 +1764,7 @@ public partial class MainWindowViewModel : ObservableObject
     private void NotifySelectionChanged()
     {
         OnPropertyChanged(nameof(IsFunctionViewModeEnabled));
+        NotifyFileCommandChanged();
         OnPropertyChanged(nameof(IsMinimizedViewEnabled));
         OnPropertyChanged(nameof(IsOperationMinimizeEnabled));
         OnPropertyChanged(nameof(IsOperationMapToGatesEnabled));
@@ -1516,6 +1786,20 @@ public partial class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(IsOperationOrFunctionsEnabled));
         OnPropertyChanged(nameof(IsOperationAndFunctionsEnabled));
         OnPropertyChanged(nameof(IsOperationXorFunctionsEnabled));
+    }
+
+    private void NotifyFileCommandChanged()
+    {
+        OnPropertyChanged(nameof(IsFileNewEnabled));
+        OnPropertyChanged(nameof(IsFileOpenEnabled));
+        OnPropertyChanged(nameof(IsFileSaveEnabled));
+        OnPropertyChanged(nameof(IsFileSaveAsEnabled));
+        OnPropertyChanged(nameof(IsFileExportEnabled));
+        OnPropertyChanged(nameof(IsFileExportTruthTableEnabled));
+        OnPropertyChanged(nameof(IsFileExportGateDiagramEnabled));
+        OnPropertyChanged(nameof(IsFilePrintEnabled));
+        OnPropertyChanged(nameof(SelectedFunctionFilePath));
+        OnPropertyChanged(nameof(IsSelectedFunctionDirty));
     }
 
     private void SetShowAllTruthTableRows(bool showAllRows)
@@ -1686,4 +1970,8 @@ public partial class MainWindowViewModel : ObservableObject
             _ => $"{outputNames[0]}-{outputNames[^1]}"
         };
     }
+
+    private sealed record LogicFunctionDocumentState(
+        string? FilePath,
+        bool IsDirty);
 }

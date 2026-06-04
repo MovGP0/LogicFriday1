@@ -317,6 +317,11 @@ public partial class MainWindow : Window
 
     private async void NewTruthTable_OnClick(object? sender, RoutedEventArgs e)
     {
+        await StartNewTruthTableAsync();
+    }
+
+    private async Task StartNewTruthTableAsync()
+    {
         var dialog = new TruthTableSetupDialog();
         var result = await dialog.ShowDialog<bool?>(this);
         if (result != true || DataContext is not MainWindowViewModel viewModel)
@@ -360,7 +365,7 @@ public partial class MainWindow : Window
 
     private void NewLogicEquation_OnClick(object? sender, RoutedEventArgs e)
     {
-        if (DataContext is MainWindowViewModel viewModel)
+        if (DataContext is MainWindowViewModel { IsFileNewEnabled: true } viewModel)
         {
             viewModel.StartNewLogicEquation();
             EquationEditor.Focus();
@@ -422,10 +427,92 @@ public partial class MainWindow : Window
 
     private void NewGateDiagram_OnClick(object? sender, RoutedEventArgs e)
     {
-        if (DataContext is MainWindowViewModel viewModel)
+        if (DataContext is MainWindowViewModel { IsFileNewEnabled: true } viewModel)
         {
             viewModel.StartNewGateDiagram();
         }
+    }
+
+    private async void ToolbarNew_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainWindowViewModel { IsFileNewEnabled: true })
+        {
+            return;
+        }
+
+        var choice = await ShowNewFunctionChooserAsync();
+        switch (choice)
+        {
+            case "TruthTable":
+                await StartNewTruthTableAsync();
+                break;
+            case "LogicEquation":
+                NewLogicEquation_OnClick(sender, e);
+                break;
+            case "GateDiagram":
+                NewGateDiagram_OnClick(sender, e);
+                break;
+        }
+    }
+
+    private async Task<string?> ShowNewFunctionChooserAsync()
+    {
+        var dialog = new Window
+        {
+            Title = "New Function",
+            Width = 320,
+            Height = 190,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            CanResize = false
+        };
+
+        var truthTableButton = new Button
+        {
+            Content = "Truth Table",
+            HorizontalAlignment = HorizontalAlignment.Stretch
+        };
+        var logicEquationButton = new Button
+        {
+            Content = "Logic Equation",
+            HorizontalAlignment = HorizontalAlignment.Stretch
+        };
+        var gateDiagramButton = new Button
+        {
+            Content = "Gate Diagram",
+            HorizontalAlignment = HorizontalAlignment.Stretch
+        };
+        var cancelButton = new Button
+        {
+            Content = "Cancel",
+            MinWidth = 80,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            IsCancel = true
+        };
+
+        truthTableButton.Click += (_, _) => dialog.Close("TruthTable");
+        logicEquationButton.Click += (_, _) => dialog.Close("LogicEquation");
+        gateDiagramButton.Click += (_, _) => dialog.Close("GateDiagram");
+        cancelButton.Click += (_, _) => dialog.Close(null);
+
+        dialog.Content = new Grid
+        {
+            RowDefinitions = new RowDefinitions("Auto,Auto,Auto,Auto"),
+            Margin = new Avalonia.Thickness(16),
+            RowSpacing = 8,
+            Children =
+            {
+                truthTableButton,
+                logicEquationButton,
+                gateDiagramButton,
+                cancelButton
+            }
+        };
+
+        Grid.SetRow(logicEquationButton, 1);
+        Grid.SetRow(gateDiagramButton, 2);
+        Grid.SetRow(cancelButton, 3);
+
+        return await dialog.ShowDialog<string?>(this);
     }
 
     private async void ImportTruthTable_OnClick(object? sender, RoutedEventArgs e)
@@ -700,6 +787,235 @@ public partial class MainWindow : Window
             TruthTableDataGrid.Columns.Clear();
             FunctionTruthTableDataGrid.Columns.Clear();
         }
+    }
+
+    private async void OpenDocument_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainWindowViewModel { IsFileOpenEnabled: true } viewModel)
+        {
+            return;
+        }
+
+        var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "Open Logic Function",
+            AllowMultiple = false,
+            FileTypeFilter =
+            [
+                new FilePickerFileType("Logic Function Files")
+                {
+                    Patterns = [ "*.lfcn" ]
+                },
+                new FilePickerFileType("All Files")
+                {
+                    Patterns = [ "*" ]
+                }
+            ]
+        });
+
+        var file = files.FirstOrDefault();
+        if (file is null)
+        {
+            return;
+        }
+
+        if (viewModel.OpenFunction(file.Path.LocalPath))
+        {
+            ConfigureSelectedFunctionTruthTableColumns(viewModel);
+            return;
+        }
+
+        await ShowMessageAsync(viewModel.StatusText, "Open Logic Function");
+    }
+
+    private async void Save_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainWindowViewModel { IsFileSaveEnabled: true } viewModel)
+        {
+            return;
+        }
+
+        if (viewModel.SaveSelectedFunction())
+        {
+            return;
+        }
+
+        if (viewModel.StatusText == "Save As required")
+        {
+            await SaveSelectedFunctionAsAsync(viewModel);
+            return;
+        }
+
+        await ShowMessageAsync(viewModel.StatusText, "Save Logic Function");
+    }
+
+    private async void SaveAs_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is MainWindowViewModel { IsFileSaveAsEnabled: true } viewModel)
+        {
+            await SaveSelectedFunctionAsAsync(viewModel);
+        }
+    }
+
+    private async void ExportTruthTable_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainWindowViewModel { IsFileExportTruthTableEnabled: true } viewModel)
+        {
+            return;
+        }
+
+        var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "Export Truth Table",
+            SuggestedFileName = GetSuggestedFileName(viewModel, ".csv"),
+            DefaultExtension = "csv",
+            FileTypeChoices =
+            [
+                new FilePickerFileType("Comma Separated Values")
+                {
+                    Patterns = [ "*.csv" ]
+                },
+                new FilePickerFileType("All Files")
+                {
+                    Patterns = [ "*" ]
+                }
+            ]
+        });
+
+        if (file is null)
+        {
+            return;
+        }
+
+        var csv = viewModel.ExportSelectedTruthTableCsv();
+        if (csv is null)
+        {
+            await ShowMessageAsync(viewModel.StatusText, "Export Truth Table");
+            return;
+        }
+
+        try
+        {
+            await using var output = await file.OpenWriteAsync();
+            if (output.CanSeek)
+            {
+                output.SetLength(0);
+            }
+
+            await using var writer = new StreamWriter(output);
+            await writer.WriteAsync(csv);
+        }
+        catch (Exception ex)
+        {
+            await ShowMessageAsync($"The truth table could not be exported.\n{ex.Message}", "Export Truth Table");
+        }
+    }
+
+    private async void ExportGateDiagram_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainWindowViewModel { IsFileExportGateDiagramEnabled: true } viewModel)
+        {
+            return;
+        }
+
+        var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "Export Gate Diagram",
+            SuggestedFileName = GetSuggestedFileName(viewModel, ".svg"),
+            DefaultExtension = "svg",
+            FileTypeChoices =
+            [
+                new FilePickerFileType("Scalable Vector Graphics")
+                {
+                    Patterns = [ "*.svg" ]
+                },
+                new FilePickerFileType("All Files")
+                {
+                    Patterns = [ "*" ]
+                }
+            ]
+        });
+
+        if (file is null)
+        {
+            return;
+        }
+
+        var svg = viewModel.ExportSelectedGateDiagramSvg();
+        if (svg is null)
+        {
+            await ShowMessageAsync(viewModel.StatusText, "Export Gate Diagram");
+            return;
+        }
+
+        try
+        {
+            await using var output = await file.OpenWriteAsync();
+            if (output.CanSeek)
+            {
+                output.SetLength(0);
+            }
+
+            await using var writer = new StreamWriter(output);
+            await writer.WriteAsync(svg);
+        }
+        catch (Exception ex)
+        {
+            await ShowMessageAsync($"The gate diagram could not be exported.\n{ex.Message}", "Export Gate Diagram");
+        }
+    }
+
+    private async void Print_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is MainWindowViewModel { IsFilePrintEnabled: true } viewModel)
+        {
+            viewModel.PrintSelectedFunction();
+            await ShowMessageAsync(viewModel.StatusText, "Print");
+        }
+    }
+
+    private async Task SaveSelectedFunctionAsAsync(MainWindowViewModel viewModel)
+    {
+        var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "Save Logic Function",
+            SuggestedFileName = GetSuggestedFileName(viewModel, ".lfcn"),
+            DefaultExtension = "lfcn",
+            FileTypeChoices =
+            [
+                new FilePickerFileType("Logic Function Files")
+                {
+                    Patterns = [ "*.lfcn" ]
+                },
+                new FilePickerFileType("All Files")
+                {
+                    Patterns = [ "*" ]
+                }
+            ]
+        });
+
+        if (file is null)
+        {
+            return;
+        }
+
+        if (!viewModel.SaveSelectedFunctionAs(file.Path.LocalPath))
+        {
+            await ShowMessageAsync(viewModel.StatusText, "Save Logic Function");
+        }
+    }
+
+    private static string GetSuggestedFileName(MainWindowViewModel viewModel, string extension)
+    {
+        var selectedFunction = viewModel.GetSelectedFunction();
+        var baseName = selectedFunction?.OutputNames.Length switch
+        {
+            1 => selectedFunction.OutputNames[0],
+            > 1 => $"{selectedFunction.OutputNames[0]}-{selectedFunction.OutputNames[^1]}",
+            _ => "function"
+        };
+
+        return string.Concat(baseName, extension);
     }
 
     private void Exit_OnClick(object? sender, RoutedEventArgs e)

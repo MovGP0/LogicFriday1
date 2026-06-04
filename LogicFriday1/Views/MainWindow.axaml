@@ -93,26 +93,40 @@
     <DockPanel>
         <Menu DockPanel.Dock="Top">
             <MenuItem Header="_File">
-                <MenuItem Header="_New">
+                <MenuItem Header="_New"
+                          IsEnabled="{Binding IsFileNewEnabled}">
                     <MenuItem Header="Truth _Table"
+                              IsEnabled="{Binding IsFileNewEnabled}"
                               Click="NewTruthTable_OnClick" />
                     <MenuItem Header="Logic _Equation"
+                              IsEnabled="{Binding IsFileNewEnabled}"
                               Click="NewLogicEquation_OnClick" />
                     <MenuItem Header="Gate _Diagram"
+                              IsEnabled="{Binding IsFileNewEnabled}"
                               Click="NewGateDiagram_OnClick" />
                 </MenuItem>
-                <MenuItem Header="_Open..." />
+                <MenuItem Header="_Open..."
+                          IsEnabled="{Binding IsFileOpenEnabled}"
+                          Click="OpenDocument_OnClick" />
                 <MenuItem Header="_Close"
                           Click="CloseDocument_OnClick" />
                 <Separator />
-                <MenuItem Header="Save _As..." />
+                <MenuItem Header="Save _As..."
+                          IsEnabled="{Binding IsFileSaveAsEnabled}"
+                          Click="SaveAs_OnClick" />
                 <Separator />
                 <MenuItem Header="_Import Truth Table..."
                           Click="ImportTruthTable_OnClick" />
-                <MenuItem Header="Export _Truth Table..." />
-                <MenuItem Header="Export _Gate Diagram..." />
+                <MenuItem Header="Export _Truth Table..."
+                          IsEnabled="{Binding IsFileExportTruthTableEnabled}"
+                          Click="ExportTruthTable_OnClick" />
+                <MenuItem Header="Export _Gate Diagram..."
+                          IsEnabled="{Binding IsFileExportGateDiagramEnabled}"
+                          Click="ExportGateDiagram_OnClick" />
                 <Separator />
-                <MenuItem Header="_Print..." />
+                <MenuItem Header="_Print..."
+                          IsEnabled="{Binding IsFilePrintEnabled}"
+                          Click="Print_OnClick" />
                 <Separator />
                 <MenuItem Header="E_xit"
                           Click="Exit_OnClick" />
@@ -344,19 +358,27 @@
             <StackPanel Orientation="Horizontal"
                         Spacing="2">
                 <Button Classes="toolbarButton"
-                        ToolTip.Tip="New...">
+                        ToolTip.Tip="New..."
+                        IsEnabled="{Binding IsFileNewEnabled}"
+                        Click="ToolbarNew_OnClick">
                     <icons:PackIcon Kind="FilePlus" />
                 </Button>
                 <Button Classes="toolbarButton"
-                        ToolTip.Tip="Open...">
+                        ToolTip.Tip="Open..."
+                        IsEnabled="{Binding IsFileOpenEnabled}"
+                        Click="OpenDocument_OnClick">
                     <icons:PackIcon Kind="FolderOpen" />
                 </Button>
                 <Button Classes="toolbarButton"
-                        ToolTip.Tip="Save">
+                        ToolTip.Tip="Save"
+                        IsEnabled="{Binding IsFileSaveEnabled}"
+                        Click="Save_OnClick">
                     <icons:PackIcon Kind="ContentSave" />
                 </Button>
                 <Button Classes="toolbarButton"
-                        ToolTip.Tip="Print">
+                        ToolTip.Tip="Print"
+                        IsEnabled="{Binding IsFilePrintEnabled}"
+                        Click="Print_OnClick">
                     <icons:PackIcon Kind="Printer" />
                 </Button>
 

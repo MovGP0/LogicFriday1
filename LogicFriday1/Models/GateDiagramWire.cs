@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace LogicFriday1.Models;
 
 public enum GateDiagramConnectionKind
@@ -20,6 +22,7 @@ public sealed record GateDiagramWirePoint(
     double X,
     double Y);
 
+[method: JsonConstructor]
 public sealed record GateDiagramWire(
     GateDiagramConnectionReference Start,
     GateDiagramConnectionReference End,

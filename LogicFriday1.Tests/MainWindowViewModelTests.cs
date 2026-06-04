@@ -1,4 +1,5 @@
 ﻿using LogicFriday1.Models;
+using LogicFriday1.Services;
 using LogicFriday1.ViewModels;
 using Shouldly;
 using Xunit;
@@ -108,6 +109,78 @@ public sealed class MainWindowViewModelTests
             static vm => vm.IsEquationFormatEnabled.ShouldBeFalse(),
             static vm => vm.IsEquationSubmitEnabled.ShouldBeFalse(),
             static vm => vm.IsEquationCancelEnabled.ShouldBeFalse());
+    }
+
+    [Fact]
+    public void FileCommandEnablement_AllowsNewAndOpenWithoutFunctions()
+    {
+        var viewModel = new MainWindowViewModel();
+
+        viewModel.ShouldSatisfyAllConditions(
+            static vm => vm.IsFileNewEnabled.ShouldBeTrue(),
+            static vm => vm.IsFileOpenEnabled.ShouldBeTrue(),
+            static vm => vm.IsFileSaveAsEnabled.ShouldBeFalse(),
+            static vm => vm.IsFileExportEnabled.ShouldBeFalse(),
+            static vm => vm.IsFilePrintEnabled.ShouldBeFalse());
+    }
+
+    [Fact]
+    public void FileCommandEnablement_AllowsSaveAsExportAndPrintForSingleSelectedFunction()
+    {
+        var viewModel = new MainWindowViewModel();
+
+        AddEquation(viewModel, "F = A;");
+
+        viewModel.ShouldSatisfyAllConditions(
+            static vm => vm.IsFileNewEnabled.ShouldBeTrue(),
+            static vm => vm.IsFileOpenEnabled.ShouldBeTrue(),
+            static vm => vm.IsFileSaveAsEnabled.ShouldBeTrue(),
+            static vm => vm.IsFileExportEnabled.ShouldBeTrue(),
+            static vm => vm.IsFilePrintEnabled.ShouldBeTrue());
+    }
+
+    [Fact]
+    public void FileCommandEnablement_DisablesExportAndPrintForMultipleSelectedFunctions()
+    {
+        var viewModel = CreateTwoSelectedTruthTableFunctions(
+            ["A"],
+            ["0", "1"],
+            ["1", "0"]);
+
+        viewModel.ShouldSatisfyAllConditions(
+            static vm => vm.IsFileNewEnabled.ShouldBeTrue(),
+            static vm => vm.IsFileOpenEnabled.ShouldBeTrue(),
+            static vm => vm.IsFileSaveAsEnabled.ShouldBeFalse(),
+            static vm => vm.IsFileExportEnabled.ShouldBeFalse(),
+            static vm => vm.IsFilePrintEnabled.ShouldBeFalse());
+    }
+
+    [Fact]
+    public void FileCommandEnablement_DisablesSharedFileCommandsDuringCreationMode()
+    {
+        var viewModel = new MainWindowViewModel();
+
+        viewModel.StartNewLogicEquation();
+
+        viewModel.ShouldSatisfyAllConditions(
+            static vm => vm.IsFileNewEnabled.ShouldBeFalse(),
+            static vm => vm.IsFileOpenEnabled.ShouldBeFalse(),
+            static vm => vm.IsFileSaveAsEnabled.ShouldBeFalse(),
+            static vm => vm.IsFileExportEnabled.ShouldBeFalse(),
+            static vm => vm.IsFilePrintEnabled.ShouldBeFalse());
+    }
+
+    [Fact]
+    public void PrintSelectedFunction_ReportsUnsupportedStatusText()
+    {
+        var viewModel = new MainWindowViewModel();
+        AddEquation(viewModel, "F = A;");
+
+        var result = viewModel.PrintSelectedFunction();
+
+        viewModel.ShouldSatisfyAllConditions(
+            _ => result.ShouldBeTrue(),
+            static vm => vm.StatusText.ShouldBe("Print is not yet supported in this port"));
     }
 
     [Fact]
@@ -361,6 +434,110 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public void FilePersistenceEnablement_IsDisabledWithoutSelection()
+    {
+        var viewModel = new MainWindowViewModel();
+
+        viewModel.ShouldSatisfyAllConditions(
+            static vm => vm.IsFileOpenEnabled.ShouldBeTrue(),
+            static vm => vm.IsFileSaveEnabled.ShouldBeFalse(),
+            static vm => vm.IsFileSaveAsEnabled.ShouldBeFalse(),
+            static vm => vm.SelectedFunctionFilePath.ShouldBeNull(),
+            static vm => vm.IsSelectedFunctionDirty.ShouldBeFalse());
+    }
+
+    [Fact]
+    public void FilePersistenceEnablement_IsEnabledForSingleSelectedFunction()
+    {
+        var viewModel = new MainWindowViewModel();
+
+        AddEquation(viewModel, "F = A;");
+
+        viewModel.ShouldSatisfyAllConditions(
+            static vm => vm.IsFileSaveEnabled.ShouldBeTrue(),
+            static vm => vm.IsFileSaveAsEnabled.ShouldBeTrue(),
+            static vm => vm.SelectedFunctionFilePath.ShouldBeNull(),
+            static vm => vm.IsSelectedFunctionDirty.ShouldBeTrue());
+    }
+
+    [Fact]
+    public void SaveSelectedFunction_WithoutPath_ReportsSaveAsRequired()
+    {
+        var viewModel = new MainWindowViewModel();
+        AddEquation(viewModel, "F = A;");
+
+        var result = viewModel.SaveSelectedFunction();
+
+        viewModel.ShouldSatisfyAllConditions(
+            _ => result.ShouldBeFalse(),
+            static vm => vm.StatusText.ShouldBe("Save As required"),
+            static vm => vm.IsSelectedFunctionDirty.ShouldBeTrue());
+    }
+
+    [Fact]
+    public void SaveSelectedFunctionAs_SavesPathAndMarksFunctionClean()
+    {
+        using var tempFiles = new MainWindowViewModelPersistenceTempFiles();
+        var viewModel = new MainWindowViewModel();
+        AddEquation(viewModel, "F = A;");
+
+        var result = viewModel.SaveSelectedFunctionAs(tempFiles.GetFilePath("saved.lfcn"));
+
+        viewModel.ShouldSatisfyAllConditions(
+            _ => result.ShouldBeTrue(),
+            vm => File.Exists(vm.SelectedFunctionFilePath).ShouldBeTrue(),
+            static vm => vm.IsSelectedFunctionDirty.ShouldBeFalse(),
+            static vm => vm.StatusText.ShouldBe("Function saved"));
+    }
+
+    [Fact]
+    public void SaveSelectedFunction_WithExistingPath_SavesCurrentFunctionAndMarksClean()
+    {
+        using var tempFiles = new MainWindowViewModelPersistenceTempFiles();
+        var viewModel = new MainWindowViewModel();
+        var filePath = tempFiles.GetFilePath("saved.lfcn");
+        AddEquation(viewModel, "F = A;");
+        viewModel.SaveSelectedFunctionAs(filePath);
+
+        viewModel.ShowSumOfProductsEquation();
+        var saveResult = viewModel.SaveSelectedFunction();
+        var loadedFunction = new LogicFunctionFileService().Load(filePath);
+
+        viewModel.ShouldSatisfyAllConditions(
+            _ => saveResult.ShouldBeTrue(),
+            static vm => vm.SelectedFunctionFilePath.ShouldNotBeNull(),
+            static vm => vm.IsSelectedFunctionDirty.ShouldBeFalse(),
+            _ => loadedFunction.EquationText.ShouldBe(viewModel.GetSelectedFunction()!.EquationText));
+    }
+
+    [Fact]
+    public void OpenFunction_LoadsFunctionAndMarksCleanWithPath()
+    {
+        using var tempFiles = new MainWindowViewModelPersistenceTempFiles();
+        var filePath = tempFiles.GetFilePath("open.lfcn");
+        new LogicFunctionFileService().Save(
+            filePath,
+            new TruthTableLogicFunction(
+                ["A"],
+                ["F"],
+                [
+                    ["0"],
+                    ["1"]
+                ],
+                "F = A;"));
+        var viewModel = new MainWindowViewModel();
+
+        var result = viewModel.OpenFunction(filePath);
+
+        viewModel.ShouldSatisfyAllConditions(
+            _ => result.ShouldBeTrue(),
+            static vm => vm.GetSelectedFunction()!.OutputNames.ShouldBe(["F"]),
+            vm => vm.SelectedFunctionFilePath.ShouldBe(filePath),
+            static vm => vm.IsSelectedFunctionDirty.ShouldBeFalse(),
+            static vm => vm.StatusText.ShouldBe("Function opened"));
+    }
+
+    [Fact]
     public void CancelOperation_ReportsNoActiveOperation()
     {
         var viewModel = new MainWindowViewModel();
@@ -517,6 +694,77 @@ public sealed class MainWindowViewModelTests
             static vm => GetTerms(vm).ShouldBe(["0", "1"]));
     }
 
+    [Fact]
+    public void FileExportEnablement_IsEnabledForSingleSelectedFunction()
+    {
+        var viewModel = CreateXorTruthTableFunction();
+
+        viewModel.ShouldSatisfyAllConditions(
+            static vm => vm.IsFileExportEnabled.ShouldBeTrue(),
+            static vm => vm.IsFileExportTruthTableEnabled.ShouldBeTrue(),
+            static vm => vm.IsFileExportGateDiagramEnabled.ShouldBeFalse());
+    }
+
+    [Fact]
+    public void FileExportEnablement_EnablesGateDiagramForGateDiagramFunctionWithItems()
+    {
+        var viewModel = new MainWindowViewModel();
+        var gateDiagramFunction = CreateGateDiagramFunction();
+        var summary = new FunctionSummaryRow(
+            Function: "F",
+            Inputs: "1",
+            Outputs: "1",
+            Gates: "0",
+            LogicFunction: gateDiagramFunction);
+
+        viewModel.FunctionSummaries.Clear();
+        viewModel.FunctionSummaries.Add(summary);
+        viewModel.SelectedFunctionSummary = summary;
+        viewModel.SelectedFunctionCount = 1;
+
+        viewModel.ShouldSatisfyAllConditions(
+            static vm => vm.IsFileExportEnabled.ShouldBeTrue(),
+            static vm => vm.IsFileExportTruthTableEnabled.ShouldBeTrue(),
+            static vm => vm.IsFileExportGateDiagramEnabled.ShouldBeTrue());
+    }
+
+    [Fact]
+    public void ExportSelectedTruthTableCsv_ReturnsCsvForSelectedFunction()
+    {
+        var viewModel = CreateXorTruthTableFunction();
+
+        var csv = viewModel.ExportSelectedTruthTableCsv();
+
+        viewModel.ShouldSatisfyAllConditions(
+            _ => csv.ShouldBe("A,B,,F\r\n0,0,,0\r\n0,1,,1\r\n1,0,,1\r\n1,1,,0\r\n"),
+            static vm => vm.StatusText.ShouldBe("Truth table exported"));
+    }
+
+    [Fact]
+    public void ExportSelectedGateDiagramSvg_ReturnsSvgForSelectedGateDiagram()
+    {
+        var viewModel = new MainWindowViewModel();
+        var gateDiagramFunction = CreateGateDiagramFunction();
+        var summary = new FunctionSummaryRow(
+            Function: "F",
+            Inputs: "1",
+            Outputs: "1",
+            Gates: "0",
+            LogicFunction: gateDiagramFunction);
+
+        viewModel.FunctionSummaries.Clear();
+        viewModel.FunctionSummaries.Add(summary);
+        viewModel.SelectedFunctionSummary = summary;
+        viewModel.SelectedFunctionCount = 1;
+
+        var svg = viewModel.ExportSelectedGateDiagramSvg();
+
+        viewModel.ShouldSatisfyAllConditions(
+            _ => svg.ShouldNotBeNull(),
+            _ => svg!.ShouldContain("<svg xmlns=\"http://www.w3.org/2000/svg\""),
+            static vm => vm.StatusText.ShouldBe("Gate diagram exported"));
+    }
+
     private static string[] GetTerms(MainWindowViewModel viewModel)
     {
         return viewModel.FunctionTruthTableRows
@@ -604,5 +852,52 @@ public sealed class MainWindowViewModelTests
         viewModel.SubmitTruthTableEditing();
 
         return viewModel;
+    }
+
+    private static GateDiagramFunction CreateGateDiagramFunction()
+    {
+        return new GateDiagramFunction(
+            ["A"],
+            ["F"],
+            [
+                ["0"],
+                ["1"]
+            ],
+            "F = A;",
+            [
+                new GateDiagramItem(GatePaletteKind.Input, 0, 0, 0, "A", Id: 1),
+                new GateDiagramItem(GatePaletteKind.Output, 1, 120, 0, "F", Id: 2)
+            ],
+            [
+                new GateDiagramWire(
+                    new GateDiagramConnectionReference(1, GateDiagramConnectionKind.Output, 0),
+                    new GateDiagramConnectionReference(2, GateDiagramConnectionKind.Input, 0))
+            ]);
+    }
+}
+
+public sealed class MainWindowViewModelPersistenceTempFiles : IDisposable
+{
+    private readonly string _tempDirectory = Path.Combine(
+        Directory.GetCurrentDirectory(),
+        ".temp",
+        Guid.NewGuid().ToString("N"));
+
+    public MainWindowViewModelPersistenceTempFiles()
+    {
+        Directory.CreateDirectory(_tempDirectory);
+    }
+
+    public string GetFilePath(string fileName)
+    {
+        return Path.Combine(_tempDirectory, fileName);
+    }
+
+    public void Dispose()
+    {
+        if (Directory.Exists(_tempDirectory))
+        {
+            Directory.Delete(_tempDirectory, recursive: true);
+        }
     }
 }
