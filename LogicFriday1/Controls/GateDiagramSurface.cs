@@ -49,7 +49,9 @@ public sealed class GateDiagramSurface : Control
 
     private const double RoutingCrossingPenalty = 90;
 
-    private const int WireHuePrimeStep = 137;
+    private const int WirePaletteColorCount = 32;
+
+    private const double WireHueStep = 137.50776405003785;
 
     private GateDiagramConnectionPoint? _pendingWireStart;
 
@@ -910,6 +912,7 @@ public sealed class GateDiagramSurface : Control
 
     private void DrawWires(DrawingContext context)
     {
+        var wireColorIndexes = GetWireColorIndexes(Wires);
         var wireIndex = 0;
         foreach (var wire in Wires ?? [])
         {
@@ -919,7 +922,7 @@ public sealed class GateDiagramSurface : Control
                 var points = GetWireRoute(wire, wireStart, wireEnd);
                 var wirePen = _selectedWireIndices.Contains(wireIndex)
                     ? new Pen(Brushes.Firebrick, 2.4)
-                    : new Pen(GetWireBrush(wireIndex), 1.7);
+                    : new Pen(GetWireBrush(wireColorIndexes[wireIndex]), 1.7);
 
                 DrawWireRoute(context, wirePen, points);
 
@@ -941,6 +944,69 @@ public sealed class GateDiagramSurface : Control
         }
     }
 
+    private static IReadOnlyList<int> GetWireColorIndexes(IList<GateDiagramWire>? wires)
+    {
+        if (wires is null || wires.Count == 0)
+        {
+            return [];
+        }
+
+        var parents = new Dictionary<GateDiagramConnectionReference, GateDiagramConnectionReference>();
+        foreach (var wire in wires)
+        {
+            Union(wire.Start, wire.End, parents);
+        }
+
+        var colorIndexesByRoot = new Dictionary<GateDiagramConnectionReference, int>();
+        var colorIndexes = new int[wires.Count];
+        for (var index = 0; index < wires.Count; index++)
+        {
+            var root = Find(wires[index].Start, parents);
+            if (!colorIndexesByRoot.TryGetValue(root, out var colorIndex))
+            {
+                colorIndex = colorIndexesByRoot.Count;
+                colorIndexesByRoot[root] = colorIndex;
+            }
+
+            colorIndexes[index] = colorIndex;
+        }
+
+        return colorIndexes;
+    }
+
+    private static void Union(
+        GateDiagramConnectionReference left,
+        GateDiagramConnectionReference right,
+        IDictionary<GateDiagramConnectionReference, GateDiagramConnectionReference> parents)
+    {
+        var leftRoot = Find(left, parents);
+        var rightRoot = Find(right, parents);
+        if (leftRoot != rightRoot)
+        {
+            parents[rightRoot] = leftRoot;
+        }
+    }
+
+    private static GateDiagramConnectionReference Find(
+        GateDiagramConnectionReference reference,
+        IDictionary<GateDiagramConnectionReference, GateDiagramConnectionReference> parents)
+    {
+        if (!parents.TryGetValue(reference, out var parent))
+        {
+            parents[reference] = reference;
+            return reference;
+        }
+
+        if (parent == reference)
+        {
+            return reference;
+        }
+
+        var root = Find(parent, parents);
+        parents[reference] = root;
+        return root;
+    }
+
     private static void DrawWireRoute(
         DrawingContext context,
         Pen pen,
@@ -955,10 +1021,13 @@ public sealed class GateDiagramSurface : Control
         }
     }
 
-    private static IBrush GetWireBrush(int wireIndex)
+    private static IBrush GetWireBrush(int colorIndex)
     {
-        var hue = wireIndex * WireHuePrimeStep % 360;
-        var color = HslToRgb(hue, 0.72, 0.36);
+        var paletteIndex = colorIndex % WirePaletteColorCount;
+        var hue = paletteIndex * WireHueStep % 360;
+        var saturation = paletteIndex % 2 == 0 ? 0.74 : 0.86;
+        var lightness = paletteIndex % 4 < 2 ? 0.34 : 0.44;
+        var color = HslToRgb(hue, saturation, lightness);
         return new SolidColorBrush(color);
     }
 
