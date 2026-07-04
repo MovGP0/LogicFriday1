@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="LogicFriday1.App"
              xmlns:local="using:LogicFriday1"
+             xmlns:dockThemes="clr-namespace:Dock.Avalonia.Themes.Fluent;assembly=Dock.Avalonia.Themes.Fluent"
              RequestedThemeVariant="Light">
 
     <Application.DataTemplates>
@@ -10,6 +11,7 @@
   
     <Application.Styles>
         <FluentTheme />
+        <dockThemes:DockFluentTheme CacheDocumentTabContent="True" />
         <StyleInclude Source="avares://Avalonia.Controls.DataGrid/Themes/Fluent.xaml" />
 
         <Style Selector="Window">

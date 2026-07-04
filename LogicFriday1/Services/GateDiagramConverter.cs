@@ -475,8 +475,17 @@ public static class GateDiagramConverter
 
     private static bool IsSimpleExpression(string expression)
     {
-        return expression is "0" or "1" || expression.All(static character =>
-            char.IsLetterOrDigit(character) || character == '_');
+        if (expression is "0" or "1")
+        {
+            return true;
+        }
+
+        return expression.All(IsSimpleExpressionCharacter);
+    }
+
+    private static bool IsSimpleExpressionCharacter(char character)
+    {
+        return char.IsLetterOrDigit(character) || character == '_';
     }
 
     private static int GetInputValue(int term, int inputIndex, int inputCount)

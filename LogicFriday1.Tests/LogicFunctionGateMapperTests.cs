@@ -109,12 +109,10 @@ public sealed class LogicFunctionGateMapperTests
             _ => firstGate.X.ShouldBe(180),
             _ => secondGate.X.ShouldBe(340),
             _ => output.X.ShouldBe(500),
-            _ => gateDiagram.Wires.ShouldContain(wire =>
-                wire.Start.ItemId == firstGate.Id &&
-                wire.End.ItemId == secondGate.Id),
-            _ => gateDiagram.Wires.ShouldContain(wire =>
-                wire.Start.ItemId == secondGate.Id &&
-                wire.End.ItemId == output.Id));
+            _ => gateDiagram.Wires.ShouldContain(wire => wire.Start.ItemId == firstGate.Id
+                && wire.End.ItemId == secondGate.Id),
+            _ => gateDiagram.Wires.ShouldContain(wire => wire.Start.ItemId == secondGate.Id
+                && wire.End.ItemId == output.Id));
     }
 
     [Fact]

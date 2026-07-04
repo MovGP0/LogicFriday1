@@ -177,6 +177,10 @@ public partial class MainWindowViewModel : ObservableObject
 
     public ObservableCollection<TruthTableRow> FunctionTruthTableRows { get; } = [];
 
+    public string[] TruthTableInputNames => [.. _truthTableInputNames];
+
+    public string[] TruthTableOutputNames => [.. _truthTableOutputNames];
+
     public ObservableCollection<GatePaletteItem> GatePaletteItems
     {
         get;
@@ -980,6 +984,8 @@ public partial class MainWindowViewModel : ObservableObject
         _logicEquationEditTarget = null;
         _truthTableInputNames = [.. inputNames];
         _truthTableOutputNames = [.. outputNames];
+        OnPropertyChanged(nameof(TruthTableInputNames));
+        OnPropertyChanged(nameof(TruthTableOutputNames));
 
         var rowCount = 1 << inputNames.Length;
         for (var term = 0; term < rowCount; term++)
@@ -1129,6 +1135,8 @@ public partial class MainWindowViewModel : ObservableObject
         TruthTableRows.Clear();
         _truthTableInputNames = [];
         _truthTableOutputNames = [];
+        OnPropertyChanged(nameof(TruthTableInputNames));
+        OnPropertyChanged(nameof(TruthTableOutputNames));
         _truthTableEditTarget = null;
         IsTruthTableVisible = false;
 
@@ -1231,6 +1239,8 @@ public partial class MainWindowViewModel : ObservableObject
         TruthTableRows.Clear();
         _truthTableInputNames = [];
         _truthTableOutputNames = [];
+        OnPropertyChanged(nameof(TruthTableInputNames));
+        OnPropertyChanged(nameof(TruthTableOutputNames));
         _truthTableEditTarget = null;
         IsEquationEditorVisible = false;
         IsTruthTableVisible = false;
@@ -1250,6 +1260,8 @@ public partial class MainWindowViewModel : ObservableObject
         GateTraceInputs.Clear();
         _truthTableInputNames = [];
         _truthTableOutputNames = [];
+        OnPropertyChanged(nameof(TruthTableInputNames));
+        OnPropertyChanged(nameof(TruthTableOutputNames));
         _truthTableEditTarget = null;
         _logicEquationEditTarget = null;
         _gateDiagramEditTarget = null;

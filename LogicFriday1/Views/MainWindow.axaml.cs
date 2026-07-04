@@ -12,6 +12,8 @@ using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
+using Avalonia.Threading;
+using Dock.Model.Core;
 using LogicFriday1.Controls;
 using LogicFriday1.Models;
 using LogicFriday1.Services;
@@ -24,10 +26,18 @@ public partial class MainWindow : Window
     private const string HelpContentsUrl = "https://github.com/MovGP0/LogicFriday1/wiki";
     private const string GateDiagramHelpUrl = "https://github.com/MovGP0/LogicFriday1/wiki/Entering-a-gate-diagram";
     private INotifyPropertyChanged? _propertyChangedDataContext;
+    private FunctionsGridView FunctionsGrid = null!;
+    private FunctionTruthTableView FunctionTruthTableView = null!;
+    private LogicTextOutputView LogicTextOutputView = null!;
+    private GateDiagramViewerView GateDiagramViewerView = null!;
+    private TruthTableEditorView TruthTableEditor = null!;
+    private LogicEquationEditorView LogicEquationEditor = null!;
+    private GateDiagramEditorView GateDiagramEditor = null!;
 
     public MainWindow()
     {
         InitializeComponent();
+        InitializeWorkspaceViews();
         DataContextChanged += MainWindow_OnDataContextChanged;
     }
 
@@ -44,7 +54,140 @@ public partial class MainWindow : Window
             _propertyChangedDataContext.PropertyChanged += DataContext_OnPropertyChanged;
         }
 
+        SyncWorkspaceViewDataContext();
+        UpdateWorkspaceDocumentVisibility();
         UpdateTruthTableMainMenuState();
+    }
+
+    private void InitializeWorkspaceViews()
+    {
+        FunctionsGrid = CreateFunctionsGridView();
+        FunctionTruthTableView = CreateFunctionTruthTableView();
+        LogicTextOutputView = CreateLogicTextOutputView();
+        GateDiagramViewerView = CreateGateDiagramViewerView();
+        TruthTableEditor = CreateTruthTableEditorView();
+        LogicEquationEditor = CreateLogicEquationEditorView();
+        GateDiagramEditor = CreateGateDiagramEditorView();
+
+        FunctionsTool.Content = new Func<IServiceProvider, object>(_ => CreateFunctionsGridView());
+        TruthTableDocument.Content = new Func<IServiceProvider, object>(_ => CreateFunctionTruthTableView());
+        LogicEquationDocument.Content = new Func<IServiceProvider, object>(_ => CreateLogicTextOutputView());
+        GateDiagramDocument.Content = new Func<IServiceProvider, object>(_ => CreateGateDiagramViewerView());
+        TruthTableEditorDocument.Content = new Func<IServiceProvider, object>(_ => CreateTruthTableEditorView());
+        EquationEditorDocument.Content = new Func<IServiceProvider, object>(_ => CreateLogicEquationEditorView());
+        GateDiagramEditorDocument.Content = new Func<IServiceProvider, object>(_ => CreateGateDiagramEditorView());
+
+        SyncWorkspaceViewDataContext();
+    }
+
+    private void SyncWorkspaceViewDataContext()
+    {
+        var dataContext = DataContext;
+        FunctionsGrid.DataContext = dataContext;
+        FunctionTruthTableView.DataContext = dataContext;
+        LogicTextOutputView.DataContext = dataContext;
+        GateDiagramViewerView.DataContext = dataContext;
+        TruthTableEditor.DataContext = dataContext;
+        LogicEquationEditor.DataContext = dataContext;
+        GateDiagramEditor.DataContext = dataContext;
+    }
+
+    private FunctionsGridView CreateFunctionsGridView()
+    {
+        var view = new FunctionsGridView
+        {
+            DataContext = DataContext
+        };
+        view.SelectionChanged += FunctionsGrid_OnSelectionChanged;
+        FunctionsGrid = view;
+        return view;
+    }
+
+    private FunctionTruthTableView CreateFunctionTruthTableView()
+    {
+        var view = new FunctionTruthTableView
+        {
+            DataContext = DataContext
+        };
+
+        if (DataContext is MainWindowViewModel viewModel &&
+            viewModel.GetSelectedFunction() is { } logicFunction)
+        {
+            view.ConfigureColumns(logicFunction.InputNames, logicFunction.OutputNames);
+        }
+
+        FunctionTruthTableView = view;
+        return view;
+    }
+
+    private LogicTextOutputView CreateLogicTextOutputView()
+    {
+        var view = new LogicTextOutputView
+        {
+            DataContext = DataContext
+        };
+        LogicTextOutputView = view;
+        return view;
+    }
+
+    private GateDiagramViewerView CreateGateDiagramViewerView()
+    {
+        var view = new GateDiagramViewerView
+        {
+            DataContext = DataContext
+        };
+        GateDiagramViewerView = view;
+        return view;
+    }
+
+    private TruthTableEditorView CreateTruthTableEditorView()
+    {
+        var view = new TruthTableEditorView
+        {
+            DataContext = DataContext
+        };
+        view.SelectionChanged += TruthTableEditor_OnSelectionChanged;
+        view.SubmitRequested += TruthTableEditor_OnSubmitRequested;
+        view.CancelRequested += TruthTableEditor_OnCancelRequested;
+
+        if (DataContext is MainWindowViewModel
+            {
+                TruthTableInputNames.Length: > 0,
+                TruthTableOutputNames.Length: > 0
+            } viewModel)
+        {
+            view.ConfigureColumns(viewModel.TruthTableInputNames, viewModel.TruthTableOutputNames);
+        }
+
+        TruthTableEditor = view;
+        return view;
+    }
+
+    private LogicEquationEditorView CreateLogicEquationEditorView()
+    {
+        var view = new LogicEquationEditorView
+        {
+            DataContext = DataContext
+        };
+        view.SubmitRequested += LogicEquationEditor_OnSubmitRequested;
+        view.CancelRequested += LogicEquationEditor_OnCancelRequested;
+        view.StateChanged += LogicEquationEditor_OnStateChanged;
+        LogicEquationEditor = view;
+        return view;
+    }
+
+    private GateDiagramEditorView CreateGateDiagramEditorView()
+    {
+        var view = new GateDiagramEditorView
+        {
+            DataContext = DataContext
+        };
+        view.SubmitRequested += GateDiagramEditor_OnSubmitRequested;
+        view.CancelRequested += GateDiagramEditor_OnCancelRequested;
+        view.HelpRequested += GateDiagramEditor_OnHelpRequested;
+        view.VariableNameRequested += GateDiagramEditor_OnVariableNameRequested;
+        GateDiagramEditor = view;
+        return view;
     }
 
     private void DataContext_OnPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -52,12 +195,195 @@ public partial class MainWindow : Window
         if (e.PropertyName == nameof(MainWindowViewModel.IsTruthTableVisible))
         {
             UpdateTruthTableMainMenuState();
+            UpdateWorkspaceDocumentVisibility();
+            if (DataContext is MainWindowViewModel { IsTruthTableVisible: true })
+            {
+                Dispatcher.UIThread.Post(UpdateTruthTableMainMenuState, DispatcherPriority.Loaded);
+            }
         }
 
         if (e.PropertyName == nameof(MainWindowViewModel.IsEquationEditorVisible))
         {
             RefreshEquationEditorToolbarButtons();
+            UpdateWorkspaceDocumentVisibility();
         }
+
+        if (e.PropertyName == nameof(MainWindowViewModel.IsGateDiagramVisible))
+        {
+            UpdateWorkspaceDocumentVisibility();
+        }
+
+        if (e.PropertyName == nameof(MainWindowViewModel.IsFunctionDetailVisible))
+        {
+            UpdateWorkspaceDocumentVisibility();
+            if (DataContext is MainWindowViewModel { IsFunctionDetailVisible: true })
+            {
+                FunctionsToolDock.ActiveDockable = FunctionsTool;
+            }
+        }
+
+        if (e.PropertyName == nameof(MainWindowViewModel.IsMappedGateDiagramDetailVisible))
+        {
+            UpdateWorkspaceDocumentVisibility();
+        }
+    }
+
+    private void UpdateWorkspaceDocumentVisibility()
+    {
+        var visibleDocuments = GetVisibleWorkspaceDocuments().ToArray();
+        var visibleDocumentSet = visibleDocuments.ToHashSet();
+
+        foreach (var document in GetWorkspaceDocuments())
+        {
+            if (visibleDocumentSet.Contains(document))
+            {
+                ShowWorkspaceDocument(document);
+            }
+            else
+            {
+                HideWorkspaceDocument(document);
+            }
+        }
+
+        if (visibleDocuments.Length == 0)
+        {
+            WorkspaceDocumentDock.ActiveDockable = null;
+            WorkspaceDocumentDock.FocusedDockable = null;
+            return;
+        }
+
+        if (WorkspaceDocumentDock.ActiveDockable is not { } activeDockable ||
+            !visibleDocumentSet.Contains(activeDockable))
+        {
+            SelectWorkspaceDocument(visibleDocuments[0]);
+        }
+    }
+
+    private IEnumerable<IDockable> GetVisibleWorkspaceDocuments()
+    {
+        if (DataContext is not MainWindowViewModel viewModel)
+        {
+            yield break;
+        }
+
+        if (viewModel.IsTruthTableVisible)
+        {
+            yield return TruthTableEditorDocument;
+            yield break;
+        }
+
+        if (viewModel.IsEquationEditorVisible)
+        {
+            yield return EquationEditorDocument;
+            yield break;
+        }
+
+        if (viewModel.IsGateDiagramVisible)
+        {
+            yield return GateDiagramEditorDocument;
+            yield break;
+        }
+
+        if (!viewModel.IsFunctionDetailVisible)
+        {
+            yield break;
+        }
+
+        yield return TruthTableDocument;
+        yield return LogicEquationDocument;
+
+        if (viewModel.IsMappedGateDiagramDetailVisible)
+        {
+            yield return GateDiagramDocument;
+        }
+    }
+
+    private IEnumerable<IDockable> GetWorkspaceDocuments()
+    {
+        yield return TruthTableDocument;
+        yield return LogicEquationDocument;
+        yield return GateDiagramDocument;
+        yield return TruthTableEditorDocument;
+        yield return EquationEditorDocument;
+        yield return GateDiagramEditorDocument;
+    }
+
+    private void ShowWorkspaceDocument(IDockable document)
+    {
+        EnsureWorkspaceDocumentDockVisible();
+        if (WorkspaceDocumentDock.VisibleDockables?.Contains(document) == true)
+        {
+            return;
+        }
+
+        if (document.Owner is IDock currentOwner &&
+            currentOwner.VisibleDockables?.Contains(document) == true)
+        {
+            currentOwner.VisibleDockables.Remove(document);
+        }
+
+        WorkspaceDocumentDock.VisibleDockables ??= [];
+        WorkspaceDocumentDock.VisibleDockables.Add(document);
+        document.Owner = WorkspaceDocumentDock;
+        document.OriginalOwner ??= WorkspaceDocumentDock;
+    }
+
+    private void EnsureWorkspaceDocumentDockVisible()
+    {
+        if (WorkspaceLayoutDock.VisibleDockables?.Contains(WorkspaceDocumentDock) == true)
+        {
+            return;
+        }
+
+        WorkspaceLayoutDock.VisibleDockables ??= [];
+        WorkspaceLayoutDock.VisibleDockables.Add(WorkspaceDocumentDock);
+        WorkspaceDocumentDock.Owner = WorkspaceLayoutDock;
+        WorkspaceDocumentDock.OriginalOwner ??= WorkspaceLayoutDock;
+    }
+
+    private void HideWorkspaceDocument(IDockable document)
+    {
+        if (document.Owner is not IDock owner ||
+            owner.VisibleDockables?.Contains(document) != true)
+        {
+            return;
+        }
+
+        if (ReferenceEquals(owner.ActiveDockable, document))
+        {
+            owner.ActiveDockable = null;
+        }
+
+        if (ReferenceEquals(owner.FocusedDockable, document))
+        {
+            owner.FocusedDockable = null;
+        }
+
+        owner.VisibleDockables.Remove(document);
+        document.Owner = null;
+    }
+
+    private void SelectWorkspaceDocument(IDockable document)
+    {
+        ShowWorkspaceDocument(document);
+        WorkspaceDocumentDock.ActiveDockable = document;
+        WorkspaceDocumentDock.FocusedDockable = document;
+        WorkspaceDock.UpdateLayout();
+    }
+
+    private async Task<TruthTableEditorView?> ActivateTruthTableEditorAsync()
+    {
+        SelectWorkspaceDocument(TruthTableEditorDocument);
+        if (TruthTableEditor is { } truthTableEditor)
+        {
+            return truthTableEditor;
+        }
+
+        await Dispatcher.UIThread.InvokeAsync(
+            WorkspaceDock.UpdateLayout,
+            DispatcherPriority.Loaded);
+
+        return TruthTableEditor;
     }
 
     private async void HelpContents_OnClick(object? sender, RoutedEventArgs e)
@@ -340,11 +666,18 @@ public partial class MainWindow : Window
         }
 
         viewModel.StartNewTruthTable(dialog.ViewModel.InputNames, dialog.ViewModel.OutputNames);
-        TruthTableEditor.ConfigureColumns(dialog.ViewModel.InputNames, dialog.ViewModel.OutputNames);
+        var truthTableEditor = await ActivateTruthTableEditorAsync();
+        if (truthTableEditor is null)
+        {
+            await ShowMessageAsync("The truth table editor could not be opened.", "Truth Table");
+            return;
+        }
+
+        truthTableEditor.ConfigureColumns(dialog.ViewModel.InputNames, dialog.ViewModel.OutputNames);
         UpdateTruthTableMainMenuState();
     }
 
-    private void ModifyTruthTable_OnClick(object? sender, RoutedEventArgs e)
+    private async void ModifyTruthTable_OnClick(object? sender, RoutedEventArgs e)
     {
         if (DataContext is not MainWindowViewModel viewModel ||
             !viewModel.StartModifyTruthTable() ||
@@ -353,7 +686,14 @@ public partial class MainWindow : Window
             return;
         }
 
-        TruthTableEditor.ConfigureColumns(logicFunction.InputNames, logicFunction.OutputNames);
+        var truthTableEditor = await ActivateTruthTableEditorAsync();
+        if (truthTableEditor is null)
+        {
+            await ShowMessageAsync("The truth table editor could not be opened.", "Truth Table");
+            return;
+        }
+
+        truthTableEditor.ConfigureColumns(logicFunction.InputNames, logicFunction.OutputNames);
         UpdateTruthTableMainMenuState();
     }
 
@@ -638,7 +978,14 @@ public partial class MainWindow : Window
             var import = TruthTableImporter.Import(await reader.ReadToEndAsync());
 
             viewModel.StartImportedTruthTable(import.InputNames, import.OutputNames, import.OutputValues);
-            TruthTableEditor.ConfigureColumns(import.InputNames, import.OutputNames);
+            var truthTableEditor = await ActivateTruthTableEditorAsync();
+            if (truthTableEditor is null)
+            {
+                await ShowMessageAsync("The truth table editor could not be opened.", "Import Truth Table");
+                return;
+            }
+
+            truthTableEditor.ConfigureColumns(import.InputNames, import.OutputNames);
             UpdateTruthTableMainMenuState();
         }
         catch (TruthTableImportException ex)
@@ -1102,10 +1449,12 @@ public partial class MainWindow : Window
 
     private void UpdateTruthTableMainMenuState()
     {
-        var isTruthTableVisible = DataContext is MainWindowViewModel { IsTruthTableVisible: true };
-        var hasSelectedRows =
-            isTruthTableVisible &&
-            TruthTableEditor.HasSelectedRows;
+        var truthTableEditor = TruthTableEditor;
+        var isTruthTableVisible = DataContext is MainWindowViewModel { IsTruthTableVisible: true }
+            && truthTableEditor is not null;
+        var hasSelectedRows = isTruthTableVisible
+            && truthTableEditor is not null
+            && truthTableEditor.HasSelectedRows;
 
         TruthTableSelectAllMainMenuItem.IsEnabled = isTruthTableVisible;
         TruthTableSetTrueMainMenuItem.IsEnabled = hasSelectedRows;

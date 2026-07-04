@@ -55,10 +55,9 @@ public class PackIcon : PathIcon
         var scale = Math.Min(Bounds.Width / sourceBounds.Width, Bounds.Height / sourceBounds.Height);
         var x = (Bounds.Width - sourceBounds.Width * scale) / 2;
         var y = (Bounds.Height - sourceBounds.Height * scale) / 2;
-        var matrix =
-            Matrix.CreateTranslation(-sourceBounds.X, -sourceBounds.Y) *
-            Matrix.CreateScale(scale, scale) *
-            Matrix.CreateTranslation(x, y);
+        var matrix = Matrix.CreateTranslation(-sourceBounds.X, -sourceBounds.Y)
+            * Matrix.CreateScale(scale, scale)
+            * Matrix.CreateTranslation(x, y);
 
         var geometry = data.Clone();
         geometry.Transform = new MatrixTransform(matrix);

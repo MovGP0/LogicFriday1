@@ -172,8 +172,7 @@ public sealed class QuantizerWu : Quantizer
         int dr = Volume(cube, momentsR);
         int dg = Volume(cube, momentsG);
         int db = Volume(cube, momentsB);
-        double xx =
-            moments[GetIndex(cube.r1, cube.g1, cube.b1)]
+        double xx = moments[GetIndex(cube.r1, cube.g1, cube.b1)]
             - moments[GetIndex(cube.r1, cube.g1, cube.b0)]
             - moments[GetIndex(cube.r1, cube.g0, cube.b1)]
             + moments[GetIndex(cube.r1, cube.g0, cube.b0)]
@@ -321,18 +320,15 @@ public sealed class QuantizerWu : Quantizer
     {
         return direction switch
         {
-            Direction.RED =>
-                -moment[GetIndex(cube.r0, cube.g1, cube.b1)]
+            Direction.RED => -moment[GetIndex(cube.r0, cube.g1, cube.b1)]
                 + moment[GetIndex(cube.r0, cube.g1, cube.b0)]
                 + moment[GetIndex(cube.r0, cube.g0, cube.b1)]
                 - moment[GetIndex(cube.r0, cube.g0, cube.b0)],
-            Direction.GREEN =>
-                -moment[GetIndex(cube.r1, cube.g0, cube.b1)]
+            Direction.GREEN => -moment[GetIndex(cube.r1, cube.g0, cube.b1)]
                 + moment[GetIndex(cube.r1, cube.g0, cube.b0)]
                 + moment[GetIndex(cube.r0, cube.g0, cube.b1)]
                 - moment[GetIndex(cube.r0, cube.g0, cube.b0)],
-            _ =>
-                -moment[GetIndex(cube.r1, cube.g1, cube.b0)]
+            _ => -moment[GetIndex(cube.r1, cube.g1, cube.b0)]
                 + moment[GetIndex(cube.r1, cube.g0, cube.b0)]
                 + moment[GetIndex(cube.r0, cube.g1, cube.b0)]
                 - moment[GetIndex(cube.r0, cube.g0, cube.b0)],
@@ -343,18 +339,15 @@ public sealed class QuantizerWu : Quantizer
     {
         return direction switch
         {
-            Direction.RED =>
-                moment[GetIndex(position, cube.g1, cube.b1)]
+            Direction.RED => moment[GetIndex(position, cube.g1, cube.b1)]
                 - moment[GetIndex(position, cube.g1, cube.b0)]
                 - moment[GetIndex(position, cube.g0, cube.b1)]
                 + moment[GetIndex(position, cube.g0, cube.b0)],
-            Direction.GREEN =>
-                moment[GetIndex(cube.r1, position, cube.b1)]
+            Direction.GREEN => moment[GetIndex(cube.r1, position, cube.b1)]
                 - moment[GetIndex(cube.r1, position, cube.b0)]
                 - moment[GetIndex(cube.r0, position, cube.b1)]
                 + moment[GetIndex(cube.r0, position, cube.b0)],
-            _ =>
-                moment[GetIndex(cube.r1, cube.g1, position)]
+            _ => moment[GetIndex(cube.r1, cube.g1, position)]
                 - moment[GetIndex(cube.r1, cube.g0, position)]
                 - moment[GetIndex(cube.r0, cube.g1, position)]
                 + moment[GetIndex(cube.r0, cube.g0, position)],

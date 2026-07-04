@@ -1363,8 +1363,7 @@ public sealed class GateDiagramSurface : Control
             return string.Empty;
         }
 
-        var nextNumber = (Items ?? [])
-            .Count(static diagramItem => diagramItem.ComponentLabel.Length > 0) + 1;
+        var nextNumber = (Items ?? []).Count(static diagramItem => diagramItem.ComponentLabel.Length > 0) + 1;
 
         return $"[{nextNumber}]";
     }
@@ -1768,9 +1767,8 @@ public sealed class GateDiagramSurface : Control
 
         foreach (var candidate in EnumerateConnectionPoints())
         {
-            var distanceSquared =
-                Math.Pow(candidate.X - position.X, 2) +
-                Math.Pow(candidate.Y - position.Y, 2);
+            var distanceSquared = Math.Pow(candidate.X - position.X, 2)
+                + Math.Pow(candidate.Y - position.Y, 2);
 
             if (distanceSquared > bestDistanceSquared)
             {
@@ -2020,10 +2018,11 @@ public sealed class GateDiagramSurface : Control
             var previous = points[index - 1];
             var current = points[index];
             var next = points[index + 1];
-            if ((Math.Abs(previous.X - current.X) < WireGeometryTolerance &&
-                    Math.Abs(current.X - next.X) < WireGeometryTolerance) ||
-                (Math.Abs(previous.Y - current.Y) < WireGeometryTolerance &&
-                    Math.Abs(current.Y - next.Y) < WireGeometryTolerance))
+            var isRedundantVerticalPoint = Math.Abs(previous.X - current.X) < WireGeometryTolerance
+                && Math.Abs(current.X - next.X) < WireGeometryTolerance;
+            var isRedundantHorizontalPoint = Math.Abs(previous.Y - current.Y) < WireGeometryTolerance
+                && Math.Abs(current.Y - next.Y) < WireGeometryTolerance;
+            if (isRedundantVerticalPoint || isRedundantHorizontalPoint)
             {
                 points.RemoveAt(index);
                 continue;

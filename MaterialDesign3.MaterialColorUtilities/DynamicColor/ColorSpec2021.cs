@@ -797,9 +797,9 @@ public class ColorSpec2021 : ColorSpec
             var polarity = toneDeltaPair.Polarity;
             bool stayTogether = toneDeltaPair.StayTogether;
 
-            bool aIsNearer = (polarity == TonePolarity.Nearer
-                              || (polarity == TonePolarity.Lighter && !scheme.IsDark)
-                              || (polarity == TonePolarity.Darker && !scheme.IsDark));
+            bool aIsNearer = polarity == TonePolarity.Nearer
+                || (polarity == TonePolarity.Lighter && !scheme.IsDark)
+                || (polarity == TonePolarity.Darker && !scheme.IsDark);
             var nearer = aIsNearer ? roleA : roleB;
             var farther = aIsNearer ? roleB : roleA;
             bool amNearer = color.name.Equals(nearer.name, System.StringComparison.Ordinal);

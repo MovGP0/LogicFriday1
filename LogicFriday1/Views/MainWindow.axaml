@@ -1,6 +1,9 @@
 ﻿<Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:controls="using:LogicFriday1.Controls"
+        xmlns:dock="using:Dock.Avalonia.Controls"
+        xmlns:dockFactory="using:Dock.Model.Avalonia"
+        xmlns:dockModel="using:Dock.Model.Avalonia.Controls"
         xmlns:icons="using:LogicFriday1.MaterialIcons"
         xmlns:models="using:LogicFriday1.Models"
         xmlns:vm="using:LogicFriday1.ViewModels"
@@ -9,6 +12,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d" d:DesignWidth="1100" d:DesignHeight="720"
         x:Class="LogicFriday1.Views.MainWindow"
+        x:Name="RootWindow"
         x:DataType="vm:MainWindowViewModel"
         Icon="/Assets/avalonia-logo.ico"
         Title="LogicFriday1"
@@ -476,41 +480,67 @@
 
         <Border Padding="8"
                 Background="{DynamicResource LogicFriday.Brush.Surface}">
-            <Grid RowDefinitions="160,Auto,*">
-                <views:FunctionsGridView x:Name="FunctionsGrid"
-                                         SelectionChanged="FunctionsGrid_OnSelectionChanged" />
-
-                <views:LogicEquationEditorView x:Name="LogicEquationEditor"
-                                               Grid.Row="1"
-                                               Grid.RowSpan="2"
-                                               SubmitRequested="LogicEquationEditor_OnSubmitRequested"
-                                               CancelRequested="LogicEquationEditor_OnCancelRequested"
-                                               StateChanged="LogicEquationEditor_OnStateChanged" />
-                <Grid Grid.Row="2"
-                      IsVisible="{Binding IsFunctionDetailVisible}"
-                      ColumnDefinitions="*,*"
-                      ColumnSpacing="8">
-                    <views:FunctionTruthTableView x:Name="FunctionTruthTableView"
-                                                  Grid.Column="0" />
-                    <Grid Grid.Column="1"
-                          RowDefinitions="*,*"
-                          RowSpacing="8">
-                        <views:LogicTextOutputView Grid.Row="0" />
-                        <views:GateDiagramViewerView Grid.Row="1" />
-                    </Grid>
-                </Grid>
-                <views:TruthTableEditorView x:Name="TruthTableEditor"
-                                            Grid.Row="2"
-                                            SelectionChanged="TruthTableEditor_OnSelectionChanged"
-                                            SubmitRequested="TruthTableEditor_OnSubmitRequested"
-                                            CancelRequested="TruthTableEditor_OnCancelRequested" />
-                <views:GateDiagramEditorView x:Name="GateDiagramEditor"
-                                             Grid.Row="2"
-                                             SubmitRequested="GateDiagramEditor_OnSubmitRequested"
-                                             CancelRequested="GateDiagramEditor_OnCancelRequested"
-                                             HelpRequested="GateDiagramEditor_OnHelpRequested"
-                                             VariableNameRequested="GateDiagramEditor_OnVariableNameRequested" />
-            </Grid>
+            <dock:DockControl x:Name="WorkspaceDock"
+                              InitializeLayout="True"
+                              InitializeFactory="True">
+                <dock:DockControl.Factory>
+                    <dockFactory:Factory />
+                </dock:DockControl.Factory>
+                <dockModel:RootDock x:Name="WorkspaceRootDock"
+                                    Id="WorkspaceRoot"
+                                    Title="Workspace"
+                                    IsFocusableRoot="True">
+                    <dockModel:ProportionalDock x:Name="WorkspaceLayoutDock"
+                                                Id="WorkspaceLayout"
+                                                Orientation="Vertical">
+                        <dockModel:ToolDock x:Name="FunctionsToolDock"
+                                            Id="FunctionsToolDock"
+                                            Title="Functions"
+                                            Proportion="0.24"
+                                            Alignment="Top"
+                                            IsCollapsable="False"
+                                            CanCloseLastDockable="False">
+                            <dockModel:Tool x:Name="FunctionsTool"
+                                            Id="FunctionsTool"
+                                            Title="Functions"
+                                            CanClose="False" />
+                        </dockModel:ToolDock>
+                        <dockModel:ProportionalDockSplitter />
+                        <dockModel:DocumentDock x:Name="WorkspaceDocumentDock"
+                                                Id="WorkspaceDocumentDock"
+                                                Title="Workspace"
+                                                Proportion="0.76"
+                                                IsCollapsable="False"
+                                                CanCreateDocument="False"
+                                                CanCloseLastDockable="False">
+                            <dockModel:Document x:Name="TruthTableDocument"
+                                                Id="TruthTableDocument"
+                                                Title="Truth Table"
+                                                CanClose="False" />
+                            <dockModel:Document x:Name="LogicEquationDocument"
+                                                Id="LogicEquationDocument"
+                                                Title="Logic Equation"
+                                                CanClose="False" />
+                            <dockModel:Document x:Name="GateDiagramDocument"
+                                                Id="GateDiagramDocument"
+                                                Title="Gate Diagram"
+                                                CanClose="False" />
+                            <dockModel:Document x:Name="TruthTableEditorDocument"
+                                                Id="TruthTableEditorDocument"
+                                                Title="Truth Table Editor"
+                                                CanClose="False" />
+                            <dockModel:Document x:Name="EquationEditorDocument"
+                                                Id="EquationEditorDocument"
+                                                Title="Equation Editor"
+                                                CanClose="False" />
+                            <dockModel:Document x:Name="GateDiagramEditorDocument"
+                                                Id="GateDiagramEditorDocument"
+                                                Title="Gate Diagram Editor"
+                                                CanClose="False" />
+                        </dockModel:DocumentDock>
+                    </dockModel:ProportionalDock>
+                </dockModel:RootDock>
+            </dock:DockControl>
         </Border>
     </DockPanel>
 
