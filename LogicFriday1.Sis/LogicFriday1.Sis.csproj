@@ -55,13 +55,19 @@
 
   <ItemGroup>
     <Compile Remove="NativeMethods.g.cs" />
+    <SisNativeBuildInput Include="$(MSBuildThisFileDirectory)..\LogicFriday1.Sis.Native\Cargo.toml" />
+    <SisNativeBuildInput Include="$(MSBuildThisFileDirectory)..\LogicFriday1.Sis.Native\Cargo.lock" />
+    <SisNativeBuildInput Include="$(MSBuildThisFileDirectory)..\LogicFriday1.Sis.Native\build.rs" />
+    <SisNativeBuildInput Include="$(MSBuildThisFileDirectory)..\LogicFriday1.Sis.Native\src\**\*.rs" />
   </ItemGroup>
 
   <Target Name="BuildSisNative"
           BeforeTargets="PrepareForBuild"
-          Condition="'$(BuildNativeLibraries)' != 'false'">
+          Condition="'$(BuildNativeLibraries)' != 'false'"
+          Inputs="@(SisNativeBuildInput)"
+          Outputs="$(SisNativeOutputPath);$(MSBuildThisFileDirectory)NativeMethods.g.cs">
     <Error Condition="'$(SisRustTarget)' == ''" Text="Unsupported RuntimeIdentifier '$(SisNativeRid)' for LogicFriday1.Sis native Rust build. Supported RIDs: win-x64, win-arm64, linux-x64, linux-arm64, osx-x64, osx-arm64." />
-    <Exec Command="cargo build --manifest-path &quot;$(SisNativeManifest)&quot; --target $(SisRustTarget) $(SisCargoProfileArg)" EnvironmentVariables="CARGO_INCREMENTAL=0;LOGICFRIDAY1_SIS_BINDGEN_FORCE=$([System.DateTime]::UtcNow.Ticks)" />
+    <Exec Command="cargo build --manifest-path &quot;$(SisNativeManifest)&quot; --target $(SisRustTarget) $(SisCargoProfileArg)" />
     <Copy SourceFiles="$(SisNativeOutputPath)" DestinationFolder="$(OutputPath)runtimes\$(SisNativeRid)\native\" SkipUnchangedFiles="true" />
   </Target>
 

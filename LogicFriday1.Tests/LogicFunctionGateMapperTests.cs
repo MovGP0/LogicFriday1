@@ -118,6 +118,125 @@ public sealed class LogicFunctionGateMapperTests
     }
 
     [Fact]
+    public void BuildGateDiagramFunction_SameLayerGates_OrdersRowsByInputBarycenter()
+    {
+        var source = CreateEmptyTruthTableFunction(["A", "B"], ["F", "G"]);
+        var mapped = new SisMappedNetwork
+        {
+            Gates =
+            [
+                Gate("gB", "and", ["B", "B"], "G"),
+                Gate("gA", "and", ["A", "A"], "F")
+            ]
+        };
+
+        var gateDiagram = LogicFunctionGateMapper.BuildGateDiagramFunction(source, mapped);
+
+        var gateA = gateDiagram.Items.Single(item => item.Kind == GatePaletteKind.And && DrivesOutput(gateDiagram, item, "F"));
+        var gateB = gateDiagram.Items.Single(item => item.Kind == GatePaletteKind.And && DrivesOutput(gateDiagram, item, "G"));
+        gateA.Y.ShouldBeLessThan(gateB.Y);
+    }
+
+    [Fact]
+    public void BuildGateDiagramFunction_CommutativeGate_ReordersInputPinsBySourceOrder()
+    {
+        var source = CreateEmptyTruthTableFunction(["A", "B"], ["F"]);
+        var mapped = new SisMappedNetwork
+        {
+            Gates =
+            [
+                Gate("g1", "and", ["B", "A"], "F")
+            ]
+        };
+
+        var gateDiagram = LogicFunctionGateMapper.BuildGateDiagramFunction(source, mapped);
+
+        var gate = gateDiagram.Items.Single(static item => item.Kind == GatePaletteKind.And);
+        var inputA = gateDiagram.Items.Single(static item => item.Label == "A");
+        var inputB = gateDiagram.Items.Single(static item => item.Label == "B");
+        gateDiagram.ShouldSatisfyAllConditions(
+            _ => WireTo(gateDiagram, inputA, gate).End.PinIndex.ShouldBe(0),
+            _ => WireTo(gateDiagram, inputB, gate).End.PinIndex.ShouldBe(1));
+    }
+
+    [Fact]
+    public void BuildGateDiagramFunction_MuxGate_DoesNotReorderInputPins()
+    {
+        var source = CreateEmptyTruthTableFunction(["A", "B", "C"], ["F"]);
+        var mapped = new SisMappedNetwork
+        {
+            Gates =
+            [
+                Gate("g1", "mux", ["B", "A", "C"], "F")
+            ]
+        };
+
+        var gateDiagram = LogicFunctionGateMapper.BuildGateDiagramFunction(source, mapped);
+
+        var gate = gateDiagram.Items.Single(static item => item.Kind == GatePaletteKind.Mux);
+        var inputA = gateDiagram.Items.Single(static item => item.Label == "A");
+        var inputB = gateDiagram.Items.Single(static item => item.Label == "B");
+        var inputC = gateDiagram.Items.Single(static item => item.Label == "C");
+        gateDiagram.ShouldSatisfyAllConditions(
+            _ => WireTo(gateDiagram, inputB, gate).End.PinIndex.ShouldBe(0),
+            _ => WireTo(gateDiagram, inputA, gate).End.PinIndex.ShouldBe(1),
+            _ => WireTo(gateDiagram, inputC, gate).End.PinIndex.ShouldBe(2));
+    }
+
+    [Fact]
+    public void BuildGateDiagramFunction_GeneratedWires_UseRoutedVirtualPoints()
+    {
+        var source = CreateEmptyTruthTableFunction(["A", "B", "C"], ["F"]);
+        var mapped = new SisMappedNetwork
+        {
+            Gates =
+            [
+                Gate("g1", "and", ["A", "B"], "n1"),
+                Gate("g2", "or", ["n1", "C"], "F")
+            ]
+        };
+
+        var gateDiagram = LogicFunctionGateMapper.BuildGateDiagramFunction(source, mapped);
+
+        gateDiagram.Wires.ShouldAllBe(static wire => wire.RoutePoints.Count >= 2);
+    }
+
+    [Fact]
+    public void BuildGateDiagramFunction_SharedBoundaryWires_UseSeparatedGridLanes()
+    {
+        var source = CreateEmptyTruthTableFunction(["A", "B", "C", "D", "E", "G"], ["F"]);
+        var mapped = new SisMappedNetwork
+        {
+            Gates =
+            [
+                Gate("gA", "and", ["A", "A"], "nA"),
+                Gate("gB", "and", ["B", "B"], "nB"),
+                Gate("gC", "and", ["C", "C"], "nC"),
+                Gate("gD", "and", ["D", "D"], "nD"),
+                Gate("gE", "and", ["E", "E"], "nE"),
+                Gate("gG", "and", ["G", "G"], "nG"),
+                Gate("gOut", "and", ["nA", "nB", "nC", "nD", "nE", "nG"], "F")
+            ]
+        };
+
+        var gateDiagram = LogicFunctionGateMapper.BuildGateDiagramFunction(source, mapped);
+
+        var outputDriver = gateDiagram.Items.Single(item => item.Kind == GatePaletteKind.And && DrivesOutput(gateDiagram, item, "F"));
+        var incomingChannelXs = gateDiagram.Wires
+            .Where(wire => wire.End.ItemId == outputDriver.Id)
+            .Select(static wire => wire.RoutePoints[0].X)
+            .Order()
+            .ToArray();
+        incomingChannelXs.ShouldSatisfyAllConditions(
+            static value => value.Length.ShouldBe(6),
+            static value => value.Distinct().Count().ShouldBe(6));
+        foreach (var distance in incomingChannelXs.Zip(incomingChannelXs.Skip(1), static (left, right) => right - left))
+        {
+            distance.ShouldBeGreaterThanOrEqualTo(20);
+        }
+    }
+
+    [Fact]
     public void BuildGateDiagramFunction_FullAdderNandNorMappedNetwork_UsesExpectedDependencyColumns()
     {
         var source = CreateMinimizedFullAdderFunction();
@@ -231,6 +350,37 @@ public sealed class LogicFunctionGateMapperTests
         GatePaletteKind kind)
     {
         return items.Count(item => item.Kind == kind);
+    }
+
+    private static bool DrivesOutput(
+        GateDiagramFunction gateDiagram,
+        GateDiagramItem source,
+        string outputName)
+    {
+        var output = gateDiagram.Items.Single(item => item.Kind == GatePaletteKind.Output && item.Label == outputName);
+        return gateDiagram.Wires.Any(wire => wire.Start.ItemId == source.Id && wire.End.ItemId == output.Id);
+    }
+
+    private static GateDiagramWire WireTo(
+        GateDiagramFunction gateDiagram,
+        GateDiagramItem source,
+        GateDiagramItem target)
+    {
+        return gateDiagram.Wires.Single(wire => wire.Start.ItemId == source.Id && wire.End.ItemId == target.Id);
+    }
+
+    private static TruthTableLogicFunction CreateEmptyTruthTableFunction(
+        IReadOnlyList<string> inputNames,
+        IReadOnlyList<string> outputNames)
+    {
+        return new TruthTableLogicFunction(
+            inputNames.ToArray(),
+            outputNames.ToArray(),
+            Enumerable
+                .Range(0, 1 << inputNames.Count)
+                .Select(_ => outputNames.Select(static _ => "0").ToArray())
+                .ToArray(),
+            "");
     }
 
     private static SisMappedNetwork CreateFullAdderNandNorMappedNetwork()

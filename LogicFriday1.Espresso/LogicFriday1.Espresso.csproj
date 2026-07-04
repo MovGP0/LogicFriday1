@@ -55,13 +55,19 @@
 
   <ItemGroup>
     <Compile Remove="NativeMethods.g.cs" />
+    <EspressoNativeBuildInput Include="$(MSBuildThisFileDirectory)..\LogicFriday1.Espresso.Native\Cargo.toml" />
+    <EspressoNativeBuildInput Include="$(MSBuildThisFileDirectory)..\LogicFriday1.Espresso.Native\Cargo.lock" />
+    <EspressoNativeBuildInput Include="$(MSBuildThisFileDirectory)..\LogicFriday1.Espresso.Native\build.rs" />
+    <EspressoNativeBuildInput Include="$(MSBuildThisFileDirectory)..\LogicFriday1.Espresso.Native\src\**\*.rs" />
   </ItemGroup>
 
   <Target Name="BuildEspressoNative"
           BeforeTargets="PrepareForBuild"
-          Condition="'$(BuildNativeLibraries)' != 'false'">
+          Condition="'$(BuildNativeLibraries)' != 'false'"
+          Inputs="@(EspressoNativeBuildInput)"
+          Outputs="$(EspressoNativeOutputPath);$(MSBuildThisFileDirectory)NativeMethods.g.cs">
     <Error Condition="'$(EspressoRustTarget)' == ''" Text="Unsupported RuntimeIdentifier '$(EspressoNativeRid)' for LogicFriday1.Espresso native Rust build. Supported RIDs: win-x64, win-arm64, linux-x64, linux-arm64, osx-x64, osx-arm64." />
-    <Exec Command="cargo build --manifest-path &quot;$(EspressoNativeManifest)&quot; --target $(EspressoRustTarget) $(EspressoCargoProfileArg)" EnvironmentVariables="CARGO_INCREMENTAL=0;LOGICFRIDAY1_ESPRESSO_BINDGEN_FORCE=$([System.DateTime]::UtcNow.Ticks)" />
+    <Exec Command="cargo build --manifest-path &quot;$(EspressoNativeManifest)&quot; --target $(EspressoRustTarget) $(EspressoCargoProfileArg)" />
     <Copy SourceFiles="$(EspressoNativeOutputPath)" DestinationFolder="$(OutputPath)runtimes\$(EspressoNativeRid)\native\" SkipUnchangedFiles="true" />
   </Target>
 
