@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="LogicFriday1.App"
              xmlns:local="using:LogicFriday1"
+             xmlns:dock="using:Dock.Avalonia.Controls"
              xmlns:dockThemes="clr-namespace:Dock.Avalonia.Themes.Fluent;assembly=Dock.Avalonia.Themes.Fluent"
              RequestedThemeVariant="Light">
 
@@ -13,6 +14,80 @@
         <FluentTheme />
         <dockThemes:DockFluentTheme CacheDocumentTabContent="True" />
         <StyleInclude Source="avares://Avalonia.Controls.DataGrid/Themes/Fluent.xaml" />
+
+        <Style Selector="dock|DockControl, dock|RootDockControl, dock|ProportionalDockControl, dock|DocumentDockControl, dock|ToolDockControl">
+            <Setter Property="Background" Value="{DynamicResource LogicFriday.Brush.Surface}" />
+        </Style>
+
+        <Style Selector="dock|DocumentControl, dock|ToolControl">
+            <Setter Property="Background" Value="{DynamicResource LogicFriday.Brush.Surface}" />
+            <Setter Property="Foreground" Value="{DynamicResource LogicFriday.Brush.OnSurface}" />
+        </Style>
+
+        <Style Selector="dock|DocumentTabStrip, dock|ToolTabStrip">
+            <Setter Property="Background" Value="{DynamicResource LogicFriday.Brush.SurfaceContainerLow}" />
+            <Setter Property="Foreground" Value="{DynamicResource LogicFriday.Brush.OnSurfaceVariant}" />
+        </Style>
+
+        <Style Selector="dock|DocumentTabStrip /template/ Border#PART_BorderFill, dock|ToolTabStrip /template/ Border#PART_BorderFill">
+            <Setter Property="Background" Value="{DynamicResource LogicFriday.Brush.SurfaceContainerLow}" />
+        </Style>
+
+        <Style Selector="dock|DocumentTabStrip /template/ Border#PART_TrailingFill, dock|ToolTabStrip /template/ Border#PART_TrailingFill">
+            <Setter Property="Background" Value="{DynamicResource LogicFriday.Brush.SurfaceContainerLow}" />
+        </Style>
+
+        <Style Selector="dock|DocumentTabStripItem, dock|ToolTabStripItem">
+            <Setter Property="Background" Value="{DynamicResource LogicFriday.Brush.SurfaceContainerLow}" />
+            <Setter Property="Foreground" Value="{DynamicResource LogicFriday.Brush.OnSurfaceVariant}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource LogicFriday.Brush.OutlineVariant}" />
+        </Style>
+
+        <Style Selector="dock|DocumentTabStripItem /template/ Border#PART_TabBody, dock|ToolTabStripItem /template/ Border#PART_TabBody">
+            <Setter Property="Background" Value="{DynamicResource LogicFriday.Brush.SurfaceContainerLow}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource LogicFriday.Brush.OutlineVariant}" />
+        </Style>
+
+        <Style Selector="dock|DocumentTabStripItem:pointerover, dock|ToolTabStripItem:pointerover">
+            <Setter Property="Background" Value="{DynamicResource LogicFriday.Brush.SecondaryContainer}" />
+            <Setter Property="Foreground" Value="{DynamicResource LogicFriday.Brush.OnSecondaryContainer}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource LogicFriday.Brush.Outline}" />
+        </Style>
+
+        <Style Selector="dock|DocumentTabStripItem:pointerover /template/ Border#PART_TabBody, dock|ToolTabStripItem:pointerover /template/ Border#PART_TabBody">
+            <Setter Property="Background" Value="{DynamicResource LogicFriday.Brush.SecondaryContainer}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource LogicFriday.Brush.Outline}" />
+        </Style>
+
+        <Style Selector="dock|DocumentTabStripItem:selected, dock|DocumentTabStripItem:active, dock|ToolTabStripItem:selected">
+            <Setter Property="Background" Value="{DynamicResource LogicFriday.Brush.PrimaryContainer}" />
+            <Setter Property="Foreground" Value="{DynamicResource LogicFriday.Brush.OnPrimaryContainer}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource LogicFriday.Brush.Primary}" />
+        </Style>
+
+        <Style Selector="dock|DocumentTabStripItem:selected /template/ Border#PART_TabBody, dock|DocumentTabStripItem:active /template/ Border#PART_TabBody, dock|ToolTabStripItem:selected /template/ Border#PART_TabBody">
+            <Setter Property="Background" Value="{DynamicResource LogicFriday.Brush.PrimaryContainer}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource LogicFriday.Brush.Primary}" />
+        </Style>
+
+        <Style Selector="dock|DocumentTabStripItem:selected /template/ Border#PART_TabGutter, dock|DocumentTabStripItem:active /template/ Border#PART_TabGutter, dock|ToolTabStripItem:selected /template/ Border#PART_TabGutter">
+            <Setter Property="Background" Value="{DynamicResource LogicFriday.Brush.Primary}" />
+        </Style>
+
+        <Style Selector="dock|DocumentTabStripItem:selected /template/ Border#PART_TabSeparatorRight, dock|DocumentTabStripItem:active /template/ Border#PART_TabSeparatorRight, dock|ToolTabStripItem:selected /template/ Border#PART_TabSeparatorRight">
+            <Setter Property="Background" Value="{DynamicResource LogicFriday.Brush.Primary}" />
+        </Style>
+
+        <Style Selector="dock|ToolChromeControl">
+            <Setter Property="Background" Value="{DynamicResource LogicFriday.Brush.SurfaceContainer}" />
+            <Setter Property="Foreground" Value="{DynamicResource LogicFriday.Brush.OnSurface}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource LogicFriday.Brush.OutlineVariant}" />
+        </Style>
+
+        <Style Selector="dock|ToolChromeControl /template/ Border#PART_Header">
+            <Setter Property="Background" Value="{DynamicResource LogicFriday.Brush.SurfaceContainerLow}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource LogicFriday.Brush.OutlineVariant}" />
+        </Style>
 
         <Style Selector="Window">
             <Setter Property="Background" Value="{DynamicResource LogicFriday.Brush.Surface}" />
